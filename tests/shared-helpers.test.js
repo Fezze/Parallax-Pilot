@@ -1,13 +1,22 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  addAsteroidToCollisionGrid,
+  advanceAsteroidsInCollisionGrid,
+  advanceAsteroidsAndCollectCollisionCandidates,
   clamp,
   chooseSpawnY,
+  collectCollisionCandidatesFromGrid,
+  createCollisionGrid,
   createAsteroid,
   createScoreEntry,
+  getCollisionBucketIndex,
+  getCollisionSliceIndex,
   getSpawnIntervalMs,
+  isAsteroidInCollisionBand,
   moveAsteroids,
   pruneAsteroids,
+  removeAsteroidFromCollisionGrid,
   advanceAsteroidsInPlace,
   calculateCollisionResult,
 } from '../zepp-app/shared/game-core.js'
@@ -77,6 +86,7 @@ test('settings and scores sanitize invalid values before persistence', () => {
     spawnMultiplier: 'x',
     tiltSensitivity: 999,
   })
+  const nullSanitized = sanitizeSettings(null)
 
   assert.deepEqual(sanitized, {
     controlMode: 'tilt',
@@ -85,8 +95,17 @@ test('settings and scores sanitize invalid values before persistence', () => {
     spawnMultiplier: 1,
     tiltSensitivity: 1,
   })
+  assert.deepEqual(nullSanitized, {
+    controlMode: 'tilt',
+    wristSide: 'left',
+    timeScale: 1,
+    spawnMultiplier: 1,
+    tiltSensitivity: 1,
+  })
 
   writeScores(storage, { not: 'an array' })
+  assert.deepEqual(readScores(storage), [])
+  storage.setItem('scores_v1', JSON.stringify({ invalid: true }))
   assert.deepEqual(readScores(storage), [])
 
   const scores = appendScore(storage, {
@@ -153,6 +172,163 @@ test('asteroid helpers keep movement logic consistent across immutable and in-pl
   assert.equal(advanceAsteroidsInPlace(inPlace, 1, viewport), inPlace)
   assert.deepEqual(inPlace.map((asteroid) => asteroid.id), ['keep'])
   assert.equal(inPlace[0].x, 20)
+})
+
+test('broad-phase collision candidates skip asteroids outside the forward ship corridor', () => {
+  const viewport = { width: 200, height: 200 }
+  const shipRect = { x: 60, y: 70, w: 30, h: 20 }
+  const asteroids = [
+    { id: 'behind', x: 30, y: 80, radius: 8, vx: -10 },
+    { id: 'candidate', x: 92, y: 80, radius: 8, vx: -10 },
+    { id: 'far-y', x: 92, y: 150, radius: 8, vx: -10 },
+  ]
+  const candidates = []
+  const grid = createCollisionGrid(viewport)
+
+  for (let index = 0; index < asteroids.length; index += 1) {
+    addAsteroidToCollisionGrid(asteroids[index], grid)
+  }
+
+  assert.equal(
+    isAsteroidInCollisionBand(asteroids[0], shipRect, 'left'),
+    false
+  )
+  assert.equal(
+    isAsteroidInCollisionBand(asteroids[1], shipRect, 'left'),
+    true
+  )
+  assert.equal(
+    isAsteroidInCollisionBand(asteroids[2], shipRect, 'left'),
+    false
+  )
+
+  assert.ok(getCollisionSliceIndex(asteroids[1].x, grid) >= 0)
+  assert.ok(getCollisionBucketIndex(asteroids[1].y, grid) >= 0)
+
+  advanceAsteroidsInCollisionGrid(
+    asteroids,
+    0.016,
+    viewport,
+    grid
+  )
+  collectCollisionCandidatesFromGrid(
+    grid,
+    shipRect,
+    'left',
+    candidates
+  )
+
+  assert.deepEqual(candidates.map((asteroid) => asteroid.id), ['candidate'])
+  assert.ok(grid.slices.some((slice) => slice.some((bucket) => bucket.length > 0)))
+})
+
+test('collision grid handles removal, slice migration and offscreen pruning', () => {
+  const viewport = { width: 200, height: 200 }
+  const grid = createCollisionGrid(viewport, 40, 40, 24)
+  const first = { id: 'first', x: 50, y: 50, radius: 8, vx: 0, lastHitAt: 0 }
+  const second = { id: 'second', x: 52, y: 50, radius: 8, vx: 0, lastHitAt: 0 }
+
+  addAsteroidToCollisionGrid(first, grid)
+  addAsteroidToCollisionGrid(second, grid)
+  removeAsteroidFromCollisionGrid(first, grid)
+
+  assert.equal(grid.slices[second.gridSliceIndex][second.gridBucketIndex][0], second)
+  assert.equal(second.gridSlotIndex, 0)
+
+  const moving = { id: 'moving', x: 39, y: 50, radius: 8, vx: 200, lastHitAt: 0 }
+  addAsteroidToCollisionGrid(moving, grid)
+  const previousSliceIndex = moving.gridSliceIndex
+  advanceAsteroidsInCollisionGrid([moving], 0.2, viewport, grid)
+  assert.notEqual(moving.gridSliceIndex, previousSliceIndex)
+
+  const offscreen = { id: 'offscreen', x: -10, y: 50, radius: 8, vx: -300, lastHitAt: 0 }
+  addAsteroidToCollisionGrid(offscreen, grid)
+  const asteroids = [offscreen]
+  advanceAsteroidsInCollisionGrid(asteroids, 0.2, viewport, grid)
+
+  assert.equal(asteroids.length, 0)
+  assert.equal(offscreen.gridSliceIndex, -1)
+  assert.equal(offscreen.gridBucketIndex, -1)
+})
+
+test('collision band handles asteroids above ship and left-travel branch', () => {
+  const shipRect = { x: 120, y: 70, w: 30, h: 20 }
+
+  assert.equal(
+    isAsteroidInCollisionBand({ x: 130, y: 40, radius: 8 }, shipRect, 'left'),
+    false
+  )
+  assert.equal(
+    isAsteroidInCollisionBand({ x: 170, y: 80, radius: 8 }, shipRect, 'right'),
+    false
+  )
+  assert.equal(
+    isAsteroidInCollisionBand({ x: 112, y: 80, radius: 8 }, shipRect, 'right'),
+    true
+  )
+})
+
+test('collision grid removal safely ignores asteroids outside known buckets', () => {
+  const grid = createCollisionGrid({ width: 200, height: 200 })
+  const orphan = {
+    id: 'orphan',
+    x: 0,
+    y: 0,
+    radius: 8,
+    gridSliceIndex: 999,
+    gridBucketIndex: 999,
+    gridSlotIndex: 0,
+  }
+
+  assert.doesNotThrow(() => removeAsteroidFromCollisionGrid(orphan, grid))
+})
+
+test('compat broad-phase wrapper still returns candidates from a transient grid', () => {
+  const viewport = { width: 200, height: 200 }
+  const shipRect = { x: 60, y: 70, w: 30, h: 20 }
+  const asteroids = [
+    { id: 'candidate', x: 92, y: 80, radius: 8, vx: -10, lastHitAt: 0 },
+  ]
+  const candidates = []
+
+  advanceAsteroidsAndCollectCollisionCandidates(
+    asteroids,
+    0.016,
+    viewport,
+    shipRect,
+    'left',
+    candidates
+  )
+
+  assert.deepEqual(candidates.map((asteroid) => asteroid.id), ['candidate'])
+})
+
+test('compat broad-phase wrapper reuses existing grid membership when present', () => {
+  const viewport = { width: 200, height: 200 }
+  const shipRect = { x: 60, y: 70, w: 30, h: 20 }
+  const grid = createCollisionGrid(viewport)
+  const asteroid = {
+    id: 'candidate',
+    x: 92,
+    y: 80,
+    radius: 8,
+    vx: -10,
+    lastHitAt: 0,
+  }
+  const candidates = []
+
+  addAsteroidToCollisionGrid(asteroid, grid)
+  advanceAsteroidsAndCollectCollisionCandidates(
+    [asteroid],
+    0.016,
+    viewport,
+    shipRect,
+    'left',
+    candidates,
+    grid
+  )
+
+  assert.deepEqual(candidates.map((entry) => entry.id), ['candidate'])
 })
 
 test('collision helper reports clean misses without damage', () => {

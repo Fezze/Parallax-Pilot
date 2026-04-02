@@ -1,4 +1,12 @@
-import { COLLISION_COOLDOWN_MS, HP_MAX } from './constants.js'
+import {
+  COLLISION_BUCKET_HEIGHT,
+  COLLISION_GRID_PADDING,
+  COLLISION_SLICE_WIDTH,
+  ASTEROID_RADIUS_MAX,
+  ASTEROID_RADIUS_MIN,
+  COLLISION_COOLDOWN_MS,
+  HP_MAX,
+} from './constants.js'
 import { resolveTravelDirection } from './device.js'
 
 export function clamp(value, min, max) {
@@ -62,11 +70,15 @@ function getAsteroidSpeed(difficulty, randomUnit = Math.random()) {
 function getVerticalClearance(candidateY, radius, shipRect, asteroids, spawnFromRight, viewport) {
   let minClearance =
     Math.abs(candidateY - shipRect.centerY) - (radius + shipRect.h * 0.9)
-  const nearbyAsteroids = asteroids.filter((asteroid) =>
-    spawnFromRight ? asteroid.x > viewport.width * 0.55 : asteroid.x < viewport.width * 0.45
-  )
+  for (let index = 0; index < asteroids.length; index += 1) {
+    const asteroid = asteroids[index]
+    const isNearby = spawnFromRight
+      ? asteroid.x > viewport.width * 0.55
+      : asteroid.x < viewport.width * 0.45
+    if (!isNearby) {
+      continue
+    }
 
-  for (const asteroid of nearbyAsteroids) {
     const asteroidClearance =
       Math.abs(candidateY - asteroid.y) - (radius + asteroid.radius + 12)
     minClearance = Math.min(minClearance, asteroidClearance)
@@ -121,7 +133,11 @@ export function createAsteroid({
 }) {
   const minDimension = Math.min(viewport.width, viewport.height)
   const radius = Math.round(
-    clamp(minDimension * (0.02 + random() * 0.02) + difficulty * 0.06, 7, 18)
+    clamp(
+      minDimension * (0.02 + random() * 0.02) + difficulty * 0.06,
+      ASTEROID_RADIUS_MIN,
+      ASTEROID_RADIUS_MAX
+    )
   )
   const spawnFromRight = resolveTravelDirection(wristSide) === 'right'
   const x = spawnFromRight ? viewport.width + radius + 8 : -radius - 8
@@ -178,6 +194,193 @@ export function advanceAsteroidsInPlace(asteroids, deltaSeconds, viewport) {
 
   asteroids.length = writeIndex
   return asteroids
+}
+
+export function isAsteroidInCollisionBand(asteroid, shipRect, wristSide) {
+  if (asteroid.y + asteroid.radius < shipRect.y) {
+    return false
+  }
+
+  if (asteroid.y - asteroid.radius > shipRect.y + shipRect.h) {
+    return false
+  }
+
+  const travelDirection = resolveTravelDirection(wristSide)
+  if (travelDirection === 'right') {
+    if (asteroid.x + asteroid.radius < shipRect.x) {
+      return false
+    }
+
+    return asteroid.x - asteroid.radius <= shipRect.x + shipRect.w + ASTEROID_RADIUS_MAX
+  }
+
+  if (asteroid.x - asteroid.radius > shipRect.x + shipRect.w) {
+    return false
+  }
+
+  return asteroid.x + asteroid.radius >= shipRect.x - ASTEROID_RADIUS_MAX
+}
+
+export function createCollisionGrid(
+  viewport,
+  sliceWidth = COLLISION_SLICE_WIDTH,
+  bucketHeight = COLLISION_BUCKET_HEIGHT,
+  padding = COLLISION_GRID_PADDING
+) {
+  const sliceCount = Math.max(
+    1,
+    Math.ceil((viewport.width + padding * 2) / sliceWidth)
+  )
+  const bucketCount = Math.max(
+    1,
+    Math.ceil((viewport.height + padding * 2) / bucketHeight)
+  )
+
+  return {
+    sliceWidth,
+    bucketHeight,
+    padding,
+    sliceCount,
+    bucketCount,
+    slices: Array.from({ length: sliceCount }, () =>
+      Array.from({ length: bucketCount }, () => [])
+    ),
+  }
+}
+
+export function getCollisionSliceIndex(x, grid) {
+  return clamp(
+    Math.floor((x + grid.padding) / grid.sliceWidth),
+    0,
+    grid.sliceCount - 1
+  )
+}
+
+export function getCollisionBucketIndex(y, grid) {
+  return clamp(
+    Math.floor((y + grid.padding) / grid.bucketHeight),
+    0,
+    grid.bucketCount - 1
+  )
+}
+
+export function addAsteroidToCollisionGrid(asteroid, grid) {
+  const sliceIndex = getCollisionSliceIndex(asteroid.x, grid)
+  const bucketIndex = getCollisionBucketIndex(asteroid.y, grid)
+  const bucket = grid.slices[sliceIndex][bucketIndex]
+
+  asteroid.gridSliceIndex = sliceIndex
+  asteroid.gridBucketIndex = bucketIndex
+  asteroid.gridSlotIndex = bucket.length
+  bucket.push(asteroid)
+  return asteroid
+}
+
+export function removeAsteroidFromCollisionGrid(asteroid, grid) {
+  const slice = grid.slices[asteroid.gridSliceIndex]
+  const bucket = slice?.[asteroid.gridBucketIndex]
+  if (!bucket) {
+    return
+  }
+
+  const lastAsteroid = bucket.pop()
+  if (lastAsteroid && lastAsteroid !== asteroid) {
+    bucket[asteroid.gridSlotIndex] = lastAsteroid
+    lastAsteroid.gridSlotIndex = asteroid.gridSlotIndex
+  }
+
+  asteroid.gridSliceIndex = -1
+  asteroid.gridBucketIndex = -1
+  asteroid.gridSlotIndex = -1
+}
+
+export function advanceAsteroidsInCollisionGrid(
+  asteroids,
+  deltaSeconds,
+  viewport,
+  grid
+) {
+  let writeIndex = 0
+
+  for (let index = 0; index < asteroids.length; index += 1) {
+    const asteroid = asteroids[index]
+    asteroid.x += asteroid.vx * deltaSeconds
+
+    if (
+      asteroid.x + asteroid.radius <= -24 ||
+      asteroid.x - asteroid.radius >= viewport.width + 24
+    ) {
+      removeAsteroidFromCollisionGrid(asteroid, grid)
+      continue
+    }
+
+    const nextSliceIndex = getCollisionSliceIndex(asteroid.x, grid)
+    if (nextSliceIndex !== asteroid.gridSliceIndex) {
+      removeAsteroidFromCollisionGrid(asteroid, grid)
+      addAsteroidToCollisionGrid(asteroid, grid)
+    }
+
+    asteroids[writeIndex] = asteroid
+    writeIndex += 1
+  }
+
+  asteroids.length = writeIndex
+  return asteroids
+}
+
+export function collectCollisionCandidatesFromGrid(
+  grid,
+  shipRect,
+  wristSide,
+  candidates = []
+) {
+  candidates.length = 0
+
+  const minSlice = getCollisionSliceIndex(shipRect.x - ASTEROID_RADIUS_MAX, grid)
+  const maxSlice = getCollisionSliceIndex(
+    shipRect.x + shipRect.w + ASTEROID_RADIUS_MAX,
+    grid
+  )
+  const minBucket = getCollisionBucketIndex(shipRect.y - ASTEROID_RADIUS_MAX, grid)
+  const maxBucket = getCollisionBucketIndex(
+    shipRect.y + shipRect.h + ASTEROID_RADIUS_MAX,
+    grid
+  )
+
+  for (let sliceIndex = minSlice; sliceIndex <= maxSlice; sliceIndex += 1) {
+    const slice = grid.slices[sliceIndex]
+    for (let bucketIndex = minBucket; bucketIndex <= maxBucket; bucketIndex += 1) {
+      const bucket = slice[bucketIndex]
+      for (let index = 0; index < bucket.length; index += 1) {
+        const asteroid = bucket[index]
+        if (isAsteroidInCollisionBand(asteroid, shipRect, wristSide)) {
+          candidates.push(asteroid)
+        }
+      }
+    }
+  }
+
+  return candidates
+}
+
+export function advanceAsteroidsAndCollectCollisionCandidates(
+  asteroids,
+  deltaSeconds,
+  viewport,
+  shipRect,
+  wristSide,
+  candidates = [],
+  grid = createCollisionGrid(viewport)
+) {
+  for (let index = 0; index < asteroids.length; index += 1) {
+    const asteroid = asteroids[index]
+    if (typeof asteroid.gridSliceIndex !== 'number' || asteroid.gridSliceIndex < 0) {
+      addAsteroidToCollisionGrid(asteroid, grid)
+    }
+  }
+
+  advanceAsteroidsInCollisionGrid(asteroids, deltaSeconds, viewport, grid)
+  return collectCollisionCandidatesFromGrid(grid, shipRect, wristSide, candidates)
 }
 
 function intersectionArea(leftRect, rightRect) {

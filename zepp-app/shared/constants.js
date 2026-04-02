@@ -41,6 +41,11 @@ export const MAX_SCORE_HISTORY = 100
 export const RESULTS_PAGE_SIZE = 7
 export const HP_MAX = 100
 export const COLLISION_COOLDOWN_MS = 260
+export const ASTEROID_RADIUS_MIN = 7
+export const ASTEROID_RADIUS_MAX = 18
+export const COLLISION_SLICE_WIDTH = ASTEROID_RADIUS_MAX * 2 + 8
+export const COLLISION_BUCKET_HEIGHT = ASTEROID_RADIUS_MAX * 2 + 8
+export const COLLISION_GRID_PADDING = ASTEROID_RADIUS_MAX + 8
 
 export const COLORS = {
   background: 0x000000,

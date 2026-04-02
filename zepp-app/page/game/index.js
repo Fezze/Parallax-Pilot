@@ -30,16 +30,20 @@ import {
 } from '@zos/sensor'
 import { replace } from '@zos/router'
 import {
+  COLLISION_SLICE_WIDTH,
   COLLISION_COOLDOWN_MS,
   COLORS,
   HP_MAX,
   ROUTES,
 } from '../../shared/constants.js'
 import {
-  advanceAsteroidsInPlace,
+  addAsteroidToCollisionGrid,
+  advanceAsteroidsInCollisionGrid,
   calculateCollisionResult,
   calculateDifficulty,
   clamp,
+  collectCollisionCandidatesFromGrid,
+  createCollisionGrid,
   createAsteroid,
   createScoreEntry,
   createShipRect,
@@ -266,11 +270,17 @@ Page({
     }
     this.settings = settings
     this.crownSupported = crownSupported
+    this.collisionSliceWidth = COLLISION_SLICE_WIDTH
     this.shipCenterY = deviceInfo.height / 2
     this.crownCenterY = deviceInfo.height / 2
     this.touchDirection = 0
     this.pointerDown = false
     this.asteroids = []
+    this.collisionCandidates = []
+    this.collisionGrid = createCollisionGrid(
+      this.viewport,
+      this.collisionSliceWidth
+    )
     this.asteroidSeed = 0
     this.hp = HP_MAX
     this.startedAt = Date.now()
@@ -558,23 +568,24 @@ Page({
 
     this.lastSpawnAt = now
     this.asteroidSeed += 1
-    this.asteroids.push(
-      createAsteroid({
-        id: `${now}-${this.asteroidSeed}`,
-        viewport: this.viewport,
-        difficulty,
-        shipRect,
-        asteroids: this.asteroids,
-        wristSide: this.settings.wristSide,
-      })
-    )
+    const asteroid = createAsteroid({
+      id: `${now}-${this.asteroidSeed}`,
+      viewport: this.viewport,
+      difficulty,
+      shipRect,
+      asteroids: this.asteroids,
+      wristSide: this.settings.wristSide,
+    })
+
+    this.asteroids.push(asteroid)
+    addAsteroidToCollisionGrid(asteroid, this.collisionGrid)
   },
 
   handleCollisions(now, shipRect, difficulty) {
     let didDamage = false
 
-    for (let index = 0; index < this.asteroids.length; index += 1) {
-      const asteroid = this.asteroids[index]
+    for (let index = 0; index < this.collisionCandidates.length; index += 1) {
+      const asteroid = this.collisionCandidates[index]
       const collision = calculateCollisionResult({
         shipRect,
         asteroid,
@@ -638,7 +649,18 @@ Page({
     )
 
     this.spawnAsteroids(now, shipRect, difficulty)
-    advanceAsteroidsInPlace(this.asteroids, deltaSeconds, this.viewport)
+    advanceAsteroidsInCollisionGrid(
+      this.asteroids,
+      deltaSeconds,
+      this.viewport,
+      this.collisionGrid
+    )
+    collectCollisionCandidatesFromGrid(
+      this.collisionGrid,
+      shipRect,
+      this.settings.wristSide,
+      this.collisionCandidates
+    )
     this.handleCollisions(now, shipRect, difficulty)
     this.drawFrame()
   },
