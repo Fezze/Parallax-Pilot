@@ -18,9 +18,5 @@ export function sanitizeControlMode(controlMode, crownSupported) {
     return 'tilt'
   }
 
-  if (controlMode === 'crown' && !crownSupported) {
-    return 'tilt'
-  }
-
   return controlMode
 }

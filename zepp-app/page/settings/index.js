@@ -145,7 +145,7 @@ Page({
       y: startY + (rowHeight + rowGap) * 5 + 2,
       w: fullWidth,
       h: 22,
-      text: crownSupported ? 'DIGITAL CROWN DETECTED' : 'DIGITAL CROWN UNAVAILABLE',
+      text: `KEYTYPE ${deviceInfo.keyType || 'unknown'}`,
       textSize: 15,
       color: COLORS.textMuted,
     })

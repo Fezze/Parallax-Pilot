@@ -6,9 +6,7 @@ import {
 } from './constants.js'
 
 export function getAvailableControlModes(crownSupported) {
-  return crownSupported
-    ? CONTROL_MODES
-    : CONTROL_MODES.filter((mode) => mode !== 'crown')
+  return CONTROL_MODES
 }
 
 export function cycleOption(options, currentValue) {

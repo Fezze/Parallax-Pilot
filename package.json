@@ -5,7 +5,15 @@
   "type": "module",
   "scripts": {
     "test": "node --test",
+    "test:coverage": "c8 --all --src zepp-app/shared --exclude tests/** --exclude zepp-app/shared/page-ui.js --exclude zepp-app/shared/storage.js --reporter=text --reporter=html --reporter=lcov node --test",
+    "test:playwright": "playwright test",
+    "test:playwright:headed": "playwright test --headed",
+    "playwright:install": "playwright install chromium",
     "build": "cmd /c \"cd /d zepp-app && zeus build\"",
     "dev": "cmd /c \"cd /d zepp-app && zeus dev\""
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.59.1",
+    "c8": "^11.0.0"
   }
 }

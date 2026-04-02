@@ -21,7 +21,7 @@ export const CONTROL_MODE_LABELS = {
   tilt: 'TILT',
   touch: 'TOUCH',
   swipe: 'SWIPE',
-  crown: 'CROWN',
+  crown: 'ROTARY',
 }
 
 export const WRIST_SIDE_LABELS = {

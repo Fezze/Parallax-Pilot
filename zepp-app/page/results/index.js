@@ -1,10 +1,38 @@
-import { getDeviceInfo } from '@zos/device'
+import { getDeviceInfo, SCREEN_SHAPE_ROUND } from '@zos/device'
 import { back, push, replace } from '@zos/router'
 import { COLORS, ROUTES, RESULTS_PAGE_SIZE } from '../../shared/constants.js'
 import { createActionButton, createLabel, hideStatusBar } from '../../shared/page-ui.js'
 import { parseRouteParams } from '../../shared/params.js'
 import { loadLastSession, loadScores } from '../../shared/storage.js'
 import { buildScoreRow, formatDurationMs, paginateScores } from '../../shared/view-models.js'
+
+function createRowButtons({ width, y, buttons, safePad, gap = 10 }) {
+  if (buttons.length === 0) {
+    return
+  }
+
+  const rowWidth = width - safePad * 2
+  const buttonWidth = Math.floor((rowWidth - gap * (buttons.length - 1)) / buttons.length)
+  const totalWidth = buttonWidth * buttons.length + gap * (buttons.length - 1)
+  let currentX = Math.round((width - totalWidth) / 2)
+
+  buttons.forEach((button) => {
+    createActionButton({
+      x: currentX,
+      y,
+      w: buttonWidth,
+      h: button.h || 44,
+      text: button.text,
+      onClick: button.onClick,
+      normalColor: button.normalColor,
+      pressColor: button.pressColor,
+      textColor: button.textColor,
+      textSize: button.textSize,
+    })
+
+    currentX += buttonWidth + gap
+  })
+}
 
 Page({
   onInit(params) {
@@ -22,9 +50,12 @@ Page({
       RESULTS_PAGE_SIZE
     )
     const { width, height } = deviceInfo
-    const pad = Math.round(width * 0.07)
+    const isRound = deviceInfo.screenShape === SCREEN_SHAPE_ROUND
+    const pad = Math.round(width * (isRound ? 0.11 : 0.07))
     const fullWidth = width - pad * 2
     const listTop = lastSession ? 158 : 118
+    const hasPrev = pageCount > 1 && pageIndex > 0
+    const hasNext = pageCount > 1 && pageIndex < pageCount - 1
 
     createLabel({
       x: pad,
@@ -92,61 +123,114 @@ Page({
       })
     }
 
-    createLabel({
-      x: pad,
-      y: height - 96,
-      w: fullWidth,
-      h: 18,
-      text: `${pageIndex + 1} / ${pageCount}`,
-      textSize: 14,
-      color: COLORS.textMuted,
-    })
+    if (pageCount > 1) {
+      createLabel({
+        x: pad,
+        y: height - (isRound ? 146 : 96),
+        w: fullWidth,
+        h: 18,
+        text: `${pageIndex + 1} / ${pageCount}`,
+        textSize: 14,
+        color: COLORS.textMuted,
+      })
+    }
+
+    if (isRound && hasPrev && hasNext) {
+      createRowButtons({
+        width,
+        y: height - 116,
+        safePad: Math.round(width * 0.18),
+        buttons: [
+          {
+            text: 'PREV',
+            onClick: () =>
+              replace({
+                url: ROUTES.RESULTS,
+                params: JSON.stringify({
+                  pageIndex: pageIndex - 1,
+                }),
+              }),
+            textSize: 18,
+            h: 40,
+          },
+          {
+            text: 'NEXT',
+            onClick: () =>
+              replace({
+                url: ROUTES.RESULTS,
+                params: JSON.stringify({
+                  pageIndex: pageIndex + 1,
+                }),
+              }),
+            textSize: 18,
+            h: 40,
+          },
+        ],
+      })
+
+      createRowButtons({
+        width,
+        y: height - 66,
+        safePad: Math.round(width * 0.28),
+        buttons: [
+          {
+            text: 'PLAY',
+            normalColor: COLORS.accent,
+            pressColor: 0xc9a900,
+            textColor: COLORS.background,
+            onClick: () => push({ url: ROUTES.GAME }),
+          },
+        ],
+      })
+    } else {
+      const navButtons = []
+
+      if (hasPrev) {
+        navButtons.push({
+          text: 'PREV',
+          onClick: () =>
+            replace({
+              url: ROUTES.RESULTS,
+              params: JSON.stringify({
+                pageIndex: pageIndex - 1,
+              }),
+            }),
+        })
+      }
+
+      navButtons.push({
+        text: 'PLAY',
+        normalColor: COLORS.accent,
+        pressColor: 0xc9a900,
+        textColor: COLORS.background,
+        onClick: () => push({ url: ROUTES.GAME }),
+      })
+
+      if (hasNext) {
+        navButtons.push({
+          text: 'NEXT',
+          onClick: () =>
+            replace({
+              url: ROUTES.RESULTS,
+              params: JSON.stringify({
+                pageIndex: pageIndex + 1,
+              }),
+            }),
+        })
+      }
+
+      createRowButtons({
+        width,
+        y: height - 70,
+        safePad: Math.round(width * (isRound ? 0.18 : 0.07)),
+        buttons: navButtons,
+        gap: 8,
+      })
+    }
 
     createActionButton({
       x: pad,
-      y: height - 70,
-      w: Math.floor((fullWidth - 16) / 3),
-      h: 44,
-      text: 'PREV',
-      onClick: () =>
-        replace({
-          url: ROUTES.RESULTS,
-          params: JSON.stringify({
-            pageIndex: Math.max(pageIndex - 1, 0),
-          }),
-        }),
-    })
-
-    createActionButton({
-      x: pad + Math.floor((fullWidth - 16) / 3) + 8,
-      y: height - 70,
-      w: Math.floor((fullWidth - 16) / 3),
-      h: 44,
-      text: 'PLAY',
-      normalColor: COLORS.accent,
-      pressColor: 0xc9a900,
-      textColor: COLORS.background,
-      onClick: () => push({ url: ROUTES.GAME }),
-    })
-
-    createActionButton({
-      x: pad + (Math.floor((fullWidth - 16) / 3) + 8) * 2,
-      y: height - 70,
-      w: Math.floor((fullWidth - 16) / 3),
-      h: 44,
-      text: 'NEXT',
-      onClick: () =>
-        replace({
-          url: ROUTES.RESULTS,
-          params: JSON.stringify({
-            pageIndex: Math.min(pageIndex + 1, pageCount - 1),
-          }),
-        }),
-    })
-
-    createActionButton({
-      x: pad,
-      y: height - 122,
+      y: height - (isRound ? 164 : 122),
       w: fullWidth,
       h: 38,
       text: 'BACK',

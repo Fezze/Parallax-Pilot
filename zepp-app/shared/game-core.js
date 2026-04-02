@@ -30,8 +30,8 @@ export function createScoreEntry(survivedMs, settings, timestamp = Date.now()) {
 
 export function createShipRect(viewport, shipCenterY, wristSide) {
   const minDimension = Math.min(viewport.width, viewport.height)
-  const shipHeight = Math.round(Math.max(28, minDimension * 0.085))
-  const shipWidth = Math.round(shipHeight * 1.2)
+  const shipHeight = Math.round(Math.max(18, minDimension * 0.055))
+  const shipWidth = Math.round(shipHeight * 1.45)
   const travelDirection = resolveTravelDirection(wristSide)
   const centerX = Math.round(
     viewport.width * (travelDirection === 'right' ? 0.36 : 0.64)
@@ -121,7 +121,7 @@ export function createAsteroid({
 }) {
   const minDimension = Math.min(viewport.width, viewport.height)
   const radius = Math.round(
-    clamp(minDimension * (0.038 + random() * 0.045) + difficulty * 0.18, 12, 34)
+    clamp(minDimension * (0.02 + random() * 0.02) + difficulty * 0.06, 7, 18)
   )
   const spawnFromRight = resolveTravelDirection(wristSide) === 'right'
   const x = spawnFromRight ? viewport.width + radius + 8 : -radius - 8
@@ -158,6 +158,26 @@ export function pruneAsteroids(asteroids, viewport) {
       asteroid.x + asteroid.radius > -24 &&
       asteroid.x - asteroid.radius < viewport.width + 24
   )
+}
+
+export function advanceAsteroidsInPlace(asteroids, deltaSeconds, viewport) {
+  let writeIndex = 0
+
+  for (let index = 0; index < asteroids.length; index += 1) {
+    const asteroid = asteroids[index]
+    asteroid.x += asteroid.vx * deltaSeconds
+
+    if (
+      asteroid.x + asteroid.radius > -24 &&
+      asteroid.x - asteroid.radius < viewport.width + 24
+    ) {
+      asteroids[writeIndex] = asteroid
+      writeIndex += 1
+    }
+  }
+
+  asteroids.length = writeIndex
+  return asteroids
 }
 
 function intersectionArea(leftRect, rightRect) {

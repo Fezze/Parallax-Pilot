@@ -1,0 +1,216 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import {
+  clamp,
+  chooseSpawnY,
+  createAsteroid,
+  createScoreEntry,
+  getSpawnIntervalMs,
+  moveAsteroids,
+  pruneAsteroids,
+  advanceAsteroidsInPlace,
+  calculateCollisionResult,
+} from '../zepp-app/shared/game-core.js'
+import {
+  appendScore,
+  readJson,
+  readScores,
+  sanitizeSettings,
+  writeJson,
+  writeScores,
+} from '../zepp-app/shared/persistence.js'
+import { parseRouteParams } from '../zepp-app/shared/params.js'
+import {
+  buildScoreRow,
+  cycleOption,
+  formatDurationMs,
+  formatSettingValue,
+  paginateScores,
+} from '../zepp-app/shared/view-models.js'
+import {
+  sanitizeControlMode,
+  supportsDigitalCrown,
+} from '../zepp-app/shared/device.js'
+
+function createMemoryStorage(initialValues = {}) {
+  const map = new Map(Object.entries(initialValues))
+  return {
+    getItem(key, fallback = null) {
+      return map.has(key) ? map.get(key) : fallback
+    },
+    setItem(key, value) {
+      map.set(key, value)
+    },
+  }
+}
+
+test('route params and json storage fall back safely on invalid input', () => {
+  const storage = createMemoryStorage({
+    broken: '{bad json',
+    scalar: JSON.stringify(42),
+    objectValue: { ok: true },
+  })
+  const throwingStorage = {
+    getItem() {
+      throw new Error('boom')
+    },
+  }
+
+  assert.deepEqual(parseRouteParams('{"page":2}'), { page: 2 })
+  assert.deepEqual(parseRouteParams(null, { page: 0 }), { page: 0 })
+  assert.deepEqual(parseRouteParams('{broken', { page: 1 }), { page: 1 })
+  assert.deepEqual(readJson(storage, 'broken', { ok: false }), { ok: false })
+  assert.equal(readJson(storage, 'scalar', 0), 42)
+  assert.deepEqual(readJson(storage, 'objectValue', null), { ok: true })
+  assert.deepEqual(readJson(throwingStorage, 'x', { safe: true }), { safe: true })
+
+  writeJson(storage, 'saved', { ok: true })
+  assert.deepEqual(readJson(storage, 'saved', null), { ok: true })
+})
+
+test('settings and scores sanitize invalid values before persistence', () => {
+  const storage = createMemoryStorage()
+  const sanitized = sanitizeSettings({
+    controlMode: 'bad',
+    wristSide: 'up',
+    timeScale: '3',
+    spawnMultiplier: 'x',
+    tiltSensitivity: 999,
+  })
+
+  assert.deepEqual(sanitized, {
+    controlMode: 'tilt',
+    wristSide: 'left',
+    timeScale: 3,
+    spawnMultiplier: 1,
+    tiltSensitivity: 1,
+  })
+
+  writeScores(storage, { not: 'an array' })
+  assert.deepEqual(readScores(storage), [])
+
+  const scores = appendScore(storage, {
+    id: 'run-1',
+    timestamp: 10,
+    score: 10,
+    survivedMs: 10,
+  })
+  assert.equal(scores.length, 1)
+})
+
+test('view models format and clamp pagination predictably', () => {
+  const scores = [{ score: 9, survivedMs: 125000 }]
+  const page = paginateScores(null, 99, 5)
+
+  assert.deepEqual(page, {
+    pageCount: 1,
+    pageIndex: 0,
+    items: [],
+  })
+  assert.equal(cycleOption(['a', 'b', 'c'], 'b'), 'c')
+  assert.equal(cycleOption(['a', 'b', 'c'], 'missing'), 'b')
+  assert.equal(formatDurationMs(125000), '125s')
+  assert.equal(formatDurationMs(12500), '12.5s')
+  assert.equal(formatDurationMs(980), '0.98s')
+  assert.equal(formatSettingValue('controlMode', 'crown'), 'ROTARY')
+  assert.equal(formatSettingValue('wristSide', 'left'), 'LEFT')
+  assert.equal(formatSettingValue('timeScale', 2), '2x')
+  assert.equal(formatSettingValue('unknown', 7), '7')
+  assert.equal(buildScoreRow(scores[0], 1), '02  9  125s')
+})
+
+test('device helpers and score entry cover invalid and negative branches', () => {
+  const entry = createScoreEntry(-25, {
+    controlMode: 'touch',
+    wristSide: 'right',
+    timeScale: 2,
+    spawnMultiplier: 1.6,
+  }, 500)
+
+  assert.equal(supportsDigitalCrown(), false)
+  assert.equal(supportsDigitalCrown({ keyType: 'normal_20' }), false)
+  assert.equal(sanitizeControlMode('bad', false), 'tilt')
+  assert.equal(sanitizeControlMode('crown', false), 'crown')
+  assert.equal(entry.survivedMs, 0)
+  assert.equal(entry.score, 0)
+})
+
+test('asteroid helpers keep movement logic consistent across immutable and in-place paths', () => {
+  const viewport = { width: 100, height: 100 }
+  const source = [
+    { id: 'keep', x: 10, y: 20, radius: 8, vx: 10 },
+    { id: 'drop', x: -40, y: 20, radius: 8, vx: -10 },
+  ]
+  const moved = moveAsteroids(source, 1)
+  const pruned = pruneAsteroids(moved, viewport)
+  const inPlace = source.map((asteroid) => ({ ...asteroid }))
+
+  assert.equal(clamp(-5, 0, 10), 0)
+  assert.equal(clamp(15, 0, 10), 10)
+  assert.equal(getSpawnIntervalMs(0.1, 0.1), 900)
+  assert.equal(getSpawnIntervalMs(99, 99), 150)
+  assert.deepEqual(pruned.map((asteroid) => asteroid.id), ['keep'])
+  assert.equal(advanceAsteroidsInPlace(inPlace, 1, viewport), inPlace)
+  assert.deepEqual(inPlace.map((asteroid) => asteroid.id), ['keep'])
+  assert.equal(inPlace[0].x, 20)
+})
+
+test('collision helper reports clean misses without damage', () => {
+  const result = calculateCollisionResult({
+    shipRect: { x: 0, y: 0, w: 20, h: 20 },
+    asteroid: { x: 100, y: 100, radius: 10, lastHitAt: 0 },
+    difficulty: 1,
+    now: 500,
+  })
+
+  assert.deepEqual(result, {
+    hit: false,
+    damage: 0,
+    overlapRatio: 0,
+  })
+})
+
+test('spawn selection and asteroid creation cover both travel directions', () => {
+  const viewport = { width: 200, height: 200 }
+  const shipRect = {
+    x: 70,
+    y: 70,
+    w: 30,
+    h: 20,
+    centerX: 85,
+    centerY: 80,
+  }
+  const asteroidField = [{ x: 40, y: 40, radius: 12 }]
+  const random = (() => {
+    const values = [0.1, 0.8, 0.2, 0.7, 0.3, 0.6, 0.4, 0.5]
+    let index = 0
+    return () => {
+      const value = values[index % values.length]
+      index += 1
+      return value
+    }
+  })()
+
+  const spawnY = chooseSpawnY({
+    viewport,
+    shipRect,
+    asteroids: asteroidField,
+    radius: 10,
+    wristSide: 'right',
+    random,
+  })
+  const asteroid = createAsteroid({
+    id: 'left-spawn',
+    viewport,
+    difficulty: 8,
+    shipRect,
+    asteroids: asteroidField,
+    wristSide: 'left',
+    random: () => 0.5,
+  })
+
+  assert.ok(spawnY >= 28)
+  assert.ok(spawnY <= 172)
+  assert.ok(asteroid.x > viewport.width)
+  assert.ok(asteroid.vx < 0)
+})
