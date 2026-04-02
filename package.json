@@ -1,0 +1,11 @@
+{
+  "name": "parallax-pilot-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "build": "cmd /c \"cd /d zepp-app && zeus build\"",
+    "dev": "cmd /c \"cd /d zepp-app && zeus dev\""
+  }
+}

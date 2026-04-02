@@ -1,0 +1,111 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import {
+  calculateCollisionResult,
+  calculateDifficulty,
+  calculateFinalScore,
+  chooseSpawnY,
+  createAsteroid,
+  createScoreEntry,
+  createShipRect,
+} from '../zepp-app/shared/game-core.js'
+import { trimScores } from '../zepp-app/shared/persistence.js'
+
+function sequenceRandom(values) {
+  let index = 0
+  return () => {
+    const value = values[index % values.length]
+    index += 1
+    return value
+  }
+}
+
+test('difficulty and final score follow the planned formula', () => {
+  assert.equal(calculateDifficulty(5000, 1.5), 8.5)
+  assert.equal(
+    calculateFinalScore(4321, {
+      timeScale: 2,
+      spawnMultiplier: 1.3,
+    }),
+    Math.round(4321 * 2 * 1.3)
+  )
+})
+
+test('trimScores sorts newest-first and limits history to 100', () => {
+  const scores = Array.from({ length: 130 }, (_, index) => ({
+    id: String(index),
+    timestamp: index,
+  }))
+
+  const trimmed = trimScores(scores)
+  assert.equal(trimmed.length, 100)
+  assert.equal(trimmed[0].timestamp, 129)
+  assert.equal(trimmed.at(-1).timestamp, 30)
+})
+
+test('spawn y prefers free lanes away from the ship and nearby asteroids', () => {
+  const viewport = { width: 480, height: 480 }
+  const shipRect = createShipRect(viewport, 240, 'left')
+  const asteroids = [{ x: 420, y: 230, radius: 24 }]
+  const y = chooseSpawnY({
+    viewport,
+    shipRect,
+    asteroids,
+    radius: 20,
+    wristSide: 'left',
+    random: sequenceRandom([0.12, 0.18, 0.84, 0.86, 0.52, 0.9, 0.72, 0.4]),
+  })
+
+  assert.ok(Math.abs(y - shipRect.centerY) > 50)
+})
+
+test('collision damage scales with overlap and respects cooldown', () => {
+  const shipRect = { x: 100, y: 100, w: 40, h: 30 }
+  const asteroid = { x: 120, y: 114, radius: 18, lastHitAt: 0 }
+
+  const result = calculateCollisionResult({
+    shipRect,
+    asteroid,
+    difficulty: 9,
+    now: 1000,
+  })
+  const cooldownBlocked = calculateCollisionResult({
+    shipRect,
+    asteroid: { ...asteroid, lastHitAt: 900 },
+    difficulty: 9,
+    now: 1000,
+  })
+
+  assert.equal(result.hit, true)
+  assert.ok(result.damage >= 10)
+  assert.equal(cooldownBlocked.hit, false)
+})
+
+test('asteroid creation respects travel direction and score entries snapshot settings', () => {
+  const viewport = { width: 390, height: 450 }
+  const shipRect = createShipRect(viewport, 225, 'right')
+  const asteroid = createAsteroid({
+    id: 'a1',
+    viewport,
+    difficulty: 7,
+    shipRect,
+    asteroids: [],
+    wristSide: 'right',
+    random: sequenceRandom([0.3, 0.4, 0.5, 0.6, 0.7, 0.8]),
+  })
+  const scoreEntry = createScoreEntry(
+    3123,
+    {
+      controlMode: 'touch',
+      wristSide: 'right',
+      timeScale: 2,
+      spawnMultiplier: 1.6,
+    },
+    5000
+  )
+
+  assert.ok(asteroid.x < 0)
+  assert.ok(asteroid.vx > 0)
+  assert.equal(scoreEntry.score, Math.round(3123 * 2 * 1.6))
+  assert.equal(scoreEntry.controlMode, 'touch')
+})

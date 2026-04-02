@@ -1,0 +1,10 @@
+{
+  "name": "parallax-pilot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "cmd /c zeus build",
+    "dev": "cmd /c zeus dev"
+  }
+}
