@@ -51,16 +51,16 @@ Page({
     const isRound = deviceInfo.screenShape === SCREEN_SHAPE_ROUND
     const pad = Math.round(width * 0.07)
     const fullWidth = width - pad * 2
-    const rowHeight = isRound ? Math.round(Math.min(52, height * 0.105)) : 34
-    const rowGap = isRound ? 10 : 8
-    const startY = isRound ? 92 : 82
+    const rowHeight = isRound ? Math.round(Math.min(52, height * 0.105)) : Math.round(Math.min(42, height * 0.09))
+    const rowGap = isRound ? 10 : 10
+    const startY = isRound ? 92 : Math.round(height * 0.18)
     const titleY = isRound ? 24 : 20
     const titleSize = isRound ? 28 : 26
     const subtitleY = isRound ? 54 : 48
     const subtitleSize = isRound ? 16 : 14
     const rowTextSize = isRound ? 22 : 20
-    const footerButtonH = isRound ? 58 : 40
-    const footerButtonY = isRound ? height - footerButtonH : height - 52
+    const footerButtonH = isRound ? 58 : 44
+    const footerButtonY = isRound ? height - footerButtonH : height - 58
     const controlModes = getAvailableControlModes(crownSupported)
     const tiltEnabled = settings.controlMode === 'tilt'
 

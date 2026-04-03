@@ -39,10 +39,17 @@ foreach ($locale in $localeNames) {
   $requiredPaths += "listing/$locale.md"
   $requiredPaths += "privacy/$locale.md"
   $requiredPaths += "assets/language-preview/$locale-preview.png"
-  $requiredPaths += "assets/screenshots/$locale/round/game-left-flight.png"
-  $requiredPaths += "assets/screenshots/$locale/round/game-right-flight.png"
-  $requiredPaths += "assets/screenshots/$locale/square/game-left-flight.png"
-  $requiredPaths += "assets/screenshots/$locale/square/game-right-flight.png"
+}
+
+$screenshotsManifestPath = Join-Path $submissionRoot 'assets/screenshots/manifest.json'
+$screenshotsManifest = Get-Content $screenshotsManifestPath -Raw | ConvertFrom-Json
+
+foreach ($locale in @($screenshotsManifest.screenshots.PSObject.Properties.Name)) {
+  foreach ($shape in @($screenshotsManifest.screenshots.$locale.PSObject.Properties.Name)) {
+    foreach ($relativeScreenshotPath in @($screenshotsManifest.screenshots.$locale.$shape)) {
+      $requiredPaths += $relativeScreenshotPath
+    }
+  }
 }
 
 foreach ($relativePath in $requiredPaths) {

@@ -10,6 +10,7 @@ function getScreenshotPath(scenarioId, scenario) {
   const shape = scenario.shape || scenarioId.split('-')[1]
   const locale = scenario.locale || 'en-US'
   const variant = scenario.variant || 'default'
+  const resolution = scenario.resolution || 'unknown'
 
   return path.join(
     process.cwd(),
@@ -18,6 +19,7 @@ function getScreenshotPath(scenarioId, scenario) {
     'screenshots',
     locale,
     shape,
+    resolution,
     `${pageName}-${variant}.png`
   )
 }
@@ -57,7 +59,7 @@ for (const [scenarioId, scenario] of Object.entries(previewScenarios)) {
 
     const screenshotPath = getScreenshotPath(scenarioId, scenario)
     await mkdir(path.dirname(screenshotPath), { recursive: true })
-    await page.locator('#watch-shell').screenshot({ path: screenshotPath })
+    await page.locator('#watch').screenshot({ path: screenshotPath })
 
     expect(pageErrors).toEqual([])
     expect(consoleErrors).toEqual([])

@@ -4,20 +4,20 @@
 
 Parallax Pilot
 
-## App Profile
+## App Introduction
 
-Arcade survival game for Zepp OS. Dodge incoming asteroids, master motion or touch controls, and chase your best score on your watch.
+Arcade asteroid dodging on your watch.
 
 ## App Details
 
-Parallax Pilot is a fast arcade dodge game built for Zepp OS watches.
+Parallax Pilot is a fast arcade survival game for Zepp OS watches.
 
-Pilot a geometric ship through an endless asteroid field, survive as long as possible, and improve your score over repeated runs. The difficulty keeps rising over time, so every extra second matters.
+Pilot a geometric spaceship through an endless asteroid field and survive as long as possible. The difficulty keeps rising over time, so every extra second matters.
 
 Features:
 
 - endless survival gameplay
 - controls by tilt, touch, swipe, and supported watch inputs
 - local score history stored on the watch
-- support for round and square watch layouts
-- clean geometric visuals with haptic feedback on collision
+- haptic feedback on collision
+- clean geometric visuals built for watch screens

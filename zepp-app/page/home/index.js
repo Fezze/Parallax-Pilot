@@ -37,10 +37,10 @@ Page({
     const secondaryButtonHeight = isRound ? buttonHeight - 6 : 42
     const titleY = isRound ? Math.round(height * 0.07) : 24
     const subtitleY = titleY + (isRound ? 42 : 38)
-    const buttonStartY = isRound ? Math.round(height * 0.34) : 120
+    const buttonStartY = isRound ? Math.round(height * 0.34) : Math.round(height * 0.28)
     const buttonGap = isRound ? 14 : 12
-    const metaPrimaryY = isRound ? height - 90 : height - 72
-    const metaSecondaryY = isRound ? height - 62 : height - 46
+    const metaPrimaryY = isRound ? height - 90 : height - 92
+    const metaSecondaryY = isRound ? height - 62 : height - 62
 
     createLabel({
       x: pad,

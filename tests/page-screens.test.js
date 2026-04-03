@@ -144,7 +144,7 @@ test('home square layout keeps metadata below the action stack', async () => {
   resetEnv()
   __setDeviceInfo({
     width: 390,
-    height: 390,
+    height: 450,
     screenShape: 'square',
   })
   __seedLocalStorage({
@@ -166,8 +166,8 @@ test('home square layout keeps metadata below the action stack', async () => {
 
   assert.ok(scoreButton)
   assert.ok(timeLabel)
-  assert.equal(scoreButton.props.y, 232)
-  assert.equal(timeLabel.props.y, 318)
+  assert.equal(scoreButton.props.y, 238)
+  assert.equal(timeLabel.props.y, 358)
 })
 
 test('settings screen disables tilt row when control mode is not tilt', async () => {
@@ -230,7 +230,7 @@ test('settings square layout leaves clear space above footer actions', async () 
   resetEnv()
   __setDeviceInfo({
     width: 390,
-    height: 390,
+    height: 450,
     screenShape: 'square',
   })
   __seedLocalStorage({
@@ -251,9 +251,9 @@ test('settings square layout leaves clear space above footer actions', async () 
   const playButton = findButton('PLAY')
 
   assert.ok(tiltButton)
-  assert.equal(tiltButton.props.y, 250)
-  assert.equal(backButton.props.y, 338)
-  assert.equal(playButton.props.y, 338)
+  assert.equal(tiltButton.props.y, 285)
+  assert.equal(backButton.props.y, 392)
+  assert.equal(playButton.props.y, 392)
 })
 
 test('settings screen renders Polish labels and values when the watch language is pl-PL', async () => {
@@ -420,7 +420,7 @@ test('results square pagination keeps the page label above nav and footer rows',
   resetEnv()
   __setDeviceInfo({
     width: 390,
-    height: 390,
+    height: 450,
     screenShape: 'square',
   })
   __seedLocalStorage({
@@ -446,11 +446,11 @@ test('results square pagination keeps the page label above nav and footer rows',
 
   assert.ok(lastVisibleRow)
   assert.ok(pageLabel)
-  assert.equal(lastVisibleRow.props.y, 230)
-  assert.equal(pageLabel.props.y, 264)
-  assert.equal(nextButton.props.y, 284)
-  assert.equal(backButton.props.y, 336)
-  assert.equal(playButton.props.y, 336)
+  assert.equal(lastVisibleRow.props.y, 248)
+  assert.equal(pageLabel.props.y, 320)
+  assert.equal(nextButton.props.y, 344)
+  assert.equal(backButton.props.y, 396)
+  assert.equal(playButton.props.y, 396)
 })
 
 test('results screen renders Polish copy when the watch language is pl-PL', async () => {

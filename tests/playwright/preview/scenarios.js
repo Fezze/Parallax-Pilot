@@ -1,20 +1,31 @@
 const DEFAULT_LOCALE = 'en-US'
 const CONFIGURED_LOCALES = ['en-US', 'pl-PL']
 
-const ROUND_DEVICE = {
+const ROUND_480_DEVICE = {
   width: 480,
   height: 480,
   screenShape: 'round',
   keyType: 'normal_21',
   keyNumber: 2,
+  resolution: '480x480',
 }
 
-const SQUARE_DEVICE = {
+const ROUND_466_DEVICE = {
+  width: 466,
+  height: 466,
+  screenShape: 'round',
+  keyType: 'normal_21',
+  keyNumber: 2,
+  resolution: '466x466',
+}
+
+const SQUARE_390X450_DEVICE = {
   width: 390,
-  height: 390,
+  height: 450,
   screenShape: 'square',
   keyType: 'normal_21',
   keyNumber: 2,
+  resolution: '390x450',
 }
 
 const LOCALE_META = {
@@ -136,6 +147,7 @@ function createScenarioBase({
     variant,
     pageModule,
     deviceInfo,
+    resolution: deviceInfo.resolution || `${deviceInfo.width}x${deviceInfo.height}`,
     localStorage,
     sessionStorage,
     initParams,
@@ -291,272 +303,182 @@ const lastSession = {
   spawnMultiplier: 1.3,
 }
 
-const scenarioFactories = [
-  (locale) => [
-    `home-round-default-${locale}`,
-    createHomeScenario({
-      locale,
-      deviceInfo: ROUND_DEVICE,
-      variant: 'default',
-      controlMode: 'tilt',
-      wristSide: 'left',
-      timeScale: 1,
-      spawnMultiplier: 1,
-      tiltSensitivity: 1,
-      scoreCount: 0,
-      expectedTexts: [t(locale, 'homeTitle'), t(locale, 'startRun'), t(locale, 'savedRuns', { count: 0 })],
-    }),
-  ],
-  (locale) => [
-    `home-round-tuned-${locale}`,
-    createHomeScenario({
-      locale,
-      deviceInfo: ROUND_DEVICE,
-      variant: 'tuned',
-      controlMode: 'swipe',
-      wristSide: 'right',
-      timeScale: 2,
-      spawnMultiplier: 1.6,
-      tiltSensitivity: 1,
-      scoreCount: 5,
-      expectedTexts: [
-        t(locale, 'homeSubtitle'),
-        t(locale, 'homeMeta', { timeScale: 2, spawnMultiplier: 1.6 }),
-        t(locale, 'savedRuns', { count: 5 }),
-      ],
-    }),
-  ],
-  (locale) => [
-    `home-square-tuned-${locale}`,
-    createHomeScenario({
-      locale,
-      deviceInfo: SQUARE_DEVICE,
-      variant: 'tuned',
-      controlMode: 'touch',
-      wristSide: 'left',
-      timeScale: 3,
-      spawnMultiplier: 2,
-      tiltSensitivity: 1,
-      scoreCount: 12,
-      expectedTexts: [t(locale, 'homeTitle'), t(locale, 'scoreboard'), t(locale, 'savedRuns', { count: 12 })],
-    }),
-  ],
-  (locale) => [
-    `settings-round-tilt-${locale}`,
-    createSettingsScenario({
-      locale,
-      deviceInfo: ROUND_DEVICE,
-      variant: 'tilt',
-      controlMode: 'tilt',
-      expectedTexts: [
-        t(locale, 'settings'),
-        `${t(locale, 'controlLabel')}  ${t(locale, 'controlMode_tilt')}`,
-        `${t(locale, 'tiltLabel')}  1.4x`,
-      ],
-    }),
-  ],
-  (locale) => [
-    `settings-round-touch-${locale}`,
-    createSettingsScenario({
-      locale,
-      deviceInfo: ROUND_DEVICE,
-      variant: 'touch',
-      controlMode: 'touch',
-      expectedTexts: [
-        t(locale, 'settings'),
-        `${t(locale, 'controlLabel')}  ${t(locale, 'controlMode_touch')}`,
-        `${t(locale, 'tiltLabel')}  1.4x`,
-      ],
-    }),
-  ],
-  (locale) => [
-    `settings-round-swipe-${locale}`,
-    createSettingsScenario({
-      locale,
-      deviceInfo: ROUND_DEVICE,
-      variant: 'swipe',
-      controlMode: 'swipe',
-      expectedTexts: [
-        t(locale, 'settings'),
-        `${t(locale, 'controlLabel')}  ${t(locale, 'controlMode_swipe')}`,
-        `${t(locale, 'spawnLabel')}  1.3x`,
-      ],
-    }),
-  ],
-  (locale) => [
-    `settings-round-rotary-${locale}`,
-    createSettingsScenario({
-      locale,
-      deviceInfo: ROUND_DEVICE,
-      variant: 'rotary',
-      controlMode: 'crown',
-      expectedTexts: [
-        t(locale, 'settings'),
-        `${t(locale, 'controlLabel')}  ${t(locale, 'controlMode_crown')}`,
-        t(locale, 'play'),
-      ],
-    }),
-  ],
-  (locale) => [
-    `settings-square-tilt-${locale}`,
-    createSettingsScenario({
-      locale,
-      deviceInfo: SQUARE_DEVICE,
-      variant: 'tilt',
-      controlMode: 'tilt',
-      expectedTexts: [
-        t(locale, 'settings'),
-        `${t(locale, 'controlLabel')}  ${t(locale, 'controlMode_tilt')}`,
-        t(locale, 'back'),
-      ],
-    }),
-  ],
-  (locale) => [
-    `settings-square-touch-${locale}`,
-    createSettingsScenario({
-      locale,
-      deviceInfo: SQUARE_DEVICE,
-      variant: 'touch',
-      controlMode: 'touch',
-      expectedTexts: [
-        t(locale, 'settings'),
-        `${t(locale, 'controlLabel')}  ${t(locale, 'controlMode_touch')}`,
-        t(locale, 'play'),
-      ],
-    }),
-  ],
-  (locale) => [
-    `results-round-empty-${locale}`,
-    createResultsScenario({
-      locale,
-      deviceInfo: ROUND_DEVICE,
-      variant: 'empty',
-      scores: [],
-      expectedTexts: [t(locale, 'scoreboard'), t(locale, 'noRunsSavedYet'), t(locale, 'back'), t(locale, 'play')],
-      forbiddenTexts: [t(locale, 'prev'), t(locale, 'next')],
-    }),
-  ],
-  (locale) => [
-    `results-square-empty-${locale}`,
-    createResultsScenario({
-      locale,
-      deviceInfo: SQUARE_DEVICE,
-      variant: 'empty',
-      scores: [],
-      expectedTexts: [t(locale, 'scoreboard'), t(locale, 'noRunsSavedYet'), t(locale, 'back'), t(locale, 'play')],
-      forbiddenTexts: [t(locale, 'prev'), t(locale, 'next')],
-    }),
-  ],
-  (locale) => [
-    `results-round-session-${locale}`,
-    createResultsScenario({
-      locale,
-      deviceInfo: ROUND_DEVICE,
-      variant: 'session',
-      scores: createScores(5),
-      lastSession,
-      expectedTexts: [t(locale, 'runOver'), t(locale, 'recentRuns'), t(locale, 'back'), t(locale, 'play')],
-      forbiddenTexts: [t(locale, 'prev'), t(locale, 'next')],
-    }),
-  ],
-  (locale) => [
-    `results-square-session-${locale}`,
-    createResultsScenario({
-      locale,
-      deviceInfo: SQUARE_DEVICE,
-      variant: 'session',
-      scores: createScores(5),
-      lastSession,
-      expectedTexts: [t(locale, 'runOver'), t(locale, 'recentRuns'), t(locale, 'back'), t(locale, 'play')],
-      forbiddenTexts: [t(locale, 'prev'), t(locale, 'next')],
-    }),
-  ],
-  (locale) => [
-    `results-round-page-first-${locale}`,
-    createResultsScenario({
-      locale,
-      deviceInfo: ROUND_DEVICE,
-      variant: 'page-first',
-      scores: pagedScores,
-      pageIndex: 0,
-      expectedTexts: [t(locale, 'scoreboard'), '1 / 2', t(locale, 'next'), t(locale, 'back'), t(locale, 'play')],
-      forbiddenTexts: [t(locale, 'prev')],
-    }),
-  ],
-  (locale) => [
-    `results-round-page-last-${locale}`,
-    createResultsScenario({
-      locale,
-      deviceInfo: ROUND_DEVICE,
-      variant: 'page-last',
-      scores: pagedScores,
-      pageIndex: 1,
-      expectedTexts: [t(locale, 'scoreboard'), '2 / 2', t(locale, 'prev'), t(locale, 'back'), t(locale, 'play')],
-      forbiddenTexts: [t(locale, 'next')],
-    }),
-  ],
-  (locale) => [
-    `results-square-page-first-${locale}`,
-    createResultsScenario({
-      locale,
-      deviceInfo: SQUARE_DEVICE,
-      variant: 'page-first',
-      scores: pagedScores,
-      pageIndex: 0,
-      expectedTexts: [t(locale, 'scoreboard'), '1 / 2', t(locale, 'next'), t(locale, 'back'), t(locale, 'play')],
-      forbiddenTexts: [t(locale, 'prev')],
-    }),
-  ],
-  (locale) => [
-    `results-square-page-last-${locale}`,
-    createResultsScenario({
-      locale,
-      deviceInfo: SQUARE_DEVICE,
-      variant: 'page-last',
-      scores: pagedScores,
-      pageIndex: 1,
-      expectedTexts: [t(locale, 'scoreboard'), '2 / 2', t(locale, 'prev'), t(locale, 'back'), t(locale, 'play')],
-      forbiddenTexts: [t(locale, 'next')],
-    }),
-  ],
-  (locale) => [
-    `game-round-left-${locale}`,
-    createGameScenario({
-      locale,
-      deviceInfo: ROUND_DEVICE,
-      variant: 'left',
-      wristSide: 'left',
-    }),
-  ],
-  (locale) => [
-    `game-round-right-${locale}`,
-    createGameScenario({
-      locale,
-      deviceInfo: ROUND_DEVICE,
-      variant: 'right',
-      wristSide: 'right',
-    }),
-  ],
-  (locale) => [
-    `game-square-left-${locale}`,
-    createGameScenario({
-      locale,
-      deviceInfo: SQUARE_DEVICE,
-      variant: 'left',
-      wristSide: 'left',
-    }),
-  ],
-  (locale) => [
-    `game-square-right-${locale}`,
-    createGameScenario({
-      locale,
-      deviceInfo: SQUARE_DEVICE,
-      variant: 'right',
-      wristSide: 'right',
-    }),
-  ],
+const DEVICE_FAMILIES = [
+  { key: 'round-480', deviceInfo: ROUND_480_DEVICE },
+  { key: 'round-466', deviceInfo: ROUND_466_DEVICE },
+  { key: 'square-390x450', deviceInfo: SQUARE_390X450_DEVICE },
 ]
 
+function scenariosForDevice(locale, deviceFamily) {
+  const { key, deviceInfo } = deviceFamily
+  const isRound = deviceInfo.screenShape === 'round'
+  const shapeKey = isRound ? 'round' : 'square'
+
+  return [
+    [
+      `home-${key}-default-${locale}`,
+      createHomeScenario({
+        locale,
+        deviceInfo,
+        variant: 'default',
+        controlMode: 'tilt',
+        wristSide: 'left',
+        timeScale: 1,
+        spawnMultiplier: 1,
+        tiltSensitivity: 1,
+        scoreCount: 0,
+        expectedTexts: [t(locale, 'homeTitle'), t(locale, 'startRun'), t(locale, 'savedRuns', { count: 0 })],
+      }),
+    ],
+    [
+      `home-${key}-tuned-${locale}`,
+      createHomeScenario({
+        locale,
+        deviceInfo,
+        variant: 'tuned',
+        controlMode: isRound ? 'swipe' : 'touch',
+        wristSide: isRound ? 'right' : 'left',
+        timeScale: isRound ? 2 : 3,
+        spawnMultiplier: isRound ? 1.6 : 2,
+        tiltSensitivity: 1,
+        scoreCount: isRound ? 5 : 12,
+        expectedTexts: isRound
+          ? [
+              t(locale, 'homeSubtitle'),
+              t(locale, 'homeMeta', { timeScale: 2, spawnMultiplier: 1.6 }),
+              t(locale, 'savedRuns', { count: 5 }),
+            ]
+          : [t(locale, 'homeTitle'), t(locale, 'scoreboard'), t(locale, 'savedRuns', { count: 12 })],
+      }),
+    ],
+    [
+      `settings-${key}-tilt-${locale}`,
+      createSettingsScenario({
+        locale,
+        deviceInfo,
+        variant: 'tilt',
+        controlMode: 'tilt',
+        expectedTexts: [
+          t(locale, 'settings'),
+          `${t(locale, 'controlLabel')}  ${t(locale, 'controlMode_tilt')}`,
+          isRound ? `${t(locale, 'tiltLabel')}  1.4x` : t(locale, 'back'),
+        ],
+      }),
+    ],
+    [
+      `settings-${key}-${isRound ? 'touch' : 'touch'}-${locale}`,
+      createSettingsScenario({
+        locale,
+        deviceInfo,
+        variant: 'touch',
+        controlMode: 'touch',
+        expectedTexts: [
+          t(locale, 'settings'),
+          `${t(locale, 'controlLabel')}  ${t(locale, 'controlMode_touch')}`,
+          isRound ? `${t(locale, 'tiltLabel')}  1.4x` : t(locale, 'play'),
+        ],
+      }),
+    ],
+    ...(isRound
+      ? [
+          [
+            `settings-${key}-swipe-${locale}`,
+            createSettingsScenario({
+              locale,
+              deviceInfo,
+              variant: 'swipe',
+              controlMode: 'swipe',
+              expectedTexts: [
+                t(locale, 'settings'),
+                `${t(locale, 'controlLabel')}  ${t(locale, 'controlMode_swipe')}`,
+                `${t(locale, 'spawnLabel')}  1.3x`,
+              ],
+            }),
+          ],
+          [
+            `settings-${key}-rotary-${locale}`,
+            createSettingsScenario({
+              locale,
+              deviceInfo,
+              variant: 'rotary',
+              controlMode: 'crown',
+              expectedTexts: [
+                t(locale, 'settings'),
+                `${t(locale, 'controlLabel')}  ${t(locale, 'controlMode_crown')}`,
+                t(locale, 'play'),
+              ],
+            }),
+          ],
+        ]
+      : []),
+    [
+      `results-${key}-empty-${locale}`,
+      createResultsScenario({
+        locale,
+        deviceInfo,
+        variant: 'empty',
+        scores: [],
+        expectedTexts: [t(locale, 'scoreboard'), t(locale, 'noRunsSavedYet'), t(locale, 'back'), t(locale, 'play')],
+        forbiddenTexts: [t(locale, 'prev'), t(locale, 'next')],
+      }),
+    ],
+    [
+      `results-${key}-session-${locale}`,
+      createResultsScenario({
+        locale,
+        deviceInfo,
+        variant: 'session',
+        scores: createScores(5),
+        lastSession,
+        expectedTexts: [t(locale, 'runOver'), t(locale, 'recentRuns'), t(locale, 'back'), t(locale, 'play')],
+        forbiddenTexts: [t(locale, 'prev'), t(locale, 'next')],
+      }),
+    ],
+    [
+      `results-${key}-page-first-${locale}`,
+      createResultsScenario({
+        locale,
+        deviceInfo,
+        variant: 'page-first',
+        scores: pagedScores,
+        pageIndex: 0,
+        expectedTexts: [t(locale, 'scoreboard'), '1 / 2', t(locale, 'next'), t(locale, 'back'), t(locale, 'play')],
+        forbiddenTexts: [t(locale, 'prev')],
+      }),
+    ],
+    [
+      `results-${key}-page-last-${locale}`,
+      createResultsScenario({
+        locale,
+        deviceInfo,
+        variant: 'page-last',
+        scores: pagedScores,
+        pageIndex: 1,
+        expectedTexts: [t(locale, 'scoreboard'), '2 / 2', t(locale, 'prev'), t(locale, 'back'), t(locale, 'play')],
+        forbiddenTexts: [t(locale, 'next')],
+      }),
+    ],
+    [
+      `game-${key}-left-${locale}`,
+      createGameScenario({
+        locale,
+        deviceInfo,
+        variant: 'left',
+        wristSide: 'left',
+      }),
+    ],
+    [
+      `game-${key}-right-${locale}`,
+      createGameScenario({
+        locale,
+        deviceInfo,
+        variant: 'right',
+        wristSide: 'right',
+      }),
+    ],
+  ]
+}
+
 export const previewScenarios = Object.fromEntries(
-  CONFIGURED_LOCALES.flatMap((locale) => scenarioFactories.map((factory) => factory(locale)))
+  CONFIGURED_LOCALES.flatMap((locale) => DEVICE_FAMILIES.flatMap((deviceFamily) => scenariosForDevice(locale, deviceFamily)))
 )

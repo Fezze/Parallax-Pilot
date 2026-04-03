@@ -5,28 +5,40 @@
   "serviceCategory": "Normal",
   "appClassification": "Game",
   "countryOrRegion": "TODO_CONFIRM_IN_CONSOLE",
-  "applicationPackage": "artifacts/Parallax_Pilot-1.1.0-release.zab",
-  "versionName": "1.1.0",
-  "versionCode": 3,
+  "applicationPackage": "artifacts/Parallax_Pilot-1.2.0-release.zab",
+  "versionName": "1.2.0",
+  "versionCode": 4,
+  "supportedDevices": [
+    "Amazfit Balance 2",
+    "Amazfit T-Rex 3",
+    "Amazfit T-Rex 3 Pro (48mm)",
+    "Amazfit Active Max",
+    "Amazfit Active 3 Premium",
+    "Amazfit T-Rex 3 Pro (44mm)",
+    "Amazfit Active 2 (Round)",
+    "Amazfit Active 2 (Square)",
+    "Amazfit Bip 6",
+    "Amazfit Active"
+  ],
+  "releaseShapeCoverage": [
+    "round",
+    "square"
+  ],
   "languages": {
     "en-US": {
       "appName": "Parallax Pilot",
+      "appIntroduction": "Arcade asteroid dodging on your watch.",
       "listingPath": "listing/en-US.md",
       "previewImage": "assets/language-preview/en-US-preview.png"
     },
     "pl-PL": {
       "appName": "Parallax Pilot",
+      "appIntroduction": "Omijaj asteroidy na ekranie zegarka.",
       "listingPath": "listing/pl-PL.md",
       "previewImage": "assets/language-preview/pl-PL-preview.png"
     }
   },
-  "screenshots": [
-    "assets/screenshots/en-US/round/game-left-flight.png",
-    "assets/screenshots/en-US/round/game-right-flight.png",
-    "assets/screenshots/en-US/square/game-left-flight.png",
-    "assets/screenshots/en-US/square/game-right-flight.png"
-  ],
-  "localizedScreenshotsManifest": "assets/screenshots/manifest.json",
+  "screenshotsManifest": "assets/screenshots/manifest.json",
   "storeIcon": "assets/icon/store-icon-240.png",
   "privacyStatements": {
     "en-US": "privacy/en-US.md",
@@ -37,5 +49,9 @@
     "device:os.local_storage",
     "data:os.device.info"
   ],
+  "callPermissionSelection": [
+    "Others"
+  ],
+  "featureDescription": "Parallax Pilot is a watch-only arcade game. It uses the accelerometer for tilt controls, local storage for on-watch settings and score history, and device info for screen/layout adaptation. It does not use network access, location, heart rate, accounts, or background services.",
   "sdkIncluded": false
 }

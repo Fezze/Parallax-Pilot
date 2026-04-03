@@ -11,31 +11,44 @@
 
 ## Package
 
-- Application package: `artifacts/Parallax_Pilot-1.1.0-release.zab`
-- Expected version after upload: `1.1.0`
-- Expected version code in package: `3`
+- Application package: `artifacts/Parallax_Pilot-1.2.0-release.zab`
+- Current app manifest version: `1.2.0`
+- Current app manifest version code: `4`
 - Supporting devices: auto-filled by Zepp Console after ZAB upload
+- Current target device set in `app.json`:
+  - `Amazfit Balance 2`
+  - `Amazfit T-Rex 3`
+  - `Amazfit T-Rex 3 Pro (48mm)`
+  - `Amazfit Active Max`
+  - `Amazfit Active 3 Premium`
+  - `Amazfit T-Rex 3 Pro (44mm)`
+  - `Amazfit Active 2 (Round)`
+  - `Amazfit Active 2 (Square)`
+  - `Amazfit Bip 6`
+  - `Amazfit Active`
+- Current release shape coverage: `round` and `square`
 
 ## Languages
 
 - `en-US`
   Name: `Parallax Pilot`
-  App profile: `listing/en-US.md`
+  App introduction: `Arcade asteroid dodging on your watch.`
   App details: `listing/en-US.md`
   App profile preview image: `assets/language-preview/en-US-preview.png`
 - `pl-PL`
   Name: `Parallax Pilot`
-  App profile: `listing/pl-PL.md`
+  App introduction: `Omijaj asteroidy na ekranie zegarka.`
   App details: `listing/pl-PL.md`
   App profile preview image: `assets/language-preview/pl-PL-preview.png`
 
 ## App Introduction Screenshots
 
-- `assets/screenshots/en-US/round/game-left-flight.png`
-- `assets/screenshots/en-US/round/game-right-flight.png`
-- `assets/screenshots/en-US/square/game-left-flight.png`
-- `assets/screenshots/en-US/square/game-right-flight.png`
-- Localized screenshot sets: `assets/screenshots/manifest.json`
+- `en-US` round: `10` screenshots in `assets/screenshots/en-US/round/`
+- `pl-PL` round: `10` screenshots in `assets/screenshots/pl-PL/round/`
+- Full map: `assets/screenshots/manifest.json`
+- Format prepared: `360x360 PNG` with transparent background
+- Round export: no margins
+- Rectangular export: equal left/right margins, no top/bottom margins
 
 ## Store Icon
 
@@ -48,13 +61,20 @@
 
 ## Calling Permissions
 
-- `device:os.accelerometer`
-- `device:os.local_storage`
-- `data:os.device.info`
+- Select in console: `Others`
+- Do not select: `Heart Rate`, `Connect to the network`, `Positioning`, `Run in background`
+- Runtime permissions used by the app:
+  - `device:os.accelerometer`
+  - `device:os.local_storage`
+  - `data:os.device.info`
 
 ## SDK Included
 
 - `No`
+
+## Features Descriptions
+
+- `Parallax Pilot is a watch-only arcade game. It uses the accelerometer for tilt controls, local storage for on-watch settings and score history, and device info for screen/layout adaptation. It does not use network access, location, heart rate, accounts, or background services.`
 
 ## Submission Notes
 

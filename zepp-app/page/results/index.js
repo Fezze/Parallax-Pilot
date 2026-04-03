@@ -85,9 +85,9 @@ Page({
       : isRound && lastSession
         ? 24
         : isSquareScoreboard
-          ? 22
+          ? 24
           : 24
-    const listTop = lastSession ? (isRound ? 158 : 148) : isRound ? 96 : 98
+    const listTop = lastSession ? (isRound ? 158 : 142) : isRound ? 96 : 104
     const hasPrev = pageCount > 1 && pageIndex > 0
     const hasNext = pageCount > 1 && pageIndex < pageCount - 1
     const listBottomY =
@@ -125,20 +125,20 @@ Page({
     const actionRowY = isRound
       ? height - roundActionButtonH
       : isSquare && !lastSession
-        ? 336
+        ? height - 54
         : isSquare
-          ? 326
+          ? height - 64
           : isEmptyState
             ? 396
             : height - 66
     const navRowY = isRound
       ? actionRowY - roundRowGap - roundNavButtonH
       : isSquareScoreboard
-        ? 284
+        ? actionRowY - 52
         : height - 110
     let pagerY = Math.max(
       listBottomY + (isRound ? 18 : 10),
-      isRoundScoreboard ? navRowY - 24 : isSquareScoreboard ? 260 : height - (isRound ? 138 : 124)
+      isRoundScoreboard ? navRowY - 24 : isSquareScoreboard ? navRowY - 24 : height - (isRound ? 138 : 124)
     )
 
     if (!lastSession) {

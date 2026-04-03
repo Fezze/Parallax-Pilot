@@ -1,4 +1,4 @@
-{
+﻿{
     "defaultLanguage":  "en-US",
     "locales":  [
                     "en-US",
@@ -7,22 +7,54 @@
     "screenshots":  {
                         "en-US":  {
                                       "round":  [
-                                                    "assets/screenshots/en-US/round/game-left-flight.png",
-                                                    "assets/screenshots/en-US/round/game-right-flight.png"
+                                                    "assets/screenshots/en-US/round/game-left.png",
+                                                    "assets/screenshots/en-US/round/game-right.png",
+                                                    "assets/screenshots/en-US/round/home-default.png",
+                                                    "assets/screenshots/en-US/round/home-tuned.png",
+                                                    "assets/screenshots/en-US/round/results-empty.png",
+                                                    "assets/screenshots/en-US/round/results-page-first.png",
+                                                    "assets/screenshots/en-US/round/results-page-last.png",
+                                                    "assets/screenshots/en-US/round/results-session.png",
+                                                    "assets/screenshots/en-US/round/settings-rotary.png",
+                                                    "assets/screenshots/en-US/round/settings-touch.png"
                                                 ],
                                       "square":  [
-                                                     "assets/screenshots/en-US/square/game-left-flight.png",
-                                                     "assets/screenshots/en-US/square/game-right-flight.png"
+                                                     "assets/screenshots/en-US/square/game-left.png",
+                                                     "assets/screenshots/en-US/square/game-right.png",
+                                                     "assets/screenshots/en-US/square/home-default.png",
+                                                     "assets/screenshots/en-US/square/home-tuned.png",
+                                                     "assets/screenshots/en-US/square/results-empty.png",
+                                                     "assets/screenshots/en-US/square/results-page-first.png",
+                                                     "assets/screenshots/en-US/square/results-page-last.png",
+                                                     "assets/screenshots/en-US/square/results-session.png",
+                                                     "assets/screenshots/en-US/square/settings-tilt.png",
+                                                     "assets/screenshots/en-US/square/settings-touch.png"
                                                  ]
                                   },
                         "pl-PL":  {
                                       "round":  [
-                                                    "assets/screenshots/pl-PL/round/game-left-flight.png",
-                                                    "assets/screenshots/pl-PL/round/game-right-flight.png"
+                                                    "assets/screenshots/pl-PL/round/game-left.png",
+                                                    "assets/screenshots/pl-PL/round/game-right.png",
+                                                    "assets/screenshots/pl-PL/round/home-default.png",
+                                                    "assets/screenshots/pl-PL/round/home-tuned.png",
+                                                    "assets/screenshots/pl-PL/round/results-empty.png",
+                                                    "assets/screenshots/pl-PL/round/results-page-first.png",
+                                                    "assets/screenshots/pl-PL/round/results-page-last.png",
+                                                    "assets/screenshots/pl-PL/round/results-session.png",
+                                                    "assets/screenshots/pl-PL/round/settings-rotary.png",
+                                                    "assets/screenshots/pl-PL/round/settings-touch.png"
                                                 ],
                                       "square":  [
-                                                     "assets/screenshots/pl-PL/square/game-left-flight.png",
-                                                     "assets/screenshots/pl-PL/square/game-right-flight.png"
+                                                     "assets/screenshots/pl-PL/square/game-left.png",
+                                                     "assets/screenshots/pl-PL/square/game-right.png",
+                                                     "assets/screenshots/pl-PL/square/home-default.png",
+                                                     "assets/screenshots/pl-PL/square/home-tuned.png",
+                                                     "assets/screenshots/pl-PL/square/results-empty.png",
+                                                     "assets/screenshots/pl-PL/square/results-page-first.png",
+                                                     "assets/screenshots/pl-PL/square/results-page-last.png",
+                                                     "assets/screenshots/pl-PL/square/results-session.png",
+                                                     "assets/screenshots/pl-PL/square/settings-tilt.png",
+                                                     "assets/screenshots/pl-PL/square/settings-touch.png"
                                                  ]
                                   }
                     },
