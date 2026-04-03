@@ -45,6 +45,10 @@ function getTexts() {
   return __getTextWidgets().map((widget) => widget.props.text)
 }
 
+function findText(text) {
+  return __getTextWidgets().find((widget) => widget.props.text === text)
+}
+
 test('home screen renders simplified copy and routes from main actions', async () => {
   resetEnv()
   __seedLocalStorage({
@@ -170,10 +174,13 @@ test('results screen keeps nav buttons separate from back/play on round screens'
   const backButton = findButton('BACK')
   const playButton = findButton('PLAY')
   const buttonTexts = __getButtonWidgets().map((widget) => widget.props.text)
+  const pageLabel = findText('1 / 2')
 
   assert.ok(getTexts().includes('RUN OVER'))
   assert.ok(getTexts().includes('RECENT RUNS'))
+  assert.ok(pageLabel)
   assert.equal(buttonTexts.includes('PREV'), false)
+  assert.equal(pageLabel.props.y, 344)
   assert.equal(nextButton.props.y, 364)
   assert.equal(backButton.props.y, 414)
   assert.equal(playButton.props.y, 414)
@@ -194,6 +201,77 @@ test('results screen keeps nav buttons separate from back/play on round screens'
       payload: { url: 'page/home/index' },
     },
   ])
+})
+
+test('results round page-last layout matches the real scoreboard spacing', async () => {
+  resetEnv()
+  __setDeviceInfo({
+    width: 480,
+    height: 480,
+    screenShape: SCREEN_SHAPE_ROUND,
+  })
+  __seedLocalStorage({
+    scores_v1: JSON.stringify(
+      Array.from({ length: 13 }, (_, index) => ({
+        id: `run-${index}`,
+        timestamp: 100 - index,
+        score: 7000 - index * 123,
+        survivedMs: 6000 + index * 210,
+      }))
+    ),
+  })
+
+  const page = await loadPageDefinition('../zepp-app/page/results/index.js')
+  page.onInit(JSON.stringify({ pageIndex: 1 }))
+  page.build()
+
+  const prevButton = findButton('PREV')
+  const backButton = findButton('BACK')
+  const playButton = findButton('PLAY')
+  const firstRow = findText('08  6139  7.47s')
+  const pageLabel = findText('2 / 2')
+
+  assert.ok(firstRow)
+  assert.ok(pageLabel)
+  assert.equal(firstRow.props.y, 156)
+  assert.equal(pageLabel.props.y, 360)
+  assert.equal(prevButton.props.y, 390)
+  assert.equal(backButton.props.y, 432)
+  assert.equal(playButton.props.y, 432)
+  assert.equal(__getButtonWidgets().some((widget) => widget.props.text === 'NEXT'), false)
+})
+
+test('results round first page keeps the page label below the last visible score', async () => {
+  resetEnv()
+  __setDeviceInfo({
+    width: 480,
+    height: 480,
+    screenShape: SCREEN_SHAPE_ROUND,
+  })
+  __seedLocalStorage({
+    scores_v1: JSON.stringify(
+      Array.from({ length: 13 }, (_, index) => ({
+        id: `run-${index}`,
+        timestamp: 100 - index,
+        score: 7000 - index * 123,
+        survivedMs: 6000 + index * 210,
+      }))
+    ),
+  })
+
+  const page = await loadPageDefinition('../zepp-app/page/results/index.js')
+  page.onInit(JSON.stringify({ pageIndex: 0 }))
+  page.build()
+
+  const lastVisibleRow = findText('07  6262  7.26s')
+  const pageLabel = findText('1 / 2')
+  const nextButton = findButton('NEXT')
+
+  assert.ok(lastVisibleRow)
+  assert.ok(pageLabel)
+  assert.equal(lastVisibleRow.props.y, 324)
+  assert.equal(pageLabel.props.y, 366)
+  assert.equal(nextButton.props.y, 390)
 })
 
 test('game screen renders without debug text widgets in the canvas HUD', async () => {
@@ -222,6 +300,51 @@ test('game screen renders without debug text widgets in the canvas HUD', async (
     const drawTextCalls = canvas.__getDrawCalls().filter((call) => call.method === 'drawText')
 
     assert.equal(drawTextCalls.length, 0)
+    page.onDestroy()
+  } finally {
+    globalThis.setInterval = originalSetInterval
+    globalThis.clearInterval = originalClearInterval
+  }
+})
+
+test('game swipe input moves relatively and does not teleport on touch down', async () => {
+  resetEnv()
+  __seedLocalStorage({
+    settings_v1: JSON.stringify({
+      controlMode: 'swipe',
+      wristSide: 'left',
+      timeScale: 1,
+      spawnMultiplier: 1,
+      tiltSensitivity: 1,
+    }),
+  })
+
+  const originalSetInterval = globalThis.setInterval
+  const originalClearInterval = globalThis.clearInterval
+  globalThis.setInterval = () => 1
+  globalThis.clearInterval = () => {}
+
+  try {
+    const page = await loadPageDefinition('../zepp-app/page/game/index.js')
+    page.onInit()
+    page.build()
+
+    const [canvas] = __getCanvasWidgets()
+    const initialCenterY = page.shipCenterY
+
+    canvas.__emit('CLICK_DOWN', { y: 80 })
+    assert.equal(page.shipCenterY, initialCenterY)
+
+    canvas.__emit('MOVE', { y: 140 })
+    assert.equal(page.shipCenterY, initialCenterY)
+    page.lastFrameAt = Date.now() - 16
+    page.tick()
+    assert.equal(page.shipCenterY, initialCenterY + 60)
+
+    canvas.__emit('CLICK_UP')
+    canvas.__emit('CLICK_DOWN', { y: 300 })
+    assert.equal(page.shipCenterY, initialCenterY + 60)
+
     page.onDestroy()
   } finally {
     globalThis.setInterval = originalSetInterval

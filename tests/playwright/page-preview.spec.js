@@ -22,6 +22,9 @@ for (const [scenarioId, scenario] of Object.entries(previewScenarios)) {
     for (const expectedText of scenario.expectedTexts) {
       await expect(page.locator('#watch')).toContainText(expectedText)
     }
+    for (const forbiddenText of scenario.forbiddenTexts || []) {
+      await expect(page.locator('#watch')).not.toContainText(forbiddenText)
+    }
 
     const preview = await page.evaluate(() => window.__PREVIEW__)
     expect(preview.scenarioId).toBe(scenarioId)

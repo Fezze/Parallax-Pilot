@@ -53,9 +53,25 @@ Page({
     const isRound = deviceInfo.screenShape === SCREEN_SHAPE_ROUND
     const pad = Math.round(width * (isRound ? 0.11 : 0.07))
     const fullWidth = width - pad * 2
-    const listTop = lastSession ? 158 : 118
+    const isRoundScoreboard = isRound && !lastSession
+    const listRowGap = isRoundScoreboard ? 28 : isRound && lastSession ? 24 : 30
+    const listTop = lastSession ? 158 : isRound ? 156 : 118
+    const navRowY = isRoundScoreboard ? 390 : height - (isRound ? 116 : 118)
+    const actionRowY = isRoundScoreboard ? 432 : height - 66
     const hasPrev = pageCount > 1 && pageIndex > 0
     const hasNext = pageCount > 1 && pageIndex < pageCount - 1
+    const listBottomY =
+      items.length > 0
+        ? listTop + (items.length - 1) * listRowGap + 24
+        : listTop + 68
+    let pagerY = Math.max(
+      listBottomY + (isRound ? 18 : 12),
+      isRoundScoreboard ? 360 : height - (isRound ? 138 : 124)
+    )
+
+    if (isRoundScoreboard) {
+      pagerY = Math.min(pagerY, navRowY - 24)
+    }
     const navButtons = []
 
     if (hasPrev) {
@@ -140,7 +156,7 @@ Page({
       items.forEach((entry, index) => {
         createLabel({
           x: pad,
-          y: listTop + index * 30,
+          y: listTop + index * listRowGap,
           w: fullWidth,
           h: 24,
           text: buildScoreRow(entry, pageIndex * RESULTS_PAGE_SIZE + index),
@@ -153,7 +169,7 @@ Page({
     if (pageCount > 1) {
       createLabel({
         x: pad,
-        y: height - (isRound ? 150 : 124),
+        y: pagerY,
         w: fullWidth,
         h: 18,
         text: `${pageIndex + 1} / ${pageCount}`,
@@ -165,7 +181,7 @@ Page({
     if (navButtons.length > 0) {
       createRowButtons({
         width,
-        y: height - (isRound ? 116 : 118),
+        y: navRowY,
         safePad: Math.round(width * (isRound ? 0.18 : 0.22)),
         buttons: navButtons.map((button) => ({
           ...button,
@@ -177,7 +193,7 @@ Page({
 
     createRowButtons({
       width,
-      y: height - 66,
+      y: actionRowY,
       safePad: Math.round(width * (isRound ? 0.18 : 0.16)),
       buttons: [
         {

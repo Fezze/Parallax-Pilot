@@ -276,6 +276,9 @@ Page({
     this.crownCenterY = deviceInfo.height / 2
     this.touchDirection = 0
     this.pointerDown = false
+    this.swipeStartTouchY = null
+    this.swipeCurrentTouchY = null
+    this.swipeStartShipY = this.shipCenterY
     this.asteroids = []
     this.collisionCandidates = []
     this.collisionGrid = createCollisionGrid(
@@ -351,30 +354,47 @@ Page({
   },
 
   bindCanvasEvents() {
-    const applyPointerInput = (y) => {
+    const beginPointerInput = (y) => {
       if (this.settings.controlMode === 'touch') {
         this.touchDirection = y < this.viewport.height / 2 ? -1 : 1
       }
 
       if (this.settings.controlMode === 'swipe') {
-        this.shipCenterY = clamp(y, 20, this.viewport.height - 20)
+        this.swipeStartTouchY = y
+        this.swipeCurrentTouchY = y
+        this.swipeStartShipY = this.shipCenterY
+      }
+    }
+
+    const updatePointerInput = (y) => {
+      if (this.settings.controlMode === 'touch') {
+        this.touchDirection = y < this.viewport.height / 2 ? -1 : 1
+      }
+
+      if (
+        this.settings.controlMode === 'swipe' &&
+        this.swipeStartTouchY !== null
+      ) {
+        this.swipeCurrentTouchY = y
       }
     }
 
     this.canvas.addEventListener(event.CLICK_DOWN, (info) => {
       this.pointerDown = true
-      applyPointerInput(info.y)
+      beginPointerInput(info.y)
     })
     this.canvas.addEventListener(event.CLICK_UP, () => {
       this.pointerDown = false
       this.touchDirection = 0
+      this.swipeStartTouchY = null
+      this.swipeCurrentTouchY = null
     })
     this.canvas.addEventListener(event.MOVE, (info) => {
       if (!this.pointerDown) {
         return
       }
 
-      applyPointerInput(info.y)
+      updatePointerInput(info.y)
     })
   },
 
@@ -532,6 +552,17 @@ Page({
       this.shipCenterY += this.touchDirection * baseSpeed * deltaSeconds
     }
 
+    if (
+      this.settings.controlMode === 'swipe' &&
+      this.pointerDown &&
+      this.swipeStartTouchY !== null &&
+      this.swipeCurrentTouchY !== null
+    ) {
+      this.shipCenterY = this.swipeStartShipY + (
+        this.swipeCurrentTouchY - this.swipeStartTouchY
+      )
+    }
+
     if (this.settings.controlMode === 'crown') {
       if (this.buttonDirection !== 0) {
         this.crownCenterY += this.buttonDirection * baseSpeed * deltaSeconds
@@ -660,7 +691,6 @@ Page({
   },
 
   drawFrame() {
-    const now = Date.now()
     const shipRect = createShipRect(
       this.viewport,
       this.shipCenterY,

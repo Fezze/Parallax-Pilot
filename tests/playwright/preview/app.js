@@ -77,6 +77,9 @@ async function mountScenario() {
   }
 
   page.build()
+  if (typeof scenario.afterBuild === 'function') {
+    await scenario.afterBuild(page)
+  }
 
   const snapshot = getRuntimeSnapshot()
   const payload = {
