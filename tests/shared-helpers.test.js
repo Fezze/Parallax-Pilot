@@ -40,6 +40,10 @@ import {
   sanitizeControlMode,
   supportsDigitalCrown,
 } from '../zepp-app/shared/device.js'
+import {
+  __resetLanguage,
+  __setLanguage,
+} from './mocks/zos/settings.mjs'
 
 function createMemoryStorage(initialValues = {}) {
   const map = new Map(Object.entries(initialValues))
@@ -118,6 +122,7 @@ test('settings and scores sanitize invalid values before persistence', () => {
 })
 
 test('view models format and clamp pagination predictably', () => {
+  __resetLanguage()
   const scores = [{ score: 9, survivedMs: 125000 }]
   const page = paginateScores(null, 99, 5)
 
@@ -136,6 +141,15 @@ test('view models format and clamp pagination predictably', () => {
   assert.equal(formatSettingValue('timeScale', 2), '2x')
   assert.equal(formatSettingValue('unknown', 7), '7')
   assert.equal(buildScoreRow(scores[0], 1), '02  9  125s')
+})
+
+test('view models switch setting labels to Polish when the locale is pl-PL', () => {
+  __setLanguage(9)
+
+  assert.equal(formatSettingValue('controlMode', 'crown'), 'OBRÓT')
+  assert.equal(formatSettingValue('wristSide', 'left'), 'LEWA')
+
+  __resetLanguage()
 })
 
 test('device helpers and score entry cover invalid and negative branches', () => {

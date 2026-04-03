@@ -15,6 +15,7 @@ import {
   formatSettingValue,
   getAvailableControlModes,
 } from '../../shared/view-models.js'
+import { t } from '../../shared/i18n.js'
 
 function updateSetting(key, nextValue) {
   const settings = loadSettings()
@@ -63,7 +64,7 @@ Page({
       y: titleY,
       w: fullWidth,
       h: 32,
-      text: 'SETTINGS',
+      text: t('settings'),
       textSize: titleSize,
       color: COLORS.accent,
     })
@@ -73,7 +74,7 @@ Page({
       y: subtitleY,
       w: fullWidth,
       h: 24,
-      text: 'TAP TO CHANGE',
+      text: t('tapToChange'),
       textSize: subtitleSize,
       color: COLORS.textMuted,
     })
@@ -83,7 +84,10 @@ Page({
       y: startY,
       w: fullWidth,
       h: rowHeight,
-      text: `CONTROL  ${formatSettingValue('controlMode', settings.controlMode)}`,
+      text: `${t('controlLabel')}  ${formatSettingValue(
+        'controlMode',
+        settings.controlMode
+      )}`,
       textSize: rowTextSize,
       onClick: () =>
         updateSetting(
@@ -97,7 +101,10 @@ Page({
       y: startY + (rowHeight + rowGap) * 1,
       w: fullWidth,
       h: rowHeight,
-      text: `WRIST  ${formatSettingValue('wristSide', settings.wristSide)}`,
+      text: `${t('wristLabel')}  ${formatSettingValue(
+        'wristSide',
+        settings.wristSide
+      )}`,
       textSize: rowTextSize,
       onClick: () =>
         updateSetting(
@@ -111,7 +118,10 @@ Page({
       y: startY + (rowHeight + rowGap) * 2,
       w: fullWidth,
       h: rowHeight,
-      text: `TIME  ${formatSettingValue('timeScale', settings.timeScale)}`,
+      text: `${t('timeLabel')}  ${formatSettingValue(
+        'timeScale',
+        settings.timeScale
+      )}`,
       textSize: rowTextSize,
       onClick: () =>
         updateSetting(
@@ -125,7 +135,7 @@ Page({
       y: startY + (rowHeight + rowGap) * 3,
       w: fullWidth,
       h: rowHeight,
-      text: `SPAWN  ${formatSettingValue(
+      text: `${t('spawnLabel')}  ${formatSettingValue(
         'spawnMultiplier',
         settings.spawnMultiplier
       )}`,
@@ -142,7 +152,7 @@ Page({
       y: startY + (rowHeight + rowGap) * 4,
       w: fullWidth,
       h: rowHeight,
-      text: `TILT  ${formatSettingValue(
+      text: `${t('tiltLabel')}  ${formatSettingValue(
         'tiltSensitivity',
         settings.tiltSensitivity
       )}`,
@@ -164,7 +174,7 @@ Page({
       y: footerButtonY,
       w: Math.floor((fullWidth - 12) / 2),
       h: footerButtonH,
-      text: 'BACK',
+      text: t('back'),
       textSize: isRound ? 22 : 20,
       onClick: () => back(),
     })
@@ -174,7 +184,7 @@ Page({
       y: footerButtonY,
       w: Math.floor((fullWidth - 12) / 2),
       h: footerButtonH,
-      text: 'PLAY',
+      text: t('play'),
       textSize: isRound ? 22 : 20,
       normalColor: COLORS.accent,
       pressColor: 0xc9a900,

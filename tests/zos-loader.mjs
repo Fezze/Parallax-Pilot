@@ -9,6 +9,7 @@ const mockFiles = {
   '@zos/interaction': 'tests/mocks/zos/interaction.mjs',
   '@zos/sensor': 'tests/mocks/zos/sensor.mjs',
   '@zos/storage': 'tests/mocks/zos/storage.mjs',
+  '@zos/settings': 'tests/mocks/zos/settings.mjs',
 }
 
 export async function resolve(specifier, context, nextResolve) {

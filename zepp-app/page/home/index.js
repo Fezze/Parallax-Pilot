@@ -5,6 +5,7 @@ import {
   sanitizeControlMode,
   supportsDigitalCrown,
 } from '../../shared/device.js'
+import { t } from '../../shared/i18n.js'
 import { createActionButton, createLabel, hideStatusBar } from '../../shared/page-ui.js'
 import { loadScores, loadSettings, saveSettings } from '../../shared/storage.js'
 
@@ -46,7 +47,7 @@ Page({
       y: titleY,
       w: fullWidth,
       h: 40,
-      text: 'PARALLAX PILOT',
+      text: t('homeTitle'),
       textSize: Math.round(Math.min(32, width * 0.08)),
       color: COLORS.accent,
     })
@@ -56,7 +57,7 @@ Page({
       y: subtitleY,
       w: fullWidth,
       h: 26,
-      text: 'DODGE THE ASTEROIDS',
+      text: t('homeSubtitle'),
       textSize: isRound ? 18 : 16,
       color: COLORS.textMuted,
     })
@@ -66,7 +67,7 @@ Page({
       y: buttonStartY,
       w: fullWidth,
       h: buttonHeight,
-      text: 'START RUN',
+      text: t('startRun'),
       normalColor: COLORS.accent,
       pressColor: 0xc9a900,
       textColor: COLORS.background,
@@ -78,7 +79,7 @@ Page({
       y: buttonStartY + buttonHeight + buttonGap,
       w: fullWidth,
       h: secondaryButtonHeight,
-      text: 'SETTINGS',
+      text: t('settings'),
       textSize: isRound ? 22 : 20,
       onClick: () => push({ url: ROUTES.SETTINGS }),
     })
@@ -88,7 +89,7 @@ Page({
       y: buttonStartY + buttonHeight + secondaryButtonHeight + buttonGap * 2,
       w: fullWidth,
       h: secondaryButtonHeight,
-      text: 'SCOREBOARD',
+      text: t('scoreboard'),
       textSize: isRound ? 22 : 20,
       onClick: () => push({ url: ROUTES.RESULTS }),
     })
@@ -98,7 +99,10 @@ Page({
       y: metaPrimaryY,
       w: fullWidth,
       h: 22,
-      text: `TIME ${nextSettings.timeScale}x  SPAWN ${nextSettings.spawnMultiplier}x`,
+      text: t('homeMeta', {
+        timeScale: nextSettings.timeScale,
+        spawnMultiplier: nextSettings.spawnMultiplier,
+      }),
       textSize: isRound ? 18 : 16,
       color: COLORS.textPrimary,
     })
@@ -108,7 +112,7 @@ Page({
       y: metaSecondaryY,
       w: fullWidth,
       h: 20,
-      text: `${scores.length} RUNS SAVED`,
+      text: t('savedRuns', { count: scores.length }),
       textSize: isRound ? 16 : 15,
       color: COLORS.textMuted,
     })

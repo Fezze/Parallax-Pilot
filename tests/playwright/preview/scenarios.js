@@ -41,6 +41,7 @@ function createSettings({
 
 function createHomeScenario({
   deviceInfo,
+  languageCode = 2,
   controlMode,
   wristSide,
   timeScale,
@@ -52,6 +53,7 @@ function createHomeScenario({
   return {
     pageModule: '/zepp-app/page/home/index.js',
     deviceInfo,
+    languageCode,
     localStorage: {
       settings_v1: createSettings({
         controlMode,
@@ -69,6 +71,7 @@ function createHomeScenario({
 
 function createSettingsScenario({
   deviceInfo,
+  languageCode = 2,
   controlMode,
   wristSide = 'left',
   timeScale = 1,
@@ -79,6 +82,7 @@ function createSettingsScenario({
   return {
     pageModule: '/zepp-app/page/settings/index.js',
     deviceInfo,
+    languageCode,
     localStorage: {
       settings_v1: createSettings({
         controlMode,
@@ -95,6 +99,7 @@ function createSettingsScenario({
 
 function createResultsScenario({
   deviceInfo,
+  languageCode = 2,
   scores = [],
   lastSession = null,
   pageIndex = 0,
@@ -105,6 +110,7 @@ function createResultsScenario({
     pageModule: '/zepp-app/page/results/index.js',
     initParams: JSON.stringify({ pageIndex }),
     deviceInfo,
+    languageCode,
     localStorage: {
       scores_v1: JSON.stringify(scores),
     },
@@ -120,6 +126,7 @@ function createResultsScenario({
 
 function createGameScenario({
   deviceInfo,
+  languageCode = 2,
   wristSide,
   controlMode = 'tilt',
   timeScale = 1,
@@ -129,6 +136,7 @@ function createGameScenario({
   return {
     pageModule: '/zepp-app/page/game/index.js',
     deviceInfo,
+    languageCode,
     localStorage: {
       settings_v1: createSettings({
         controlMode,
@@ -196,6 +204,17 @@ export const previewScenarios = {
     scoreCount: 12,
     expectedTexts: ['PARALLAX PILOT', 'SCOREBOARD', '12 RUNS SAVED'],
   }),
+  'home-round-pl': createHomeScenario({
+    deviceInfo: ROUND_DEVICE,
+    languageCode: 9,
+    controlMode: 'swipe',
+    wristSide: 'left',
+    timeScale: 2,
+    spawnMultiplier: 1.6,
+    tiltSensitivity: 1,
+    scoreCount: 5,
+    expectedTexts: ['OMIJAJ ASTEROIDY', 'CZAS 2x  ILOŚĆ 1.6x', 'WYNIKI: 5'],
+  }),
 
   'settings-round-tilt': createSettingsScenario({
     deviceInfo: ROUND_DEVICE,
@@ -226,6 +245,16 @@ export const previewScenarios = {
     deviceInfo: SQUARE_DEVICE,
     controlMode: 'touch',
     expectedTexts: ['SETTINGS', 'CONTROL  TOUCH', 'PLAY'],
+  }),
+  'settings-square-pl': createSettingsScenario({
+    deviceInfo: SQUARE_DEVICE,
+    languageCode: 9,
+    controlMode: 'crown',
+    wristSide: 'right',
+    timeScale: 3,
+    spawnMultiplier: 1.3,
+    tiltSensitivity: 1.4,
+    expectedTexts: ['USTAWIENIA', 'STER.  OBRÓT', 'MENU'],
   }),
 
   'results-round-empty': createResultsScenario({
@@ -281,6 +310,13 @@ export const previewScenarios = {
     pageIndex: 1,
     expectedTexts: ['SCOREBOARD', '2 / 2', 'PREV', 'BACK', 'PLAY'],
     forbiddenTexts: ['NEXT'],
+  }),
+  'results-round-pl-empty': createResultsScenario({
+    deviceInfo: ROUND_DEVICE,
+    languageCode: 9,
+    scores: [],
+    expectedTexts: ['WYNIKI', 'BRAK WYNIKÓW', 'MENU', 'GRAJ'],
+    forbiddenTexts: ['POPRZ.', 'DALEJ'],
   }),
 
   'game-round-left': createGameScenario({

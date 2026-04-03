@@ -1,0 +1,27 @@
+{
+    "defaultLanguage":  "en-US",
+    "locales":  [
+                    "en-US",
+                    "pl-PL"
+                ],
+    "genericScreenshots":  [
+                               "assets/screenshots/01-round-game-left.png",
+                               "assets/screenshots/02-round-game-right.png",
+                               "assets/screenshots/03-square-game-left.png",
+                               "assets/screenshots/04-square-game-right.png"
+                           ],
+    "localizedScreenshots":  {
+                                 "en-US":  [
+                                               "assets/screenshots/en-US/01-round-game-left.png",
+                                               "assets/screenshots/en-US/02-round-game-right.png",
+                                               "assets/screenshots/en-US/03-square-game-left.png",
+                                               "assets/screenshots/en-US/04-square-game-right.png"
+                                           ],
+                                 "pl-PL":  [
+                                               "assets/screenshots/pl-PL/01-round-game-left.png",
+                                               "assets/screenshots/pl-PL/02-round-game-right.png",
+                                               "assets/screenshots/pl-PL/03-square-game-left.png",
+                                               "assets/screenshots/pl-PL/04-square-game-right.png"
+                                           ]
+                             }
+}

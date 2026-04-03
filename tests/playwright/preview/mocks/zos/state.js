@@ -8,6 +8,7 @@ const defaultDeviceInfo = {
 
 const state = {
   deviceInfo: { ...defaultDeviceInfo },
+  languageCode: 2,
   localStorage: new Map(),
   sessionStorage: new Map(),
   routerCalls: [],
@@ -43,6 +44,7 @@ export function setRootElement(element) {
 
 export function resetRuntime() {
   state.deviceInfo = { ...defaultDeviceInfo }
+  state.languageCode = 2
   state.localStorage = new Map()
   state.sessionStorage = new Map()
   state.routerCalls = []
@@ -53,6 +55,7 @@ export function resetRuntime() {
 
 export function configureRuntime({
   deviceInfo = {},
+  languageCode = 2,
   localStorage = {},
   sessionStorage = {},
 }) {
@@ -60,6 +63,7 @@ export function configureRuntime({
     ...defaultDeviceInfo,
     ...deviceInfo,
   }
+  state.languageCode = languageCode
   state.localStorage = new Map(Object.entries(localStorage))
   state.sessionStorage = new Map(Object.entries(sessionStorage))
   state.routerCalls = []
@@ -70,6 +74,10 @@ export function configureRuntime({
 
 export function getDeviceInfoState() {
   return { ...state.deviceInfo }
+}
+
+export function getLanguageCodeState() {
+  return state.languageCode
 }
 
 export function getStorageMap(kind) {

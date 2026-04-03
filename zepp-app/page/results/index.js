@@ -2,6 +2,7 @@ import { getDeviceInfo, SCREEN_SHAPE_ROUND } from '@zos/device'
 import { push, replace } from '@zos/router'
 import { COLORS, ROUTES, RESULTS_PAGE_SIZE } from '../../shared/constants.js'
 import { createActionButton, createLabel, hideStatusBar } from '../../shared/page-ui.js'
+import { t } from '../../shared/i18n.js'
 import { parseRouteParams } from '../../shared/params.js'
 import { loadLastSession, loadScores } from '../../shared/storage.js'
 import { buildScoreRow, formatDurationMs, paginateScores } from '../../shared/view-models.js'
@@ -65,7 +66,7 @@ Page({
         : isSquareScoreboard
           ? 22
           : 24
-    const listTop = lastSession ? (isRound ? 158 : 148) : isRound ? 156 : 98
+    const listTop = lastSession ? (isRound ? 158 : 148) : isRound ? 96 : 98
     const navRowY = isRoundScoreboard
       ? 390
       : isSquareScoreboard
@@ -98,7 +99,7 @@ Page({
 
     if (hasPrev) {
       navButtons.push({
-        text: 'PREV',
+        text: t('prev'),
         onClick: () =>
           replace({
             url: ROUTES.RESULTS,
@@ -111,7 +112,7 @@ Page({
 
     if (hasNext) {
       navButtons.push({
-        text: 'NEXT',
+        text: t('next'),
         onClick: () =>
           replace({
             url: ROUTES.RESULTS,
@@ -127,7 +128,7 @@ Page({
       y: 22,
       w: fullWidth,
       h: 32,
-      text: lastSession ? 'RUN OVER' : 'SCOREBOARD',
+      text: lastSession ? t('runOver') : t('scoreboard'),
       textSize: 28,
       color: COLORS.accent,
     })
@@ -158,7 +159,7 @@ Page({
         y: 116,
         w: fullWidth,
         h: 18,
-        text: 'RECENT RUNS',
+        text: t('recentRuns'),
         textSize: 14,
         color: COLORS.textMuted,
       })
@@ -170,7 +171,7 @@ Page({
         y: isRound ? listTop + 40 : listTop + 54,
         w: fullWidth,
         h: 28,
-        text: 'NO RUNS SAVED YET',
+        text: t('noRunsSavedYet'),
         textSize: 18,
         color: COLORS.textMuted,
       })
@@ -219,11 +220,11 @@ Page({
       safePad: Math.round(width * (isRound ? 0.18 : 0.16)),
       buttons: [
         {
-          text: 'BACK',
+          text: t('back'),
           onClick: () => push({ url: ROUTES.HOME }),
         },
         {
-          text: 'PLAY',
+          text: t('play'),
           normalColor: COLORS.accent,
           pressColor: 0xc9a900,
           textColor: COLORS.background,

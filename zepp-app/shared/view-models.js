@@ -1,9 +1,5 @@
-import {
-  CONTROL_MODE_LABELS,
-  CONTROL_MODES,
-  RESULTS_PAGE_SIZE,
-  WRIST_SIDE_LABELS,
-} from './constants.js'
+import { CONTROL_MODES, RESULTS_PAGE_SIZE } from './constants.js'
+import { t } from './i18n.js'
 
 export function getAvailableControlModes(crownSupported) {
   return CONTROL_MODES
@@ -44,9 +40,9 @@ export function formatDurationMs(durationMs) {
 export function formatSettingValue(key, value) {
   switch (key) {
     case 'controlMode':
-      return CONTROL_MODE_LABELS[value]
+      return t(`controlMode_${value}`)
     case 'wristSide':
-      return WRIST_SIDE_LABELS[value]
+      return t(`wristSide_${value}`)
     case 'timeScale':
     case 'spawnMultiplier':
     case 'tiltSensitivity':

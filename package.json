@@ -1,9 +1,13 @@
 {
   "name": "parallax-pilot-workspace",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "scripts": {
+    "version:bump:patch": "node scripts/version-proxy.mjs patch",
+    "version:bump:minor": "node scripts/version-proxy.mjs minor",
+    "version:bump:major": "node scripts/version-proxy.mjs major",
+    "hooks:install": "git config core.hooksPath .githooks",
     "test": "node --import ./tests/register-zepp-globals.mjs --test",
     "test:coverage": "c8 --all --src zepp-app/shared --exclude tests/** --exclude zepp-app/shared/page-ui.js --exclude zepp-app/shared/storage.js --reporter=text --reporter=html --reporter=lcov node --import ./tests/register-zepp-globals.mjs --test",
     "test:playwright": "playwright test",
@@ -11,7 +15,8 @@
     "test:playwright:headed": "playwright test --headed",
     "playwright:install": "playwright install chromium",
     "build": "cmd /c \"cd /d zepp-app && zeus build\"",
-    "dev": "cmd /c \"cd /d zepp-app && zeus dev\""
+    "dev": "node scripts/zeus-proxy.mjs dev",
+    "preview": "node scripts/zeus-proxy.mjs preview"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",

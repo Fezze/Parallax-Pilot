@@ -1,15 +1,15 @@
 {
   "configVersion": "v3",
   "app": {
-    "appId": 11042026,
+    "appId": 1110694,
     "appName": "Parallax Pilot",
     "appType": "app",
     "version": {
-      "code": 1,
-      "name": "1.0.0"
+      "code": 3,
+      "name": "1.1.0"
     },
     "icon": "icon.png",
-    "vender": "krzys",
+    "vender": "Fezze",
     "description": "Arcade dodge game for Zepp OS."
   },
   "permissions": [

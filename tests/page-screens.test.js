@@ -15,6 +15,7 @@ import {
 } from './mocks/zos/ui.mjs'
 import { __resetInteraction } from './mocks/zos/interaction.mjs'
 import { __resetSensors } from './mocks/zos/sensor.mjs'
+import { __resetLanguage, __setLanguage } from './mocks/zos/settings.mjs'
 import {
   __readLocalStorage,
   __resetStorage,
@@ -29,6 +30,7 @@ function resetEnv() {
   __resetInteraction()
   __resetSensors()
   __resetStorage()
+  __resetLanguage()
 }
 
 async function loadPageDefinition(relativePath) {
@@ -82,6 +84,32 @@ test('home screen renders simplified copy and routes from main actions', async (
     { type: 'push', payload: { url: 'page/game/index' } },
     { type: 'push', payload: { url: 'page/results/index' } },
   ])
+})
+
+test('home screen renders Polish copy when the watch language is pl-PL', async () => {
+  resetEnv()
+  __setLanguage(9)
+  __seedLocalStorage({
+    settings_v1: JSON.stringify({
+      controlMode: 'swipe',
+      wristSide: 'left',
+      timeScale: 2,
+      spawnMultiplier: 1.6,
+      tiltSensitivity: 1,
+    }),
+    scores_v1: JSON.stringify([{ id: 'run-1', timestamp: 1 }]),
+  })
+
+  const page = await loadPageDefinition('../zepp-app/page/home/index.js')
+  page.build()
+
+  const texts = getTexts()
+  assert.ok(texts.includes('OMIJAJ ASTEROIDY'))
+  assert.ok(texts.includes('CZAS 2x  ILOŚĆ 1.6x'))
+  assert.ok(texts.includes('WYNIKI: 1'))
+  assert.ok(findButton('START'))
+  assert.ok(findButton('USTAWIENIA'))
+  assert.ok(findButton('WYNIKI'))
 })
 
 test('home square layout keeps metadata below the action stack', async () => {
@@ -200,6 +228,33 @@ test('settings square layout leaves clear space above footer actions', async () 
   assert.equal(playButton.props.y, 338)
 })
 
+test('settings screen renders Polish labels and values when the watch language is pl-PL', async () => {
+  resetEnv()
+  __setLanguage(9)
+  __seedLocalStorage({
+    settings_v1: JSON.stringify({
+      controlMode: 'crown',
+      wristSide: 'right',
+      timeScale: 3,
+      spawnMultiplier: 1.3,
+      tiltSensitivity: 1.4,
+    }),
+  })
+
+  const page = await loadPageDefinition('../zepp-app/page/settings/index.js')
+  page.build()
+
+  const texts = getTexts()
+  assert.ok(texts.includes('USTAWIENIA'))
+  assert.ok(texts.includes('DOTKNIJ, BY ZMIENIĆ'))
+  assert.ok(findButton('STER.  OBRÓT'))
+  assert.ok(findButton('RĘKA  PRAWA'))
+  assert.ok(findButton('CZAS  3x'))
+  assert.ok(findButton('ILOŚĆ  1.3x'))
+  assert.ok(findButton('MENU'))
+  assert.ok(findButton('GRAJ'))
+})
+
 test('results screen keeps nav buttons separate from back/play on round screens', async () => {
   resetEnv()
   __setDeviceInfo({
@@ -293,7 +348,7 @@ test('results round page-last layout matches the real scoreboard spacing', async
 
   assert.ok(firstRow)
   assert.ok(pageLabel)
-  assert.equal(firstRow.props.y, 156)
+  assert.equal(firstRow.props.y, 96)
   assert.equal(pageLabel.props.y, 360)
   assert.equal(prevButton.props.y, 390)
   assert.equal(backButton.props.y, 432)
@@ -329,8 +384,8 @@ test('results round first page keeps the page label below the last visible score
 
   assert.ok(lastVisibleRow)
   assert.ok(pageLabel)
-  assert.equal(lastVisibleRow.props.y, 324)
-  assert.equal(pageLabel.props.y, 366)
+  assert.equal(lastVisibleRow.props.y, 264)
+  assert.equal(pageLabel.props.y, 360)
   assert.equal(nextButton.props.y, 390)
 })
 
@@ -369,6 +424,24 @@ test('results square pagination keeps the page label above nav and footer rows',
   assert.equal(nextButton.props.y, 284)
   assert.equal(backButton.props.y, 336)
   assert.equal(playButton.props.y, 336)
+})
+
+test('results screen renders Polish copy when the watch language is pl-PL', async () => {
+  resetEnv()
+  __setLanguage(9)
+  __seedLocalStorage({
+    scores_v1: JSON.stringify([]),
+  })
+
+  const page = await loadPageDefinition('../zepp-app/page/results/index.js')
+  page.onInit(JSON.stringify({ pageIndex: 0 }))
+  page.build()
+
+  const texts = getTexts()
+  assert.ok(texts.includes('WYNIKI'))
+  assert.ok(texts.includes('BRAK WYNIKÓW'))
+  assert.ok(findButton('MENU'))
+  assert.ok(findButton('GRAJ'))
 })
 
 test('game screen renders without debug text widgets in the canvas HUD', async () => {
