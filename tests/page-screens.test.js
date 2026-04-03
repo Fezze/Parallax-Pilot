@@ -84,6 +84,36 @@ test('home screen renders simplified copy and routes from main actions', async (
   ])
 })
 
+test('home square layout keeps metadata below the action stack', async () => {
+  resetEnv()
+  __setDeviceInfo({
+    width: 390,
+    height: 390,
+    screenShape: 'square',
+  })
+  __seedLocalStorage({
+    settings_v1: JSON.stringify({
+      controlMode: 'touch',
+      wristSide: 'left',
+      timeScale: 3,
+      spawnMultiplier: 2,
+      tiltSensitivity: 1,
+    }),
+    scores_v1: JSON.stringify(Array.from({ length: 12 }, (_, index) => ({ id: `${index}` }))),
+  })
+
+  const page = await loadPageDefinition('../zepp-app/page/home/index.js')
+  page.build()
+
+  const scoreButton = findButton('SCOREBOARD')
+  const timeLabel = findText('TIME 3x  SPAWN 2x')
+
+  assert.ok(scoreButton)
+  assert.ok(timeLabel)
+  assert.equal(scoreButton.props.y, 232)
+  assert.equal(timeLabel.props.y, 318)
+})
+
 test('settings screen disables tilt row when control mode is not tilt', async () => {
   resetEnv()
   __seedLocalStorage({
@@ -138,6 +168,36 @@ test('settings screen cycles tilt sensitivity when tilt mode is active', async (
   assert.deepEqual(__getRouterCalls(), [
     { type: 'replace', payload: { url: 'page/settings/index' } },
   ])
+})
+
+test('settings square layout leaves clear space above footer actions', async () => {
+  resetEnv()
+  __setDeviceInfo({
+    width: 390,
+    height: 390,
+    screenShape: 'square',
+  })
+  __seedLocalStorage({
+    settings_v1: JSON.stringify({
+      controlMode: 'touch',
+      wristSide: 'left',
+      timeScale: 1,
+      spawnMultiplier: 1.3,
+      tiltSensitivity: 1.4,
+    }),
+  })
+
+  const page = await loadPageDefinition('../zepp-app/page/settings/index.js')
+  page.build()
+
+  const tiltButton = findButton('TILT')
+  const backButton = findButton('BACK')
+  const playButton = findButton('PLAY')
+
+  assert.ok(tiltButton)
+  assert.equal(tiltButton.props.y, 250)
+  assert.equal(backButton.props.y, 338)
+  assert.equal(playButton.props.y, 338)
 })
 
 test('results screen keeps nav buttons separate from back/play on round screens', async () => {
@@ -272,6 +332,43 @@ test('results round first page keeps the page label below the last visible score
   assert.equal(lastVisibleRow.props.y, 324)
   assert.equal(pageLabel.props.y, 366)
   assert.equal(nextButton.props.y, 390)
+})
+
+test('results square pagination keeps the page label above nav and footer rows', async () => {
+  resetEnv()
+  __setDeviceInfo({
+    width: 390,
+    height: 390,
+    screenShape: 'square',
+  })
+  __seedLocalStorage({
+    scores_v1: JSON.stringify(
+      Array.from({ length: 13 }, (_, index) => ({
+        id: `run-${index}`,
+        timestamp: 100 - index,
+        score: 7000 - index * 123,
+        survivedMs: 6000 + index * 210,
+      }))
+    ),
+  })
+
+  const page = await loadPageDefinition('../zepp-app/page/results/index.js')
+  page.onInit(JSON.stringify({ pageIndex: 0 }))
+  page.build()
+
+  const lastVisibleRow = findText('07  6262  7.26s')
+  const pageLabel = findText('1 / 2')
+  const nextButton = findButton('NEXT')
+  const backButton = findButton('BACK')
+  const playButton = findButton('PLAY')
+
+  assert.ok(lastVisibleRow)
+  assert.ok(pageLabel)
+  assert.equal(lastVisibleRow.props.y, 230)
+  assert.equal(pageLabel.props.y, 264)
+  assert.equal(nextButton.props.y, 284)
+  assert.equal(backButton.props.y, 336)
+  assert.equal(playButton.props.y, 336)
 })
 
 test('game screen renders without debug text widgets in the canvas HUD', async () => {

@@ -51,13 +51,35 @@ Page({
     )
     const { width, height } = deviceInfo
     const isRound = deviceInfo.screenShape === SCREEN_SHAPE_ROUND
+    const isSquare = !isRound
     const pad = Math.round(width * (isRound ? 0.11 : 0.07))
     const fullWidth = width - pad * 2
+    const isEmptyState = items.length === 0
     const isRoundScoreboard = isRound && !lastSession
-    const listRowGap = isRoundScoreboard ? 28 : isRound && lastSession ? 24 : 30
-    const listTop = lastSession ? 158 : isRound ? 156 : 118
-    const navRowY = isRoundScoreboard ? 390 : height - (isRound ? 116 : 118)
-    const actionRowY = isRoundScoreboard ? 432 : height - 66
+    const isSquareScoreboard = isSquare && !lastSession
+    const scoreTextSize = isSquareScoreboard ? 15 : 16
+    const listRowGap = isRoundScoreboard
+      ? 28
+      : isRound && lastSession
+        ? 24
+        : isSquareScoreboard
+          ? 22
+          : 24
+    const listTop = lastSession ? (isRound ? 158 : 148) : isRound ? 156 : 98
+    const navRowY = isRoundScoreboard
+      ? 390
+      : isSquareScoreboard
+        ? 284
+        : height - (isRound ? 116 : 110)
+    const actionRowY = isRoundScoreboard
+      ? 432
+      : isSquare && !lastSession
+        ? 336
+        : isSquare
+          ? 326
+          : isEmptyState
+            ? 396
+            : height - 66
     const hasPrev = pageCount > 1 && pageIndex > 0
     const hasNext = pageCount > 1 && pageIndex < pageCount - 1
     const listBottomY =
@@ -65,12 +87,12 @@ Page({
         ? listTop + (items.length - 1) * listRowGap + 24
         : listTop + 68
     let pagerY = Math.max(
-      listBottomY + (isRound ? 18 : 12),
-      isRoundScoreboard ? 360 : height - (isRound ? 138 : 124)
+      listBottomY + (isRound ? 18 : 10),
+      isRoundScoreboard ? 360 : isSquareScoreboard ? 260 : height - (isRound ? 138 : 124)
     )
 
-    if (isRoundScoreboard) {
-      pagerY = Math.min(pagerY, navRowY - 24)
+    if (!lastSession) {
+      pagerY = Math.min(pagerY, navRowY - (isRound ? 24 : 20))
     }
     const navButtons = []
 
@@ -145,7 +167,7 @@ Page({
     if (items.length === 0) {
       createLabel({
         x: pad,
-        y: listTop + 40,
+        y: isRound ? listTop + 40 : listTop + 54,
         w: fullWidth,
         h: 28,
         text: 'NO RUNS SAVED YET',
@@ -160,7 +182,7 @@ Page({
           w: fullWidth,
           h: 24,
           text: buildScoreRow(entry, pageIndex * RESULTS_PAGE_SIZE + index),
-          textSize: 16,
+          textSize: scoreTextSize,
           color: index === 0 && pageIndex === 0 ? COLORS.accent : COLORS.textPrimary,
         })
       })
@@ -185,8 +207,8 @@ Page({
         safePad: Math.round(width * (isRound ? 0.18 : 0.22)),
         buttons: navButtons.map((button) => ({
           ...button,
-          textSize: isRound ? 18 : undefined,
-          h: isRound ? 40 : 44,
+          textSize: isRound ? 18 : 20,
+          h: isRound ? 40 : 42,
         })),
       })
     }

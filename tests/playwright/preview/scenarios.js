@@ -141,10 +141,16 @@ function createGameScenario({
     sessionStorage: {},
     expectedTexts: [],
     afterBuild(page) {
-      page.lastSpawnAt = page.startedAt - 2000
+      page.lastSpawnAt = page.startedAt - 2600
       page.lastFrameAt = Date.now() - 16
       page.tick()
       page.tick()
+
+      page.asteroids.slice(0, 3).forEach((asteroid, index) => {
+        asteroid.x = Math.round(page.viewport.width * (0.78 - index * 0.18))
+        asteroid.y = Math.round(page.viewport.height * (0.24 + index * 0.22))
+      })
+      page.drawFrame()
     },
   }
 }

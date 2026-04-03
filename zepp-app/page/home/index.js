@@ -1,4 +1,4 @@
-import { getDeviceInfo } from '@zos/device'
+import { getDeviceInfo, SCREEN_SHAPE_ROUND } from '@zos/device'
 import { push } from '@zos/router'
 import { COLORS, ROUTES } from '../../shared/constants.js'
 import {
@@ -29,10 +29,17 @@ Page({
     }
     const scores = loadScores()
     const { width, height } = deviceInfo
+    const isRound = deviceInfo.screenShape === SCREEN_SHAPE_ROUND
     const pad = Math.round(width * 0.08)
     const fullWidth = width - pad * 2
-    const buttonHeight = Math.round(Math.min(62, height * 0.13))
-    const titleY = Math.round(height * 0.07)
+    const buttonHeight = isRound ? Math.round(Math.min(62, height * 0.13)) : 46
+    const secondaryButtonHeight = isRound ? buttonHeight - 6 : 42
+    const titleY = isRound ? Math.round(height * 0.07) : 24
+    const subtitleY = titleY + (isRound ? 42 : 38)
+    const buttonStartY = isRound ? Math.round(height * 0.34) : 120
+    const buttonGap = isRound ? 14 : 12
+    const metaPrimaryY = isRound ? height - 90 : height - 72
+    const metaSecondaryY = isRound ? height - 62 : height - 46
 
     createLabel({
       x: pad,
@@ -46,17 +53,17 @@ Page({
 
     createLabel({
       x: pad,
-      y: titleY + 42,
+      y: subtitleY,
       w: fullWidth,
       h: 26,
       text: 'DODGE THE ASTEROIDS',
-      textSize: 18,
+      textSize: isRound ? 18 : 16,
       color: COLORS.textMuted,
     })
 
     createActionButton({
       x: pad,
-      y: Math.round(height * 0.34),
+      y: buttonStartY,
       w: fullWidth,
       h: buttonHeight,
       text: 'START RUN',
@@ -68,39 +75,41 @@ Page({
 
     createActionButton({
       x: pad,
-      y: Math.round(height * 0.34) + buttonHeight + 14,
+      y: buttonStartY + buttonHeight + buttonGap,
       w: fullWidth,
-      h: buttonHeight - 6,
+      h: secondaryButtonHeight,
       text: 'SETTINGS',
+      textSize: isRound ? 22 : 20,
       onClick: () => push({ url: ROUTES.SETTINGS }),
     })
 
     createActionButton({
       x: pad,
-      y: Math.round(height * 0.34) + buttonHeight * 2 + 22,
+      y: buttonStartY + buttonHeight + secondaryButtonHeight + buttonGap * 2,
       w: fullWidth,
-      h: buttonHeight - 6,
+      h: secondaryButtonHeight,
       text: 'SCOREBOARD',
+      textSize: isRound ? 22 : 20,
       onClick: () => push({ url: ROUTES.RESULTS }),
     })
 
     createLabel({
       x: pad,
-      y: height - 90,
+      y: metaPrimaryY,
       w: fullWidth,
       h: 22,
       text: `TIME ${nextSettings.timeScale}x  SPAWN ${nextSettings.spawnMultiplier}x`,
-      textSize: 18,
+      textSize: isRound ? 18 : 16,
       color: COLORS.textPrimary,
     })
 
     createLabel({
       x: pad,
-      y: height - 62,
+      y: metaSecondaryY,
       w: fullWidth,
       h: 20,
       text: `${scores.length} RUNS SAVED`,
-      textSize: 16,
+      textSize: isRound ? 16 : 15,
       color: COLORS.textMuted,
     })
   },

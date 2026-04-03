@@ -1,4 +1,4 @@
-import { getDeviceInfo } from '@zos/device'
+import { getDeviceInfo, SCREEN_SHAPE_ROUND } from '@zos/device'
 import { back, push, replace } from '@zos/router'
 import {
   COLORS,
@@ -42,31 +42,39 @@ Page({
     }
 
     const { width, height } = deviceInfo
+    const isRound = deviceInfo.screenShape === SCREEN_SHAPE_ROUND
     const pad = Math.round(width * 0.07)
     const fullWidth = width - pad * 2
-    const rowHeight = Math.round(Math.min(52, height * 0.105))
-    const rowGap = 10
-    const startY = 92
+    const rowHeight = isRound ? Math.round(Math.min(52, height * 0.105)) : 34
+    const rowGap = isRound ? 10 : 8
+    const startY = isRound ? 92 : 82
+    const titleY = isRound ? 24 : 20
+    const titleSize = isRound ? 28 : 26
+    const subtitleY = isRound ? 54 : 48
+    const subtitleSize = isRound ? 16 : 14
+    const rowTextSize = isRound ? 22 : 20
+    const footerButtonY = isRound ? height - 64 : height - 52
+    const footerButtonH = isRound ? 46 : 40
     const controlModes = getAvailableControlModes(crownSupported)
     const tiltEnabled = settings.controlMode === 'tilt'
 
     createLabel({
       x: pad,
-      y: 24,
+      y: titleY,
       w: fullWidth,
       h: 32,
       text: 'SETTINGS',
-      textSize: 28,
+      textSize: titleSize,
       color: COLORS.accent,
     })
 
     createLabel({
       x: pad,
-      y: 54,
+      y: subtitleY,
       w: fullWidth,
       h: 24,
       text: 'TAP TO CHANGE',
-      textSize: 16,
+      textSize: subtitleSize,
       color: COLORS.textMuted,
     })
 
@@ -76,6 +84,7 @@ Page({
       w: fullWidth,
       h: rowHeight,
       text: `CONTROL  ${formatSettingValue('controlMode', settings.controlMode)}`,
+      textSize: rowTextSize,
       onClick: () =>
         updateSetting(
           'controlMode',
@@ -89,6 +98,7 @@ Page({
       w: fullWidth,
       h: rowHeight,
       text: `WRIST  ${formatSettingValue('wristSide', settings.wristSide)}`,
+      textSize: rowTextSize,
       onClick: () =>
         updateSetting(
           'wristSide',
@@ -102,6 +112,7 @@ Page({
       w: fullWidth,
       h: rowHeight,
       text: `TIME  ${formatSettingValue('timeScale', settings.timeScale)}`,
+      textSize: rowTextSize,
       onClick: () =>
         updateSetting(
           'timeScale',
@@ -118,6 +129,7 @@ Page({
         'spawnMultiplier',
         settings.spawnMultiplier
       )}`,
+      textSize: rowTextSize,
       onClick: () =>
         updateSetting(
           'spawnMultiplier',
@@ -134,6 +146,7 @@ Page({
         'tiltSensitivity',
         settings.tiltSensitivity
       )}`,
+      textSize: rowTextSize,
       normalColor: tiltEnabled ? COLORS.button : COLORS.hudInactive,
       pressColor: tiltEnabled ? COLORS.buttonPress : COLORS.hudInactive,
       textColor: tiltEnabled ? COLORS.textPrimary : COLORS.textMuted,
@@ -148,19 +161,21 @@ Page({
 
     createActionButton({
       x: pad,
-      y: height - 64,
+      y: footerButtonY,
       w: Math.floor((fullWidth - 12) / 2),
-      h: 46,
+      h: footerButtonH,
       text: 'BACK',
+      textSize: isRound ? 22 : 20,
       onClick: () => back(),
     })
 
     createActionButton({
       x: pad + Math.floor((fullWidth - 12) / 2) + 12,
-      y: height - 64,
+      y: footerButtonY,
       w: Math.floor((fullWidth - 12) / 2),
-      h: 46,
+      h: footerButtonH,
       text: 'PLAY',
+      textSize: isRound ? 22 : 20,
       normalColor: COLORS.accent,
       pressColor: 0xc9a900,
       textColor: COLORS.background,
