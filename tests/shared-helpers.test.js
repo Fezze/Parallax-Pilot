@@ -146,7 +146,7 @@ test('view models format and clamp pagination predictably', () => {
 test('view models switch setting labels to Polish when the locale is pl-PL', () => {
   __setLanguage(9)
 
-  assert.equal(formatSettingValue('controlMode', 'crown'), 'OBRÓT')
+  assert.equal(formatSettingValue('controlMode', 'crown'), 'OBR\u00d3T')
   assert.equal(formatSettingValue('wristSide', 'left'), 'LEWA')
 
   __resetLanguage()

@@ -1,8 +1,29 @@
+import { mkdir } from 'node:fs/promises'
+import path from 'node:path'
 import { test, expect } from '@playwright/test'
 import { previewScenarios } from './preview/scenarios.js'
 
+test.describe.configure({ mode: 'parallel' })
+
+function getScreenshotPath(scenarioId, scenario) {
+  const pageName = scenario.pageName || scenarioId.split('-')[0]
+  const shape = scenario.shape || scenarioId.split('-')[1]
+  const locale = scenario.locale || 'en-US'
+  const variant = scenario.variant || 'default'
+
+  return path.join(
+    process.cwd(),
+    'output',
+    'playwright',
+    'screenshots',
+    locale,
+    shape,
+    `${pageName}-${variant}.png`
+  )
+}
+
 for (const [scenarioId, scenario] of Object.entries(previewScenarios)) {
-  test(`preview ${scenarioId} renders and saves screenshot`, async ({ page }, testInfo) => {
+  test(`preview ${scenarioId} renders and saves screenshot`, async ({ page }) => {
     const pageErrors = []
     const consoleErrors = []
 
@@ -34,12 +55,9 @@ for (const [scenarioId, scenario] of Object.entries(previewScenarios)) {
       expect(preview.canvasCount).toBe(1)
     }
 
-    const screenshotPath = testInfo.outputPath(`${scenarioId}.png`)
+    const screenshotPath = getScreenshotPath(scenarioId, scenario)
+    await mkdir(path.dirname(screenshotPath), { recursive: true })
     await page.locator('#watch-shell').screenshot({ path: screenshotPath })
-    await testInfo.attach(`${scenarioId}.png`, {
-      path: screenshotPath,
-      contentType: 'image/png',
-    })
 
     expect(pageErrors).toEqual([])
     expect(consoleErrors).toEqual([])

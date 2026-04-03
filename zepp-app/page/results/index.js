@@ -1,7 +1,12 @@
 import { getDeviceInfo, SCREEN_SHAPE_ROUND } from '@zos/device'
 import { push, replace } from '@zos/router'
 import { COLORS, ROUTES, RESULTS_PAGE_SIZE } from '../../shared/constants.js'
-import { createActionButton, createLabel, hideStatusBar } from '../../shared/page-ui.js'
+import {
+  createActionButton,
+  createLabel,
+  createRoundButtonPair,
+  hideStatusBar,
+} from '../../shared/page-ui.js'
 import { t } from '../../shared/i18n.js'
 import { parseRouteParams } from '../../shared/params.js'
 import { loadLastSession, loadScores } from '../../shared/storage.js'
@@ -9,6 +14,18 @@ import { buildScoreRow, formatDurationMs, paginateScores } from '../../shared/vi
 
 function createRowButtons({ width, y, buttons, safePad, gap = 10 }) {
   if (buttons.length === 0) {
+    return
+  }
+
+  if (buttons.length === 2 && gap === 0) {
+    createRoundButtonPair({
+      x: safePad,
+      y,
+      w: width - safePad * 2,
+      h: buttons[0].h || 44,
+      left: buttons[0],
+      right: buttons[1],
+    })
     return
   }
 
@@ -29,6 +46,7 @@ function createRowButtons({ width, y, buttons, safePad, gap = 10 }) {
       pressColor: button.pressColor,
       textColor: button.textColor,
       textSize: button.textSize,
+      textWidth: button.textWidth || buttonWidth,
     })
 
     currentX += buttonWidth + gap
@@ -53,6 +71,9 @@ Page({
     const { width, height } = deviceInfo
     const isRound = deviceInfo.screenShape === SCREEN_SHAPE_ROUND
     const isSquare = !isRound
+    const roundActionButtonH = 58
+    const roundNavButtonH = 50
+    const roundRowGap = 12
     const pad = Math.round(width * (isRound ? 0.11 : 0.07))
     const fullWidth = width - pad * 2
     const isEmptyState = items.length === 0
@@ -67,34 +88,12 @@ Page({
           ? 22
           : 24
     const listTop = lastSession ? (isRound ? 158 : 148) : isRound ? 96 : 98
-    const navRowY = isRoundScoreboard
-      ? 390
-      : isSquareScoreboard
-        ? 284
-        : height - (isRound ? 116 : 110)
-    const actionRowY = isRoundScoreboard
-      ? 432
-      : isSquare && !lastSession
-        ? 336
-        : isSquare
-          ? 326
-          : isEmptyState
-            ? 396
-            : height - 66
     const hasPrev = pageCount > 1 && pageIndex > 0
     const hasNext = pageCount > 1 && pageIndex < pageCount - 1
     const listBottomY =
       items.length > 0
         ? listTop + (items.length - 1) * listRowGap + 24
         : listTop + 68
-    let pagerY = Math.max(
-      listBottomY + (isRound ? 18 : 10),
-      isRoundScoreboard ? 360 : isSquareScoreboard ? 260 : height - (isRound ? 138 : 124)
-    )
-
-    if (!lastSession) {
-      pagerY = Math.min(pagerY, navRowY - (isRound ? 24 : 20))
-    }
     const navButtons = []
 
     if (hasPrev) {
@@ -121,6 +120,29 @@ Page({
             }),
           }),
       })
+    }
+
+    const actionRowY = isRound
+      ? height - roundActionButtonH
+      : isSquare && !lastSession
+        ? 336
+        : isSquare
+          ? 326
+          : isEmptyState
+            ? 396
+            : height - 66
+    const navRowY = isRound
+      ? actionRowY - roundRowGap - roundNavButtonH
+      : isSquareScoreboard
+        ? 284
+        : height - 110
+    let pagerY = Math.max(
+      listBottomY + (isRound ? 18 : 10),
+      isRoundScoreboard ? navRowY - 24 : isSquareScoreboard ? 260 : height - (isRound ? 138 : 124)
+    )
+
+    if (!lastSession) {
+      pagerY = Math.min(pagerY, navRowY - (isRound ? 24 : 20))
     }
 
     createLabel({
@@ -205,11 +227,13 @@ Page({
       createRowButtons({
         width,
         y: navRowY,
-        safePad: Math.round(width * (isRound ? 0.18 : 0.22)),
+        safePad: Math.round(width * (isRound ? 0.16 : 0.2)),
+        gap: isRound && navButtons.length === 2 ? 0 : 10,
         buttons: navButtons.map((button) => ({
           ...button,
-          textSize: isRound ? 18 : 20,
-          h: isRound ? 40 : 42,
+          textSize: isRound ? 20 : 18,
+          textWidth: isRound ? undefined : Math.round(width * 0.56),
+          h: isRound ? roundNavButtonH : 42,
         })),
       })
     }
@@ -217,14 +241,19 @@ Page({
     createRowButtons({
       width,
       y: actionRowY,
-      safePad: Math.round(width * (isRound ? 0.18 : 0.16)),
+      safePad: Math.round(width * (isRound ? 0.16 : 0.16)),
+      gap: isRound ? 0 : 10,
       buttons: [
         {
           text: t('back'),
+          textSize: isRound ? 20 : 22,
+          h: isRound ? roundActionButtonH : 44,
           onClick: () => push({ url: ROUTES.HOME }),
         },
         {
           text: t('play'),
+          textSize: isRound ? 20 : 22,
+          h: isRound ? roundActionButtonH : 44,
           normalColor: COLORS.accent,
           pressColor: 0xc9a900,
           textColor: COLORS.background,

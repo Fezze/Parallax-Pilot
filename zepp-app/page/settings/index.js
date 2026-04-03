@@ -8,7 +8,12 @@ import {
   TILT_SENSITIVITY_OPTIONS,
 } from '../../shared/constants.js'
 import { sanitizeControlMode, supportsDigitalCrown } from '../../shared/device.js'
-import { createActionButton, createLabel, hideStatusBar } from '../../shared/page-ui.js'
+import {
+  createActionButton,
+  createLabel,
+  createRoundButtonPair,
+  hideStatusBar,
+} from '../../shared/page-ui.js'
 import { loadSettings, saveSettings } from '../../shared/storage.js'
 import {
   cycleOption,
@@ -54,8 +59,8 @@ Page({
     const subtitleY = isRound ? 54 : 48
     const subtitleSize = isRound ? 16 : 14
     const rowTextSize = isRound ? 22 : 20
-    const footerButtonY = isRound ? height - 64 : height - 52
-    const footerButtonH = isRound ? 46 : 40
+    const footerButtonH = isRound ? 58 : 40
+    const footerButtonY = isRound ? height - footerButtonH : height - 52
     const controlModes = getAvailableControlModes(crownSupported)
     const tiltEnabled = settings.controlMode === 'tilt'
 
@@ -169,27 +174,49 @@ Page({
         : () => {},
     })
 
-    createActionButton({
-      x: pad,
-      y: footerButtonY,
-      w: Math.floor((fullWidth - 12) / 2),
-      h: footerButtonH,
-      text: t('back'),
-      textSize: isRound ? 22 : 20,
-      onClick: () => back(),
-    })
+    if (isRound) {
+      createRoundButtonPair({
+        x: pad,
+        y: footerButtonY,
+        w: fullWidth,
+        h: footerButtonH,
+        left: {
+          text: t('back'),
+          textSize: 20,
+          onClick: () => back(),
+        },
+        right: {
+          text: t('play'),
+          textSize: 20,
+          normalColor: COLORS.accent,
+          pressColor: 0xc9a900,
+          textColor: COLORS.background,
+          onClick: () => push({ url: ROUTES.GAME }),
+        },
+      })
+    } else {
+      createActionButton({
+        x: pad,
+        y: footerButtonY,
+        w: Math.floor((fullWidth - 12) / 2),
+        h: footerButtonH,
+        text: t('back'),
+        textSize: 20,
+        onClick: () => back(),
+      })
 
-    createActionButton({
-      x: pad + Math.floor((fullWidth - 12) / 2) + 12,
-      y: footerButtonY,
-      w: Math.floor((fullWidth - 12) / 2),
-      h: footerButtonH,
-      text: t('play'),
-      textSize: isRound ? 22 : 20,
-      normalColor: COLORS.accent,
-      pressColor: 0xc9a900,
-      textColor: COLORS.background,
-      onClick: () => push({ url: ROUTES.GAME }),
-    })
+      createActionButton({
+        x: pad + Math.floor((fullWidth - 12) / 2) + 12,
+        y: footerButtonY,
+        w: Math.floor((fullWidth - 12) / 2),
+        h: footerButtonH,
+        text: t('play'),
+        textSize: 20,
+        normalColor: COLORS.accent,
+        pressColor: 0xc9a900,
+        textColor: COLORS.background,
+        onClick: () => push({ url: ROUTES.GAME }),
+      })
+    }
   },
 })

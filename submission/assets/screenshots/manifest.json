@@ -1,0 +1,33 @@
+{
+    "defaultLanguage":  "en-US",
+    "locales":  [
+                    "en-US",
+                    "pl-PL"
+                ],
+    "screenshots":  {
+                        "en-US":  {
+                                      "round":  [
+                                                    "assets/screenshots/en-US/round/game-left-flight.png",
+                                                    "assets/screenshots/en-US/round/game-right-flight.png"
+                                                ],
+                                      "square":  [
+                                                     "assets/screenshots/en-US/square/game-left-flight.png",
+                                                     "assets/screenshots/en-US/square/game-right-flight.png"
+                                                 ]
+                                  },
+                        "pl-PL":  {
+                                      "round":  [
+                                                    "assets/screenshots/pl-PL/round/game-left-flight.png",
+                                                    "assets/screenshots/pl-PL/round/game-right-flight.png"
+                                                ],
+                                      "square":  [
+                                                     "assets/screenshots/pl-PL/square/game-left-flight.png",
+                                                     "assets/screenshots/pl-PL/square/game-right-flight.png"
+                                                 ]
+                                  }
+                    },
+    "previewImages":  {
+                          "en-US":  "assets/language-preview/en-US-preview.png",
+                          "pl-PL":  "assets/language-preview/pl-PL-preview.png"
+                      }
+}

@@ -40,7 +40,35 @@ async function loadPageDefinition(relativePath) {
 }
 
 function findButton(textPrefix) {
-  return __getButtonWidgets().find((widget) => widget.props.text.startsWith(textPrefix))
+  const directMatch = __getButtonWidgets().find((widget) =>
+    typeof widget.props.text === 'string' &&
+    widget.props.text.startsWith(textPrefix)
+  )
+
+  if (directMatch) {
+    return directMatch
+  }
+
+  const textWidget = __getTextWidgets().find((widget) =>
+    widget.props.text.startsWith(textPrefix)
+  )
+
+  if (!textWidget) {
+    return undefined
+  }
+
+  const centerX = textWidget.props.x + textWidget.props.w / 2
+  const centerY = textWidget.props.y + textWidget.props.h / 2
+
+  return __getButtonWidgets().find((widget) => {
+    const { x, y, w, h } = widget.props
+    return centerX >= x && centerX <= x + w && centerY >= y && centerY <= y + h
+  })
+}
+
+function hasExactButtonText(text) {
+  return __getButtonWidgets().some((widget) => widget.props.text === text) ||
+    __getTextWidgets().some((widget) => widget.props.text === text)
 }
 
 function getTexts() {
@@ -105,7 +133,7 @@ test('home screen renders Polish copy when the watch language is pl-PL', async (
 
   const texts = getTexts()
   assert.ok(texts.includes('OMIJAJ ASTEROIDY'))
-  assert.ok(texts.includes('CZAS 2x  ILOŚĆ 1.6x'))
+  assert.ok(texts.includes('CZAS 2x  ILO\u015a\u0106 1.6x'))
   assert.ok(texts.includes('WYNIKI: 1'))
   assert.ok(findButton('START'))
   assert.ok(findButton('USTAWIENIA'))
@@ -246,11 +274,11 @@ test('settings screen renders Polish labels and values when the watch language i
 
   const texts = getTexts()
   assert.ok(texts.includes('USTAWIENIA'))
-  assert.ok(texts.includes('DOTKNIJ, BY ZMIENIĆ'))
-  assert.ok(findButton('STER.  OBRÓT'))
-  assert.ok(findButton('RĘKA  PRAWA'))
+  assert.ok(texts.includes('DOTKNIJ, BY ZMIENI\u0106'))
+  assert.ok(findButton('STEROWANIE  OBR\u00d3T'))
+  assert.ok(findButton('R\u0118KA  PRAWA'))
   assert.ok(findButton('CZAS  3x'))
-  assert.ok(findButton('ILOŚĆ  1.3x'))
+  assert.ok(findButton('ILO\u015a\u0106  1.3x'))
   assert.ok(findButton('MENU'))
   assert.ok(findButton('GRAJ'))
 })
@@ -288,17 +316,16 @@ test('results screen keeps nav buttons separate from back/play on round screens'
   const nextButton = findButton('NEXT')
   const backButton = findButton('BACK')
   const playButton = findButton('PLAY')
-  const buttonTexts = __getButtonWidgets().map((widget) => widget.props.text)
   const pageLabel = findText('1 / 2')
 
   assert.ok(getTexts().includes('RUN OVER'))
   assert.ok(getTexts().includes('RECENT RUNS'))
   assert.ok(pageLabel)
-  assert.equal(buttonTexts.includes('PREV'), false)
+  assert.equal(hasExactButtonText('PREVIOUS'), false)
   assert.equal(pageLabel.props.y, 344)
-  assert.equal(nextButton.props.y, 364)
-  assert.equal(backButton.props.y, 414)
-  assert.equal(playButton.props.y, 414)
+  assert.equal(nextButton.props.y, 360)
+  assert.equal(backButton.props.y, 422)
+  assert.equal(playButton.props.y, 422)
 
   nextButton.props.click_func()
   backButton.props.click_func()
@@ -340,7 +367,7 @@ test('results round page-last layout matches the real scoreboard spacing', async
   page.onInit(JSON.stringify({ pageIndex: 1 }))
   page.build()
 
-  const prevButton = findButton('PREV')
+  const prevButton = findButton('PREVIOUS')
   const backButton = findButton('BACK')
   const playButton = findButton('PLAY')
   const firstRow = findText('08  6139  7.47s')
@@ -349,11 +376,11 @@ test('results round page-last layout matches the real scoreboard spacing', async
   assert.ok(firstRow)
   assert.ok(pageLabel)
   assert.equal(firstRow.props.y, 96)
-  assert.equal(pageLabel.props.y, 360)
-  assert.equal(prevButton.props.y, 390)
-  assert.equal(backButton.props.y, 432)
-  assert.equal(playButton.props.y, 432)
-  assert.equal(__getButtonWidgets().some((widget) => widget.props.text === 'NEXT'), false)
+  assert.equal(pageLabel.props.y, 336)
+  assert.equal(prevButton.props.y, 360)
+  assert.equal(backButton.props.y, 422)
+  assert.equal(playButton.props.y, 422)
+  assert.equal(hasExactButtonText('NEXT'), false)
 })
 
 test('results round first page keeps the page label below the last visible score', async () => {
@@ -385,8 +412,8 @@ test('results round first page keeps the page label below the last visible score
   assert.ok(lastVisibleRow)
   assert.ok(pageLabel)
   assert.equal(lastVisibleRow.props.y, 264)
-  assert.equal(pageLabel.props.y, 360)
-  assert.equal(nextButton.props.y, 390)
+  assert.equal(pageLabel.props.y, 336)
+  assert.equal(nextButton.props.y, 360)
 })
 
 test('results square pagination keeps the page label above nav and footer rows', async () => {
@@ -439,7 +466,7 @@ test('results screen renders Polish copy when the watch language is pl-PL', asyn
 
   const texts = getTexts()
   assert.ok(texts.includes('WYNIKI'))
-  assert.ok(texts.includes('BRAK WYNIKÓW'))
+  assert.ok(texts.includes('BRAK WYNIK\u00d3W'))
   assert.ok(findButton('MENU'))
   assert.ok(findButton('GRAJ'))
 })

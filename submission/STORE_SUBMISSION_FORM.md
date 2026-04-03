@@ -11,9 +11,9 @@
 
 ## Package
 
-- Application package: `artifacts/Parallax_Pilot-1.0.1-release.zab`
-- Expected version after upload: `1.0.1`
-- Expected version code in package: `2`
+- Application package: `artifacts/Parallax_Pilot-1.1.0-release.zab`
+- Expected version after upload: `1.1.0`
+- Expected version code in package: `3`
 - Supporting devices: auto-filled by Zepp Console after ZAB upload
 
 ## Languages
@@ -31,10 +31,10 @@
 
 ## App Introduction Screenshots
 
-- `assets/screenshots/01-round-game-left.png`
-- `assets/screenshots/02-round-game-right.png`
-- `assets/screenshots/03-square-game-left.png`
-- `assets/screenshots/04-square-game-right.png`
+- `assets/screenshots/en-US/round/game-left-flight.png`
+- `assets/screenshots/en-US/round/game-right-flight.png`
+- `assets/screenshots/en-US/square/game-left-flight.png`
+- `assets/screenshots/en-US/square/game-right-flight.png`
 - Localized screenshot sets: `assets/screenshots/manifest.json`
 
 ## Store Icon

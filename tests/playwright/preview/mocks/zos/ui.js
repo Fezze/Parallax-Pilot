@@ -5,7 +5,11 @@ import {
 } from './state.js'
 
 export const align = {
+  LEFT: 'LEFT',
+  RIGHT: 'RIGHT',
   CENTER_H: 'CENTER_H',
+  TOP: 'TOP',
+  BOTTOM: 'BOTTOM',
   CENTER_V: 'CENTER_V',
 }
 
@@ -16,6 +20,7 @@ export const text_style = {
 export const widget = {
   TEXT: 'TEXT',
   BUTTON: 'BUTTON',
+  FILL_RECT: 'FILL_RECT',
   CANVAS: 'CANVAS',
 }
 
@@ -39,14 +44,46 @@ function createTextWidget(props) {
   element.textContent = props.text ?? ''
   element.style.display = 'flex'
   element.style.alignItems = 'center'
-  element.style.justifyContent = 'center'
+  element.style.justifyContent =
+    props.align_h === align.LEFT
+      ? 'flex-start'
+      : props.align_h === align.RIGHT
+        ? 'flex-end'
+        : 'center'
   element.style.color = colorToCss(props.color, '#ffffff')
   element.style.fontSize = `${props.text_size || 24}px`
   element.style.fontFamily = 'ui-monospace, monospace'
-  element.style.textAlign = 'center'
-  element.style.pointerEvents = 'none'
+  element.style.textAlign =
+    props.align_h === align.LEFT
+      ? 'left'
+      : props.align_h === align.RIGHT
+        ? 'right'
+        : 'center'
+  element.style.pointerEvents = props.click_func ? 'auto' : 'none'
+  if (props.click_func) {
+    element.style.cursor = 'pointer'
+    element.addEventListener('click', () => {
+      props.click_func?.()
+    })
+  }
   return addWidget({
     type: widget.TEXT,
+    props,
+    element,
+  })
+}
+
+function createFillRectWidget(props) {
+  const element = document.createElement('div')
+  applyFrameStyle(element, props)
+  element.style.background = colorToCss(props.color, '#171717')
+  element.style.borderRadius = `${props.radius || 0}px`
+  element.style.cursor = 'pointer'
+  element.addEventListener('click', () => {
+    props.click_func?.()
+  })
+  return addWidget({
+    type: widget.FILL_RECT,
     props,
     element,
   })
@@ -64,7 +101,9 @@ function createButtonWidget(props) {
   element.style.color = colorToCss(props.color, '#ffffff')
   element.style.fontSize = `${props.text_size || 22}px`
   element.style.fontFamily = 'ui-monospace, monospace'
-  element.style.boxShadow = 'inset 0 0 0 1px rgba(255,255,255,0.04)'
+  element.style.boxShadow = props.flat
+    ? 'none'
+    : 'inset 0 0 0 1px rgba(255,255,255,0.04)'
   element.addEventListener('click', () => {
     props.click_func?.()
   })
@@ -169,6 +208,10 @@ export function createWidget(type, props) {
 
   if (type === widget.BUTTON) {
     return createButtonWidget(props)
+  }
+
+  if (type === widget.FILL_RECT) {
+    return createFillRectWidget(props)
   }
 
   if (type === widget.CANVAS) {

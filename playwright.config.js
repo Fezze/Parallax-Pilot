@@ -6,9 +6,10 @@ const BASE_URL = `http://127.0.0.1:${PORT}`
 export default defineConfig({
   testDir: './tests/playwright',
   timeout: 30_000,
-  fullyParallel: false,
+  fullyParallel: true,
   reporter: 'list',
-  outputDir: 'output/playwright/test-results',
+  outputDir: 'output/playwright/artifacts',
+  globalSetup: './tests/playwright/global-setup.mjs',
   use: {
     baseURL: BASE_URL,
     browserName: 'chromium',

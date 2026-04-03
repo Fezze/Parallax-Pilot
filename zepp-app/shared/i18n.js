@@ -24,7 +24,7 @@ const STRINGS = {
     tiltLabel: 'TILT',
     back: 'BACK',
     play: 'PLAY',
-    prev: 'PREV',
+    prev: 'PREVIOUS',
     next: 'NEXT',
     runOver: 'RUN OVER',
     recentRuns: 'RECENT RUNS',
@@ -42,25 +42,25 @@ const STRINGS = {
     startRun: 'START',
     settings: 'USTAWIENIA',
     scoreboard: 'WYNIKI',
-    homeMeta: 'CZAS {timeScale}x  ILOŚĆ {spawnMultiplier}x',
+    homeMeta: 'CZAS {timeScale}x  ILO\u015a\u0106 {spawnMultiplier}x',
     savedRuns: 'WYNIKI: {count}',
-    tapToChange: 'DOTKNIJ, BY ZMIENIĆ',
-    controlLabel: 'STER.',
-    wristLabel: 'RĘKA',
+    tapToChange: 'DOTKNIJ, BY ZMIENI\u0106',
+    controlLabel: 'STEROWANIE',
+    wristLabel: 'R\u0118KA',
     timeLabel: 'CZAS',
-    spawnLabel: 'ILOŚĆ',
-    tiltLabel: 'PRZECH.',
+    spawnLabel: 'ILO\u015a\u0106',
+    tiltLabel: 'PRZECHYLENIE',
     back: 'MENU',
     play: 'GRAJ',
-    prev: 'POPRZ.',
-    next: 'DALEJ',
+    prev: 'POPRZEDNIA',
+    next: 'NAST\u0118PNA',
     runOver: 'KONIEC',
     recentRuns: 'OSTATNIE WYNIKI',
-    noRunsSavedYet: 'BRAK WYNIKÓW',
-    controlMode_tilt: 'PRZECH.',
+    noRunsSavedYet: 'BRAK WYNIK\u00d3W',
+    controlMode_tilt: 'PRZECHYLENIE',
     controlMode_touch: 'DOTYK',
-    controlMode_swipe: 'PRZES.',
-    controlMode_crown: 'OBRÓT',
+    controlMode_swipe: 'PRZESUWANIE',
+    controlMode_crown: 'OBR\u00d3T',
     wristSide_left: 'LEWA',
     wristSide_right: 'PRAWA',
   },
@@ -76,7 +76,7 @@ export function getLocale() {
   try {
     const languageCode = getLanguage()
     return LOCALE_BY_LANGUAGE_CODE[languageCode] || DEFAULT_LOCALE
-  } catch (error) {
+  } catch (_error) {
     return DEFAULT_LOCALE
   }
 }

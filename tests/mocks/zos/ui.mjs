@@ -1,5 +1,9 @@
 export const align = {
+  LEFT: 'LEFT',
+  RIGHT: 'RIGHT',
   CENTER_H: 'CENTER_H',
+  TOP: 'TOP',
+  BOTTOM: 'BOTTOM',
   CENTER_V: 'CENTER_V',
 }
 
@@ -10,6 +14,7 @@ export const text_style = {
 export const widget = {
   TEXT: 'TEXT',
   BUTTON: 'BUTTON',
+  FILL_RECT: 'FILL_RECT',
   CANVAS: 'CANVAS',
 }
 
@@ -65,14 +70,54 @@ function createCanvasWidget(type, props) {
   }
 }
 
+function createEventWidget(type, props) {
+  const listeners = new Map()
+
+  return {
+    type,
+    props: { ...props },
+    addEventListener(name, handler) {
+      listeners.set(name, handler)
+    },
+    __emit(name, payload) {
+      const handler = listeners.get(name)
+      if (handler) {
+        handler(payload)
+      }
+    },
+  }
+}
+
+function createTextEventWidget(type, props) {
+  const listeners = new Map()
+
+  return {
+    type,
+    props: { ...props },
+    addEventListener(name, handler) {
+      listeners.set(name, handler)
+    },
+    __emit(name, payload) {
+      const handler = listeners.get(name)
+      if (handler) {
+        handler(payload)
+      }
+    },
+  }
+}
+
 export function createWidget(type, props) {
   const instance =
     type === widget.CANVAS
       ? createCanvasWidget(type, props)
-      : {
-          type,
-          props: { ...props },
-        }
+      : type === widget.TEXT
+        ? createTextEventWidget(type, props)
+      : type === widget.FILL_RECT
+        ? createEventWidget(type, props)
+        : {
+            type,
+            props: { ...props },
+          }
 
   widgets.push(instance)
   return instance
@@ -87,7 +132,9 @@ export function __getWidgets() {
 }
 
 export function __getButtonWidgets() {
-  return widgets.filter((item) => item.type === widget.BUTTON)
+  return widgets.filter(
+    (item) => item.type === widget.BUTTON || item.type === widget.FILL_RECT
+  )
 }
 
 export function __getTextWidgets() {
