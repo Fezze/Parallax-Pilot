@@ -62,21 +62,38 @@ function deferClick(onClick, delayMs = 0) {
   }
 
   return () => {
+    const invoke = () => {
+      onClick()
+    }
+
+    const isNodeLike =
+      typeof process !== 'undefined' &&
+      process !== null &&
+      typeof process === 'object' &&
+      !!process.versions?.node
+
+    if (!isNodeLike && typeof setTimeout === 'function') {
+      setTimeout(() => {
+        invoke()
+      }, delayMs)
+      return
+    }
+
     try {
       createSysTimer(false, delayMs, () => {
-        onClick()
+        invoke()
       })
       return
     } catch (_error) {}
 
     if (typeof setTimeout === 'function') {
       setTimeout(() => {
-        onClick()
+        invoke()
       }, delayMs)
       return
     }
 
-    onClick()
+    invoke()
   }
 }
 
