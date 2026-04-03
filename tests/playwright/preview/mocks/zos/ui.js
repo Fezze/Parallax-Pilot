@@ -24,6 +24,10 @@ export const widget = {
   CANVAS: 'CANVAS',
 }
 
+export const prop = {
+  MORE: 'MORE',
+}
+
 export const event = {
   CLICK_DOWN: 'CLICK_DOWN',
   CLICK_UP: 'CLICK_UP',
@@ -70,6 +74,18 @@ function createTextWidget(props) {
     type: widget.TEXT,
     props,
     element,
+    setProperty(name, value) {
+      if (name === prop.MORE && value && typeof value === 'object') {
+        Object.assign(props, value)
+      } else {
+        props[name] = value
+      }
+
+      element.textContent = props.text ?? ''
+      element.style.color = colorToCss(props.color, '#ffffff')
+      element.style.fontSize = `${props.text_size || 24}px`
+      applyFrameStyle(element, props)
+    },
   })
 }
 
@@ -86,6 +102,17 @@ function createFillRectWidget(props) {
     type: widget.FILL_RECT,
     props,
     element,
+    setProperty(name, value) {
+      if (name === prop.MORE && value && typeof value === 'object') {
+        Object.assign(props, value)
+      } else {
+        props[name] = value
+      }
+
+      element.style.background = colorToCss(props.color, '#171717')
+      element.style.borderRadius = `${props.radius || 0}px`
+      applyFrameStyle(element, props)
+    },
   })
 }
 
@@ -107,11 +134,46 @@ function createButtonWidget(props) {
   element.addEventListener('click', () => {
     props.click_func?.()
   })
-  return addWidget({
+  const instance = addWidget({
     type: widget.BUTTON,
     props,
     element,
+    setProperty(name, value) {
+      if (name === prop.MORE && value && typeof value === 'object') {
+        Object.assign(props, value)
+      } else {
+        props[name] = value
+      }
+
+      element.textContent = props.text ?? ''
+      element.style.background = colorToCss(props.normal_color, '#171717')
+      element.style.color = colorToCss(props.color, '#ffffff')
+      element.style.fontSize = `${props.text_size || 22}px`
+      element.style.borderRadius = `${props.radius || 0}px`
+      applyFrameStyle(element, props)
+    },
   })
+
+  Object.defineProperty(instance, 'normal_color', {
+    get() {
+      return props.normal_color
+    },
+    set(value) {
+      props.normal_color = value
+      element.style.background = colorToCss(props.normal_color, '#171717')
+    },
+  })
+
+  Object.defineProperty(instance, 'press_color', {
+    get() {
+      return props.press_color
+    },
+    set(value) {
+      props.press_color = value
+    },
+  })
+
+  return instance
 }
 
 function createCanvasApi(context, props, element) {

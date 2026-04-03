@@ -223,6 +223,39 @@ export function createManualRectButton({
   return rect
 }
 
+function createManagedRoundHalfButton({
+  x,
+  y,
+  w,
+  h,
+  text,
+  onClick,
+  normalColor = COLORS.button,
+  pressColor = COLORS.buttonPress,
+  textColor = COLORS.textPrimary,
+  textSize = 22,
+  textWidth = w,
+  clickDelayMs = 0,
+}) {
+  const delayedClick = deferClick(onClick, clickDelayMs)
+  const resolved = resolveButtonTextSpec(text, textSize, textWidth)
+
+  return createWidget(widget.BUTTON, {
+    x,
+    y,
+    w,
+    h,
+    text: resolved.text,
+    color: textColor,
+    text_size: resolved.textSize,
+    text_w: textWidth,
+    radius: Math.round(h / 2),
+    normal_color: normalColor,
+    press_color: pressColor,
+    click_func: delayedClick,
+  })
+}
+
 export function createRoundButtonPair({
   x,
   y,
@@ -232,11 +265,14 @@ export function createRoundButtonPair({
   left,
   right,
 }) {
-  const seamPad = Math.round(h / 2)
   const buttonWidth = Math.floor((w - gap) / 2)
   const leftX = x
   const rightX = x + buttonWidth + gap
   const labelInset = Math.max(12, Math.round(h * 0.26))
+  const leftBaseColor = left.normalColor ?? COLORS.button
+  const leftPressColor = left.pressColor ?? COLORS.buttonPress
+  const rightBaseColor = right.normalColor ?? COLORS.button
+  const rightPressColor = right.pressColor ?? COLORS.buttonPress
   const leftResolved = resolveButtonTextSpec(
     left.text,
     left.textSize ?? 22,
@@ -248,91 +284,33 @@ export function createRoundButtonPair({
     buttonWidth - labelInset * 2
   )
 
-  createManualRectButton({
+  createManagedRoundHalfButton({
     x: leftX,
     y,
     w: buttonWidth,
     h,
     text: leftResolved.text,
     onClick: left.onClick,
-    normalColor: left.normalColor,
-    pressColor: left.pressColor ?? COLORS.buttonPress,
+    normalColor: leftBaseColor,
+    pressColor: leftPressColor,
     textColor: left.textColor,
     textSize: left.textSize,
-    textAlign: align.RIGHT,
-    textInset: labelInset,
-    renderLabel: false,
+    textWidth: buttonWidth - labelInset,
     clickDelayMs: ROUND_PAIR_CLICK_DELAY_MS,
   })
 
-  createWidget(widget.BUTTON, {
-    x: leftX + buttonWidth - seamPad,
-    y,
-    w: seamPad,
-    h,
-    text: '',
-    color: left.textColor ?? COLORS.textPrimary,
-    text_size: left.textSize ?? 22,
-    normal_color: left.normalColor ?? COLORS.button,
-    press_color: left.pressColor ?? COLORS.buttonPress,
-    click_func: deferClick(left.onClick, ROUND_PAIR_CLICK_DELAY_MS),
-    radius: 0,
-    flat: true,
-  })
-
-  createManualRectButton({
+  createManagedRoundHalfButton({
     x: rightX,
     y,
     w: buttonWidth,
     h,
-    text: right.text,
+    text: rightResolved.text,
     onClick: right.onClick,
-    normalColor: right.normalColor,
-    pressColor: right.pressColor ?? COLORS.buttonPress,
+    normalColor: rightBaseColor,
+    pressColor: rightPressColor,
     textColor: right.textColor,
     textSize: right.textSize,
-    textAlign: align.LEFT,
-    textInset: labelInset,
-    renderLabel: false,
+    textWidth: buttonWidth - labelInset,
     clickDelayMs: ROUND_PAIR_CLICK_DELAY_MS,
-  })
-
-  createWidget(widget.BUTTON, {
-    x: rightX,
-    y,
-    w: seamPad,
-    h,
-    text: '',
-    color: right.textColor ?? COLORS.textPrimary,
-    text_size: right.textSize ?? 22,
-    normal_color: right.normalColor ?? COLORS.button,
-    press_color: right.pressColor ?? COLORS.buttonPress,
-    click_func: deferClick(right.onClick, ROUND_PAIR_CLICK_DELAY_MS),
-    radius: 0,
-    flat: true,
-  })
-
-  createLabel({
-    x: leftX + labelInset,
-    y,
-    w: buttonWidth - labelInset * 2,
-    h,
-    text: left.text,
-    color: left.textColor ?? COLORS.textPrimary,
-    textSize: leftResolved.textSize,
-    alignH: align.RIGHT,
-    onClick: deferClick(left.onClick, ROUND_PAIR_CLICK_DELAY_MS),
-  })
-
-  createLabel({
-    x: rightX + labelInset,
-    y,
-    w: buttonWidth - labelInset * 2,
-    h,
-    text: rightResolved.text,
-    color: right.textColor ?? COLORS.textPrimary,
-    textSize: rightResolved.textSize,
-    alignH: align.LEFT,
-    onClick: deferClick(right.onClick, ROUND_PAIR_CLICK_DELAY_MS),
   })
 }

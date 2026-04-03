@@ -18,6 +18,10 @@ export const widget = {
   CANVAS: 'CANVAS',
 }
 
+export const prop = {
+  MORE: 'MORE',
+}
+
 export const event = {
   CLICK_DOWN: 'CLICK_DOWN',
   CLICK_UP: 'CLICK_UP',
@@ -76,6 +80,13 @@ function createEventWidget(type, props) {
   return {
     type,
     props: { ...props },
+    setProperty(name, value) {
+      if (name === prop.MORE && value && typeof value === 'object') {
+        Object.assign(this.props, value)
+        return
+      }
+      this.props[name] = value
+    },
     addEventListener(name, handler) {
       listeners.set(name, handler)
     },
@@ -91,9 +102,16 @@ function createEventWidget(type, props) {
 function createTextEventWidget(type, props) {
   const listeners = new Map()
 
-  return {
+  const instance = {
     type,
     props: { ...props },
+    setProperty(name, value) {
+      if (name === prop.MORE && value && typeof value === 'object') {
+        Object.assign(this.props, value)
+        return
+      }
+      this.props[name] = value
+    },
     addEventListener(name, handler) {
       listeners.set(name, handler)
     },
@@ -104,13 +122,33 @@ function createTextEventWidget(type, props) {
       }
     },
   }
+
+  Object.defineProperty(instance, 'normal_color', {
+    get() {
+      return this.props.normal_color
+    },
+    set(value) {
+      this.props.normal_color = value
+    },
+  })
+
+  Object.defineProperty(instance, 'press_color', {
+    get() {
+      return this.props.press_color
+    },
+    set(value) {
+      this.props.press_color = value
+    },
+  })
+
+  return instance
 }
 
 export function createWidget(type, props) {
   const instance =
     type === widget.CANVAS
       ? createCanvasWidget(type, props)
-      : type === widget.TEXT
+      : type === widget.TEXT || type === widget.BUTTON
         ? createTextEventWidget(type, props)
       : type === widget.FILL_RECT
         ? createEventWidget(type, props)
