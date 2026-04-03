@@ -15,6 +15,11 @@ import {
 } from './mocks/zos/ui.mjs'
 import { __resetInteraction } from './mocks/zos/interaction.mjs'
 import { __resetSensors } from './mocks/zos/sensor.mjs'
+import {
+  __getLastBrightTime,
+  __getResetCount,
+  __resetDisplay,
+} from './mocks/zos/display.mjs'
 import { __resetLanguage, __setLanguage } from './mocks/zos/settings.mjs'
 import {
   __readLocalStorage,
@@ -29,6 +34,7 @@ function resetEnv() {
   __resetUI()
   __resetInteraction()
   __resetSensors()
+  __resetDisplay()
   __resetStorage()
   __resetLanguage()
 }
@@ -497,7 +503,9 @@ test('game screen renders without debug text widgets in the canvas HUD', async (
     const drawTextCalls = canvas.__getDrawCalls().filter((call) => call.method === 'drawText')
 
     assert.equal(drawTextCalls.length, 0)
+    assert.equal(__getLastBrightTime(), 600000)
     page.onDestroy()
+    assert.equal(__getResetCount(), 1)
   } finally {
     globalThis.setInterval = originalSetInterval
     globalThis.clearInterval = originalClearInterval

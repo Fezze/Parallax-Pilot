@@ -1,4 +1,5 @@
 import { getDeviceInfo, SCREEN_SHAPE_ROUND } from '@zos/device'
+import { resetPageBrightTime, setPageBrightTime } from '@zos/display'
 import {
   createWidget,
   event,
@@ -57,6 +58,7 @@ const SHIP_BOUNDARY = 20
 const pageLogger = log.getLogger('game')
 const BUTTON_STEP = 26
 const SQUARE_SPAWN_INTERVAL_FACTOR = 0.84
+const GAME_BRIGHT_TIME_MS = 600000
 
 function getLegacyHmApp() {
   if (typeof hmApp !== 'undefined') {
@@ -105,6 +107,20 @@ function updateShipPoints(points, shipRect, wristSide) {
 function hideStatusBar() {
   try {
     setStatusBarVisible(false)
+  } catch (_error) {}
+}
+
+function keepScreenAwake() {
+  try {
+    setPageBrightTime({
+      brightTime: GAME_BRIGHT_TIME_MS,
+    })
+  } catch (_error) {}
+}
+
+function restoreScreenTimeout() {
+  try {
+    resetPageBrightTime()
   } catch (_error) {}
 }
 
@@ -304,6 +320,7 @@ Page({
 
   build() {
     hideStatusBar()
+    keepScreenAwake()
 
     this.canvas = createWidget(widget.CANVAS, {
       x: 0,
@@ -325,6 +342,8 @@ Page({
   },
 
   onDestroy() {
+    restoreScreenTimeout()
+
     if (this.loop) {
       clearInterval(this.loop)
       this.loop = null

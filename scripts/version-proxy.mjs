@@ -44,14 +44,14 @@ function bumpSemver(version, bumpMode) {
   const [major, minor, patch] = parseSemver(version)
 
   if (bumpMode === 'patch') {
-    return `${major}.${minor}.${patch + 1}`
+    return formatSemver([major, minor, patch + 1])
   }
 
   if (bumpMode === 'minor') {
-    return `${major}.${minor + 1}.0`
+    return formatSemver([major, minor + 1, 0])
   }
 
-  return `${major + 1}.0.0`
+  return formatSemver([major + 1, 0, 0])
 }
 
 const packageJson = readJson(packageJsonPath)
