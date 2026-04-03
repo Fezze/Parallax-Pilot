@@ -1,6 +1,6 @@
 {
   "name": "parallax-pilot-workspace",
-  "version": "1.3.0",
+  "version": "1.3.2",
   "private": true,
   "type": "module",
   "scripts": {
@@ -14,7 +14,8 @@
     "test:playwright:screens": "playwright test tests/playwright/page-preview.spec.js",
     "test:playwright:headed": "playwright test --headed",
     "playwright:install": "playwright install chromium",
-    "build": "cmd /c \"cd /d zepp-app && zeus build\"",
+    "build": "node scripts/zeus-proxy.mjs build",
+    "build:raw": "cmd /c \"cd /d zepp-app && zeus build\"",
     "dev": "node scripts/zeus-proxy.mjs dev",
     "preview": "node scripts/zeus-proxy.mjs preview"
   },

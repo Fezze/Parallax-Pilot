@@ -7,8 +7,8 @@ const repoRoot = path.resolve(__dirname, '..')
 const command = process.argv[2]
 const dryRun = process.argv.includes('--dry-run')
 
-if (!['dev', 'preview'].includes(command)) {
-  console.error('Usage: node scripts/zeus-proxy.mjs <dev|preview> [--dry-run]')
+if (!['dev', 'preview', 'build'].includes(command)) {
+  console.error('Usage: node scripts/zeus-proxy.mjs <dev|preview|build> [--dry-run]')
   process.exit(1)
 }
 
@@ -33,10 +33,10 @@ if (dryRun) {
 const zeusRun = spawnSync(
   process.platform === 'win32' ? 'cmd' : 'sh',
   process.platform === 'win32'
-    ? ['/c', `cd /d "${path.join(repoRoot, 'zepp-app')}" && zeus ${command}`]
+    ? ['/c', 'zeus', command]
     : ['-lc', `cd "${path.join(repoRoot, 'zepp-app')}" && zeus ${command}`],
   {
-    cwd: repoRoot,
+    cwd: path.join(repoRoot, 'zepp-app'),
     stdio: 'inherit',
   }
 )
