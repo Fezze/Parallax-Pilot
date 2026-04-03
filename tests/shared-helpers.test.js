@@ -166,8 +166,8 @@ test('asteroid helpers keep movement logic consistent across immutable and in-pl
 
   assert.equal(clamp(-5, 0, 10), 0)
   assert.equal(clamp(15, 0, 10), 10)
-  assert.equal(getSpawnIntervalMs(0.1, 0.1), 900)
-  assert.equal(getSpawnIntervalMs(99, 99), 150)
+  assert.ok(getSpawnIntervalMs(0.1, 0.1) > 900)
+  assert.ok(getSpawnIntervalMs(99, 99) < 1)
   assert.deepEqual(pruned.map((asteroid) => asteroid.id), ['keep'])
   assert.equal(advanceAsteroidsInPlace(inPlace, 1, viewport), inPlace)
   assert.deepEqual(inPlace.map((asteroid) => asteroid.id), ['keep'])
@@ -384,9 +384,19 @@ test('spawn selection and asteroid creation cover both travel directions', () =>
     wristSide: 'left',
     random: () => 0.5,
   })
+  const fastAsteroid = createAsteroid({
+    id: 'fast-spawn',
+    viewport,
+    difficulty: 40,
+    shipRect,
+    asteroids: asteroidField,
+    wristSide: 'left',
+    random: () => 0.5,
+  })
 
-  assert.ok(spawnY >= 28)
-  assert.ok(spawnY <= 172)
+  assert.ok(spawnY >= -5)
+  assert.ok(spawnY <= 205)
   assert.ok(asteroid.x > viewport.width)
   assert.ok(asteroid.vx < 0)
+  assert.ok(Math.abs(fastAsteroid.vx) > 440)
 })

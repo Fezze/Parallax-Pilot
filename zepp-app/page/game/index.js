@@ -56,6 +56,7 @@ const FRAME_INTERVAL_MS = 16
 const SHIP_BOUNDARY = 20
 const pageLogger = log.getLogger('game')
 const BUTTON_STEP = 26
+const SQUARE_SPAWN_INTERVAL_FACTOR = 0.84
 
 function getLegacyHmApp() {
   if (typeof hmApp !== 'undefined') {
@@ -290,14 +291,6 @@ Page({
     this.finished = false
     this.accelerometer = null
     this.vibrator = new Vibrator()
-    this.lastRotaryDegree = 0
-    this.lastRotaryKey = '--'
-    this.lastRotaryAt = 0
-    this.lastRotarySource = '--'
-    this.lastKeyCode = '--'
-    this.lastKeyEvent = '--'
-    this.lastKeySource = '--'
-    this.lastKeyAt = 0
     this.buttonDirection = 0
     this.buttonClickDirection = -1
     this.shipPoints = Array.from({ length: 5 }, () => ({ x: 0, y: 0 }))
@@ -393,10 +386,6 @@ Page({
 
   bindCrownEvents() {
     const applyRotary = (source, key, degree) => {
-      this.lastRotaryKey = `${key}`
-      this.lastRotaryDegree = degree
-      this.lastRotaryAt = Date.now()
-      this.lastRotarySource = source
       pageLogger.debug(`${source} key=${key} degree=${degree}`)
 
       if (this.settings.controlMode !== 'crown') {
@@ -435,10 +424,6 @@ Page({
 
   bindHardwareKeyEvents() {
     const applyHardwareKey = (source, key, keyEvent) => {
-      this.lastKeyCode = `${key}`
-      this.lastKeyEvent = `${keyEvent}`
-      this.lastKeySource = source
-      this.lastKeyAt = Date.now()
       pageLogger.debug(`${source} key=${key} event=${keyEvent}`)
 
       if (this.settings.controlMode !== 'crown') {
@@ -558,27 +543,36 @@ Page({
   },
 
   spawnAsteroids(now, shipRect, difficulty) {
-    const spawnInterval = getSpawnIntervalMs(
-      difficulty,
-      this.settings.spawnMultiplier
-    )
-    if (now - this.lastSpawnAt < spawnInterval) {
+    const spawnInterval =
+      getSpawnIntervalMs(
+        difficulty,
+        this.settings.spawnMultiplier
+      ) *
+      (this.deviceInfo.screenShape === SCREEN_SHAPE_ROUND
+        ? 1
+        : SQUARE_SPAWN_INTERVAL_FACTOR)
+    const elapsedSinceSpawn = now - this.lastSpawnAt
+    if (elapsedSinceSpawn < spawnInterval) {
       return
     }
 
-    this.lastSpawnAt = now
-    this.asteroidSeed += 1
-    const asteroid = createAsteroid({
-      id: `${now}-${this.asteroidSeed}`,
-      viewport: this.viewport,
-      difficulty,
-      shipRect,
-      asteroids: this.asteroids,
-      wristSide: this.settings.wristSide,
-    })
+    const spawnCount = Math.max(1, Math.floor(elapsedSinceSpawn / spawnInterval))
+    this.lastSpawnAt += spawnInterval * spawnCount
 
-    this.asteroids.push(asteroid)
-    addAsteroidToCollisionGrid(asteroid, this.collisionGrid)
+    for (let index = 0; index < spawnCount; index += 1) {
+      this.asteroidSeed += 1
+      const asteroid = createAsteroid({
+        id: `${now}-${this.asteroidSeed}`,
+        viewport: this.viewport,
+        difficulty,
+        shipRect,
+        asteroids: this.asteroids,
+        wristSide: this.settings.wristSide,
+      })
+
+      this.asteroids.push(asteroid)
+      addAsteroidToCollisionGrid(asteroid, this.collisionGrid)
+    }
   },
 
   handleCollisions(now, shipRect, difficulty) {
@@ -711,65 +705,5 @@ Page({
     } else {
       drawSquareHud(this.canvas, this.viewport, hpRatio)
     }
-
-    this.canvas.drawText({
-      x: 16,
-      y: 18,
-      text: `${Math.round(now - this.startedAt)}`,
-      text_size: 22,
-      color: COLORS.textPrimary,
-    })
-
-    this.canvas.drawText({
-      x: 16,
-      y: 46,
-      text: `${this.settings.controlMode.toUpperCase()}  HP ${this.hp}`,
-      text_size: 14,
-      color: COLORS.textMuted,
-    })
-
-    if (this.settings.controlMode === 'crown') {
-      const ageMs = this.lastRotaryAt ? now - this.lastRotaryAt : -1
-      const rawText =
-        ageMs >= 0
-          ? `ROT ${this.lastRotaryDegree} ${this.lastRotarySource} ${ageMs}ms`
-          : 'ROT NO EVENT'
-
-      this.canvas.drawText({
-        x: 16,
-        y: 64,
-        text: rawText,
-        text_size: 14,
-        color: COLORS.textMuted,
-      })
-
-      this.canvas.drawText({
-        x: 16,
-        y: 82,
-        text: `TYPE ${this.deviceInfo.keyType || 'unknown'} K ${this.lastRotaryKey}`,
-        text_size: 14,
-        color: COLORS.textMuted,
-      })
-
-      const keyAgeMs = this.lastKeyAt ? now - this.lastKeyAt : -1
-      this.canvas.drawText({
-        x: 16,
-        y: 100,
-        text:
-          keyAgeMs >= 0
-            ? `KEY ${this.lastKeyCode}/${this.lastKeyEvent} ${this.lastKeySource} ${keyAgeMs}ms`
-            : 'KEY NO EVENT',
-        text_size: 14,
-        color: COLORS.textMuted,
-      })
-    }
-
-    this.canvas.drawText({
-      x: 16,
-      y: this.viewport.height - 28,
-      text: `TIME ${this.settings.timeScale}x  SPAWN ${this.settings.spawnMultiplier}x`,
-      text_size: 14,
-      color: COLORS.textMuted,
-    })
   },
 })

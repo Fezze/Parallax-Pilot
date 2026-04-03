@@ -48,6 +48,7 @@ Page({
     const rowGap = 10
     const startY = 92
     const controlModes = getAvailableControlModes(crownSupported)
+    const tiltEnabled = settings.controlMode === 'tilt'
 
     createLabel({
       x: pad,
@@ -64,7 +65,7 @@ Page({
       y: 54,
       w: fullWidth,
       h: 24,
-      text: 'TAP ROW TO CYCLE',
+      text: 'TAP TO CHANGE',
       textSize: 16,
       color: COLORS.textMuted,
     })
@@ -133,21 +134,16 @@ Page({
         'tiltSensitivity',
         settings.tiltSensitivity
       )}`,
-      onClick: () =>
-        updateSetting(
-          'tiltSensitivity',
-          cycleOption(TILT_SENSITIVITY_OPTIONS, settings.tiltSensitivity)
-        ),
-    })
-
-    createLabel({
-      x: pad,
-      y: startY + (rowHeight + rowGap) * 5 + 2,
-      w: fullWidth,
-      h: 22,
-      text: `KEYTYPE ${deviceInfo.keyType || 'unknown'}`,
-      textSize: 15,
-      color: COLORS.textMuted,
+      normalColor: tiltEnabled ? COLORS.button : COLORS.hudInactive,
+      pressColor: tiltEnabled ? COLORS.buttonPress : COLORS.hudInactive,
+      textColor: tiltEnabled ? COLORS.textPrimary : COLORS.textMuted,
+      onClick: tiltEnabled
+        ? () =>
+            updateSetting(
+              'tiltSensitivity',
+              cycleOption(TILT_SENSITIVITY_OPTIONS, settings.tiltSensitivity)
+            )
+        : () => {},
     })
 
     createActionButton({

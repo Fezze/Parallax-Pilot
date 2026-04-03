@@ -2,13 +2,11 @@ import { getDeviceInfo } from '@zos/device'
 import { push } from '@zos/router'
 import { COLORS, ROUTES } from '../../shared/constants.js'
 import {
-  resolveTravelDirection,
   sanitizeControlMode,
   supportsDigitalCrown,
 } from '../../shared/device.js'
 import { createActionButton, createLabel, hideStatusBar } from '../../shared/page-ui.js'
 import { loadScores, loadSettings, saveSettings } from '../../shared/storage.js'
-import { formatSettingValue } from '../../shared/view-models.js'
 
 Page({
   build() {
@@ -35,8 +33,6 @@ Page({
     const fullWidth = width - pad * 2
     const buttonHeight = Math.round(Math.min(62, height * 0.13))
     const titleY = Math.round(height * 0.07)
-    const travelDirection = resolveTravelDirection(nextSettings.wristSide)
-    const incomingDirection = travelDirection === 'right' ? 'LEFT' : 'RIGHT'
 
     createLabel({
       x: pad,
@@ -53,18 +49,8 @@ Page({
       y: titleY + 42,
       w: fullWidth,
       h: 26,
-      text: `SHIP ${travelDirection.toUpperCase()}  ASTEROIDS ${incomingDirection}`,
+      text: 'DODGE THE ASTEROIDS',
       textSize: 18,
-      color: COLORS.textMuted,
-    })
-
-    createLabel({
-      x: pad,
-      y: titleY + 72,
-      w: fullWidth,
-      h: 24,
-      text: `CONTROL ${formatSettingValue('controlMode', nextSettings.controlMode)}  WRIST ${formatSettingValue('wristSide', nextSettings.wristSide)}`,
-      textSize: 16,
       color: COLORS.textMuted,
     })
 
@@ -113,18 +99,8 @@ Page({
       y: height - 62,
       w: fullWidth,
       h: 20,
-      text: `${scores.length} RUNS SAVED  TOP LIST 100`,
+      text: `${scores.length} RUNS SAVED`,
       textSize: 16,
-      color: COLORS.textMuted,
-    })
-
-    createLabel({
-      x: pad,
-      y: height - 38,
-      w: fullWidth,
-      h: 18,
-      text: crownSupported ? 'CROWN AVAILABLE' : 'CROWN NOT AVAILABLE',
-      textSize: 14,
       color: COLORS.textMuted,
     })
   },

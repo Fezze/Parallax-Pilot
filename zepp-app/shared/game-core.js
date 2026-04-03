@@ -2,10 +2,11 @@ import {
   COLLISION_BUCKET_HEIGHT,
   COLLISION_GRID_PADDING,
   COLLISION_SLICE_WIDTH,
+  ASTEROID_DAMAGE_MAX,
+  ASTEROID_DAMAGE_MIN,
   ASTEROID_RADIUS_MAX,
   ASTEROID_RADIUS_MIN,
   COLLISION_COOLDOWN_MS,
-  HP_MAX,
 } from './constants.js'
 import { resolveTravelDirection } from './device.js'
 
@@ -60,11 +61,24 @@ export function createShipRect(viewport, shipCenterY, wristSide) {
 }
 
 export function getSpawnIntervalMs(difficulty, spawnMultiplier) {
-  return clamp(940 / (0.75 + difficulty * spawnMultiplier * 0.34), 150, 900)
+  return 940 / (0.75 + difficulty * spawnMultiplier * 0.34)
 }
 
 function getAsteroidSpeed(difficulty, randomUnit = Math.random()) {
-  return clamp(115 + difficulty * 15 + randomUnit * 40, 115, 440)
+  return 115 + difficulty * 15 + randomUnit * 40
+}
+
+function getAsteroidDamage(radius) {
+  const normalizedRadius = clamp(
+    (radius - ASTEROID_RADIUS_MIN) / (ASTEROID_RADIUS_MAX - ASTEROID_RADIUS_MIN),
+    0,
+    1
+  )
+
+  return Math.round(
+    ASTEROID_DAMAGE_MIN +
+      normalizedRadius * (ASTEROID_DAMAGE_MAX - ASTEROID_DAMAGE_MIN)
+  )
 }
 
 function getVerticalClearance(candidateY, radius, shipRect, asteroids, spawnFromRight, viewport) {
@@ -96,8 +110,8 @@ export function chooseSpawnY({
   random = Math.random,
 }) {
   const spawnFromRight = resolveTravelDirection(wristSide) === 'right'
-  const minY = radius + 18
-  const maxY = viewport.height - radius - 18
+  const minY = -radius / 2
+  const maxY = viewport.height + radius / 2
   let bestY = shipRect.centerY
   let bestScore = Number.NEGATIVE_INFINITY
 
@@ -426,15 +440,10 @@ export function calculateCollisionResult({
     0,
     1.35
   )
-  const sizeFactor = clamp(asteroid.radius / (shipRect.h * 0.55), 0.75, 2.4)
-  const difficultyFactor = 1 + Math.min((difficulty - 1) * 0.012, 0.9)
-  const damage = Math.round(
-    clamp(7 + overlapRatio * 28 * sizeFactor * difficultyFactor, 7, HP_MAX)
-  )
 
   return {
     hit: true,
-    damage,
+    damage: getAsteroidDamage(asteroid.radius),
     overlapRatio,
   }
 }

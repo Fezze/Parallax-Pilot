@@ -59,25 +59,36 @@ test('spawn y prefers free lanes away from the ship and nearby asteroids', () =>
   assert.ok(Math.abs(y - shipRect.centerY) > 50)
 })
 
-test('collision damage scales with overlap and respects cooldown', () => {
+test('collision damage depends on asteroid size and respects cooldown', () => {
   const shipRect = { x: 100, y: 100, w: 40, h: 30 }
-  const asteroid = { x: 120, y: 114, radius: 18, lastHitAt: 0 }
+  const smallAsteroid = { x: 120, y: 114, radius: 7, lastHitAt: 0 }
+  const largeAsteroid = { x: 120, y: 114, radius: 18, lastHitAt: 0 }
 
-  const result = calculateCollisionResult({
+  const smallResult = calculateCollisionResult({
     shipRect,
-    asteroid,
+    asteroid: smallAsteroid,
+    difficulty: 9,
+    now: 1000,
+  })
+  const largeResult = calculateCollisionResult({
+    shipRect,
+    asteroid: largeAsteroid,
     difficulty: 9,
     now: 1000,
   })
   const cooldownBlocked = calculateCollisionResult({
     shipRect,
-    asteroid: { ...asteroid, lastHitAt: 900 },
+    asteroid: { ...largeAsteroid, lastHitAt: 900 },
     difficulty: 9,
     now: 1000,
   })
 
-  assert.equal(result.hit, true)
-  assert.ok(result.damage >= 10)
+  assert.equal(smallResult.hit, true)
+  assert.equal(largeResult.hit, true)
+  assert.equal(smallResult.damage, 7)
+  assert.equal(largeResult.damage, 13)
+  assert.ok(largeResult.damage > smallResult.damage)
+  assert.ok(largeResult.overlapRatio > 0)
   assert.equal(cooldownBlocked.hit, false)
 })
 

@@ -4,9 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test",
-    "test:coverage": "c8 --all --src zepp-app/shared --exclude tests/** --exclude zepp-app/shared/page-ui.js --exclude zepp-app/shared/storage.js --reporter=text --reporter=html --reporter=lcov node --test",
+    "test": "node --import ./tests/register-zepp-globals.mjs --test",
+    "test:coverage": "c8 --all --src zepp-app/shared --exclude tests/** --exclude zepp-app/shared/page-ui.js --exclude zepp-app/shared/storage.js --reporter=text --reporter=html --reporter=lcov node --import ./tests/register-zepp-globals.mjs --test",
     "test:playwright": "playwright test",
+    "test:playwright:screens": "playwright test tests/playwright/page-preview.spec.js",
     "test:playwright:headed": "playwright test --headed",
     "playwright:install": "playwright install chromium",
     "build": "cmd /c \"cd /d zepp-app && zeus build\"",

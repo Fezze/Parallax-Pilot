@@ -1,5 +1,5 @@
 import { getDeviceInfo, SCREEN_SHAPE_ROUND } from '@zos/device'
-import { back, push, replace } from '@zos/router'
+import { push, replace } from '@zos/router'
 import { COLORS, ROUTES, RESULTS_PAGE_SIZE } from '../../shared/constants.js'
 import { createActionButton, createLabel, hideStatusBar } from '../../shared/page-ui.js'
 import { parseRouteParams } from '../../shared/params.js'
@@ -56,6 +56,33 @@ Page({
     const listTop = lastSession ? 158 : 118
     const hasPrev = pageCount > 1 && pageIndex > 0
     const hasNext = pageCount > 1 && pageIndex < pageCount - 1
+    const navButtons = []
+
+    if (hasPrev) {
+      navButtons.push({
+        text: 'PREV',
+        onClick: () =>
+          replace({
+            url: ROUTES.RESULTS,
+            params: JSON.stringify({
+              pageIndex: pageIndex - 1,
+            }),
+          }),
+      })
+    }
+
+    if (hasNext) {
+      navButtons.push({
+        text: 'NEXT',
+        onClick: () =>
+          replace({
+            url: ROUTES.RESULTS,
+            params: JSON.stringify({
+              pageIndex: pageIndex + 1,
+            }),
+          }),
+      })
+    }
 
     createLabel({
       x: pad,
@@ -93,7 +120,7 @@ Page({
         y: 116,
         w: fullWidth,
         h: 18,
-        text: 'LAST 100 RUNS BELOW',
+        text: 'RECENT RUNS',
         textSize: 14,
         color: COLORS.textMuted,
       })
@@ -126,7 +153,7 @@ Page({
     if (pageCount > 1) {
       createLabel({
         x: pad,
-        y: height - (isRound ? 146 : 96),
+        y: height - (isRound ? 150 : 124),
         w: fullWidth,
         h: 18,
         text: `${pageIndex + 1} / ${pageCount}`,
@@ -135,107 +162,36 @@ Page({
       })
     }
 
-    if (isRound && hasPrev && hasNext) {
+    if (navButtons.length > 0) {
       createRowButtons({
         width,
-        y: height - 116,
-        safePad: Math.round(width * 0.18),
-        buttons: [
-          {
-            text: 'PREV',
-            onClick: () =>
-              replace({
-                url: ROUTES.RESULTS,
-                params: JSON.stringify({
-                  pageIndex: pageIndex - 1,
-                }),
-              }),
-            textSize: 18,
-            h: 40,
-          },
-          {
-            text: 'NEXT',
-            onClick: () =>
-              replace({
-                url: ROUTES.RESULTS,
-                params: JSON.stringify({
-                  pageIndex: pageIndex + 1,
-                }),
-              }),
-            textSize: 18,
-            h: 40,
-          },
-        ],
-      })
-
-      createRowButtons({
-        width,
-        y: height - 66,
-        safePad: Math.round(width * 0.28),
-        buttons: [
-          {
-            text: 'PLAY',
-            normalColor: COLORS.accent,
-            pressColor: 0xc9a900,
-            textColor: COLORS.background,
-            onClick: () => push({ url: ROUTES.GAME }),
-          },
-        ],
-      })
-    } else {
-      const navButtons = []
-
-      if (hasPrev) {
-        navButtons.push({
-          text: 'PREV',
-          onClick: () =>
-            replace({
-              url: ROUTES.RESULTS,
-              params: JSON.stringify({
-                pageIndex: pageIndex - 1,
-              }),
-            }),
-        })
-      }
-
-      navButtons.push({
-        text: 'PLAY',
-        normalColor: COLORS.accent,
-        pressColor: 0xc9a900,
-        textColor: COLORS.background,
-        onClick: () => push({ url: ROUTES.GAME }),
-      })
-
-      if (hasNext) {
-        navButtons.push({
-          text: 'NEXT',
-          onClick: () =>
-            replace({
-              url: ROUTES.RESULTS,
-              params: JSON.stringify({
-                pageIndex: pageIndex + 1,
-              }),
-            }),
-        })
-      }
-
-      createRowButtons({
-        width,
-        y: height - 70,
-        safePad: Math.round(width * (isRound ? 0.18 : 0.07)),
-        buttons: navButtons,
-        gap: 8,
+        y: height - (isRound ? 116 : 118),
+        safePad: Math.round(width * (isRound ? 0.18 : 0.22)),
+        buttons: navButtons.map((button) => ({
+          ...button,
+          textSize: isRound ? 18 : undefined,
+          h: isRound ? 40 : 44,
+        })),
       })
     }
 
-    createActionButton({
-      x: pad,
-      y: height - (isRound ? 164 : 122),
-      w: fullWidth,
-      h: 38,
-      text: 'BACK',
-      onClick: () => back(),
-      textSize: 18,
+    createRowButtons({
+      width,
+      y: height - 66,
+      safePad: Math.round(width * (isRound ? 0.18 : 0.16)),
+      buttons: [
+        {
+          text: 'BACK',
+          onClick: () => push({ url: ROUTES.HOME }),
+        },
+        {
+          text: 'PLAY',
+          normalColor: COLORS.accent,
+          pressColor: 0xc9a900,
+          textColor: COLORS.background,
+          onClick: () => push({ url: ROUTES.GAME }),
+        },
+      ],
     })
   },
 })
