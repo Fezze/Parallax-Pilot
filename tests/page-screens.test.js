@@ -556,3 +556,46 @@ test('game swipe input moves relatively and does not teleport on touch down', as
     globalThis.clearInterval = originalClearInterval
   }
 })
+
+test('game spawn catch-up is capped to avoid burst walls after a delayed frame', async () => {
+  resetEnv()
+  __seedLocalStorage({
+    settings_v1: JSON.stringify({
+      controlMode: 'tilt',
+      wristSide: 'left',
+      timeScale: 1,
+      spawnMultiplier: 2,
+      tiltSensitivity: 1,
+    }),
+  })
+
+  const originalSetInterval = globalThis.setInterval
+  const originalClearInterval = globalThis.clearInterval
+  globalThis.setInterval = () => 1
+  globalThis.clearInterval = () => {}
+
+  try {
+    const page = await loadPageDefinition('../zepp-app/page/game/index.js')
+    page.onInit()
+    page.build()
+
+    const shipRect = {
+      x: 120,
+      y: 120,
+      w: 30,
+      h: 20,
+      centerX: 135,
+      centerY: 130,
+    }
+
+    page.lastSpawnAt = 0
+    page.spawnAsteroids(10000, shipRect, 30)
+
+    assert.ok(page.asteroids.length <= 2)
+
+    page.onDestroy()
+  } finally {
+    globalThis.setInterval = originalSetInterval
+    globalThis.clearInterval = originalClearInterval
+  }
+})

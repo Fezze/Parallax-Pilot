@@ -59,6 +59,8 @@ const pageLogger = log.getLogger('game')
 const BUTTON_STEP = 26
 const SQUARE_SPAWN_INTERVAL_FACTOR = 0.84
 const GAME_BRIGHT_TIME_MS = 600000
+const MAX_SPAWNS_PER_TICK = 2
+const ENABLE_INPUT_DEBUG = false
 
 function getLegacyHmApp() {
   if (typeof hmApp !== 'undefined') {
@@ -102,6 +104,12 @@ function updateShipPoints(points, shipRect, wristSide) {
   points[4].x = shipRect.x
   points[4].y = shipRect.centerY
   return points
+}
+
+function debugInput(message) {
+  if (ENABLE_INPUT_DEBUG) {
+    pageLogger.debug(message)
+  }
 }
 
 function hideStatusBar() {
@@ -285,6 +293,7 @@ Page({
       width: deviceInfo.width,
       height: deviceInfo.height,
     }
+    this.viewportHalfHeight = this.viewport.height / 2
     this.settings = settings
     this.crownSupported = crownSupported
     this.collisionSliceWidth = COLLISION_SLICE_WIDTH
@@ -312,7 +321,16 @@ Page({
     this.vibrator = new Vibrator()
     this.buttonDirection = 0
     this.buttonClickDirection = -1
+    this.baseControlSpeed =
+      Math.min(this.viewport.width, this.viewport.height) *
+      0.74 *
+      this.settings.tiltSensitivity
     this.shipPoints = Array.from({ length: 5 }, () => ({ x: 0, y: 0 }))
+    this.shipRect = createShipRect(
+      this.viewport,
+      this.shipCenterY,
+      this.settings.wristSide
+    )
     pageLogger.info(
       `init keyType=${deviceInfo.keyType || 'unknown'} keyNumber=${deviceInfo.keyNumber || 'unknown'} crownSupported=${crownSupported}`
     )
@@ -375,7 +393,7 @@ Page({
   bindCanvasEvents() {
     const beginPointerInput = (y) => {
       if (this.settings.controlMode === 'touch') {
-        this.touchDirection = y < this.viewport.height / 2 ? -1 : 1
+        this.touchDirection = y < this.viewportHalfHeight ? -1 : 1
       }
 
       if (this.settings.controlMode === 'swipe') {
@@ -387,7 +405,7 @@ Page({
 
     const updatePointerInput = (y) => {
       if (this.settings.controlMode === 'touch') {
-        this.touchDirection = y < this.viewport.height / 2 ? -1 : 1
+        this.touchDirection = y < this.viewportHalfHeight ? -1 : 1
       }
 
       if (
@@ -425,7 +443,7 @@ Page({
 
   bindCrownEvents() {
     const applyRotary = (source, key, degree) => {
-      pageLogger.debug(`${source} key=${key} degree=${degree}`)
+      debugInput(`${source} key=${key} degree=${degree}`)
 
       if (this.settings.controlMode !== 'crown') {
         return
@@ -463,7 +481,7 @@ Page({
 
   bindHardwareKeyEvents() {
     const applyHardwareKey = (source, key, keyEvent) => {
-      pageLogger.debug(`${source} key=${key} event=${keyEvent}`)
+      debugInput(`${source} key=${key} event=${keyEvent}`)
 
       if (this.settings.controlMode !== 'crown') {
         return false
@@ -558,17 +576,14 @@ Page({
   },
 
   updateShip(deltaSeconds) {
-    const minDimension = Math.min(this.viewport.width, this.viewport.height)
-    const baseSpeed = minDimension * 0.74 * this.settings.tiltSensitivity
-
     if (this.settings.controlMode === 'tilt' && this.accelerometer) {
       const current = this.accelerometer.getCurrent() || { y: 0 }
       const normalized = clamp(current.y / 18, -1.15, 1.15)
-      this.shipCenterY += normalized * baseSpeed * deltaSeconds
+      this.shipCenterY += normalized * this.baseControlSpeed * deltaSeconds
     }
 
     if (this.settings.controlMode === 'touch') {
-      this.shipCenterY += this.touchDirection * baseSpeed * deltaSeconds
+      this.shipCenterY += this.touchDirection * this.baseControlSpeed * deltaSeconds
     }
 
     if (
@@ -584,7 +599,7 @@ Page({
 
     if (this.settings.controlMode === 'crown') {
       if (this.buttonDirection !== 0) {
-        this.crownCenterY += this.buttonDirection * baseSpeed * deltaSeconds
+        this.crownCenterY += this.buttonDirection * this.baseControlSpeed * deltaSeconds
       }
       this.shipCenterY = this.crownCenterY
     }
@@ -606,8 +621,16 @@ Page({
       return
     }
 
-    const spawnCount = Math.max(1, Math.floor(elapsedSinceSpawn / spawnInterval))
-    this.lastSpawnAt += spawnInterval * spawnCount
+    const rawSpawnCount = Math.floor(elapsedSinceSpawn / spawnInterval)
+    const spawnCount = Math.min(
+      MAX_SPAWNS_PER_TICK,
+      Math.max(1, rawSpawnCount)
+    )
+    const remainingDebt = Math.max(
+      0,
+      elapsedSinceSpawn - spawnInterval * spawnCount
+    )
+    this.lastSpawnAt = now - Math.min(spawnInterval, remainingDebt)
 
     for (let index = 0; index < spawnCount; index += 1) {
       this.asteroidSeed += 1
@@ -617,6 +640,7 @@ Page({
         difficulty,
         shipRect,
         asteroids: this.asteroids,
+        grid: this.collisionGrid,
         wristSide: this.settings.wristSide,
       })
 
@@ -687,6 +711,7 @@ Page({
       this.shipCenterY,
       this.settings.wristSide
     )
+    this.shipRect = shipRect
     const difficulty = calculateDifficulty(
       now - this.startedAt,
       this.settings.timeScale
@@ -706,22 +731,10 @@ Page({
       this.collisionCandidates
     )
     this.handleCollisions(now, shipRect, difficulty)
-    this.drawFrame()
+    this.drawFrame(shipRect)
   },
 
-  drawFrame() {
-    const shipRect = createShipRect(
-      this.viewport,
-      this.shipCenterY,
-      this.settings.wristSide
-    )
-
-    this.canvas.clear({
-      x: 0,
-      y: 0,
-      w: this.viewport.width,
-      h: this.viewport.height,
-    })
+  drawFrame(shipRect = this.shipRect) {
     this.canvas.drawRect({
       x1: 0,
       y1: 0,
@@ -734,14 +747,15 @@ Page({
       color: COLORS.asteroid,
       line_width: 2,
     })
-    this.asteroids.forEach((asteroid) => {
+    for (let index = 0; index < this.asteroids.length; index += 1) {
+      const asteroid = this.asteroids[index]
       this.canvas.strokeCircle({
         center_x: asteroid.x,
         center_y: asteroid.y,
         radius: asteroid.radius,
         color: COLORS.asteroid,
       })
-    })
+    }
 
     drawOutlineShip(
       this.canvas,

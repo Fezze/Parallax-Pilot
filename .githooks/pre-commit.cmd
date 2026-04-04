@@ -1,4 +1,4 @@
 @echo off
 setlocal
-node scripts\version-proxy.mjs minor --stage
+node scripts\version-proxy.mjs patch --stage
 exit /b %errorlevel%

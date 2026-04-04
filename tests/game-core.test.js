@@ -8,6 +8,7 @@ import {
   createAsteroid,
   createScoreEntry,
   createShipRect,
+  getSpawnIntervalMs,
 } from '../zepp-app/shared/game-core.js'
 import { trimScores } from '../zepp-app/shared/persistence.js'
 
@@ -43,20 +44,34 @@ test('trimScores sorts newest-first and limits history to 100', () => {
   assert.equal(trimmed.at(-1).timestamp, 30)
 })
 
-test('spawn y prefers free lanes away from the ship and nearby asteroids', () => {
+test('spawn y stays near the ship path when the lane is open', () => {
   const viewport = { width: 480, height: 480 }
   const shipRect = createShipRect(viewport, 240, 'left')
-  const asteroids = [{ x: 420, y: 230, radius: 24 }]
   const y = chooseSpawnY({
     viewport,
     shipRect,
-    asteroids,
+    asteroids: [],
     radius: 20,
     wristSide: 'left',
     random: sequenceRandom([0.12, 0.18, 0.84, 0.86, 0.52, 0.9, 0.72, 0.4]),
   })
 
-  assert.ok(Math.abs(y - shipRect.centerY) > 50)
+  assert.ok(Math.abs(y - shipRect.centerY) < 70)
+})
+
+test('spawn y moves off the exact ship lane when nearby asteroids already block it', () => {
+  const viewport = { width: 480, height: 480 }
+  const shipRect = createShipRect(viewport, 240, 'left')
+  const y = chooseSpawnY({
+    viewport,
+    shipRect,
+    asteroids: [{ x: 420, y: shipRect.centerY, radius: 24 }],
+    radius: 20,
+    wristSide: 'left',
+    random: sequenceRandom([0.5, 0.2, 0.48, 0.4, 0.52, 0.6, 0.15, 0.8]),
+  })
+
+  assert.ok(Math.abs(y - shipRect.centerY) > 20)
 })
 
 test('collision damage depends on asteroid size and respects cooldown', () => {
@@ -90,6 +105,32 @@ test('collision damage depends on asteroid size and respects cooldown', () => {
   assert.ok(largeResult.damage > smallResult.damage)
   assert.ok(largeResult.overlapRatio > 0)
   assert.equal(cooldownBlocked.hit, false)
+})
+
+test('circle-vs-rect collision ignores bounding-box corner false positives', () => {
+  const result = calculateCollisionResult({
+    shipRect: { x: 100, y: 100, w: 40, h: 30 },
+    asteroid: { x: 148, y: 138, radius: 10, lastHitAt: 0 },
+    difficulty: 1,
+    now: 1000,
+  })
+
+  assert.deepEqual(result, {
+    hit: false,
+    damage: 0,
+    overlapRatio: 0,
+  })
+})
+
+test('spawn interval still accelerates but much more gently over time', () => {
+  const early = getSpawnIntervalMs(1, 1)
+  const mid = getSpawnIntervalMs(10, 1)
+  const late = getSpawnIntervalMs(20, 1)
+
+  assert.ok(early > mid)
+  assert.ok(mid > late)
+  assert.ok(mid > 300)
+  assert.ok(late > 200)
 })
 
 test('asteroid creation respects travel direction and score entries snapshot settings', () => {

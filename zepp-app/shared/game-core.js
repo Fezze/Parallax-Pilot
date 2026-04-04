@@ -61,7 +61,7 @@ export function createShipRect(viewport, shipCenterY, wristSide) {
 }
 
 export function getSpawnIntervalMs(difficulty, spawnMultiplier) {
-  return 940 / (0.75 + difficulty * spawnMultiplier * 0.34)
+  return 1020 / (0.9 + difficulty * spawnMultiplier * 0.18)
 }
 
 function getAsteroidSpeed(difficulty, randomUnit = Math.random()) {
@@ -81,51 +81,102 @@ function getAsteroidDamage(radius) {
   )
 }
 
-function getVerticalClearance(candidateY, radius, shipRect, asteroids, spawnFromRight, viewport) {
-  let minClearance =
-    Math.abs(candidateY - shipRect.centerY) - (radius + shipRect.h * 0.9)
+function getSpawnNearbyAsteroids(asteroids, grid, spawnFromRight, viewport) {
+  if (!grid) {
+    const nearby = []
+    for (let index = 0; index < asteroids.length; index += 1) {
+      const asteroid = asteroids[index]
+      const isNearby = spawnFromRight
+        ? asteroid.x > viewport.width * 0.55
+        : asteroid.x < viewport.width * 0.45
+      if (isNearby) {
+        nearby.push(asteroid)
+      }
+    }
+    return nearby
+  }
+
+  const nearby = []
+  const minSlice = spawnFromRight
+    ? getCollisionSliceIndex(viewport.width * 0.55, grid)
+    : 0
+  const maxSlice = spawnFromRight
+    ? grid.sliceCount - 1
+    : getCollisionSliceIndex(viewport.width * 0.45, grid)
+
+  for (let sliceIndex = minSlice; sliceIndex <= maxSlice; sliceIndex += 1) {
+    const slice = grid.slices[sliceIndex]
+    for (let bucketIndex = 0; bucketIndex < grid.bucketCount; bucketIndex += 1) {
+      const bucket = slice[bucketIndex]
+      for (let index = 0; index < bucket.length; index += 1) {
+        nearby.push(bucket[index])
+      }
+    }
+  }
+
+  return nearby
+}
+
+function getVerticalClearance(candidateY, radius, shipRect, asteroids) {
+  let minClearance = Number.POSITIVE_INFINITY
   for (let index = 0; index < asteroids.length; index += 1) {
     const asteroid = asteroids[index]
-    const isNearby = spawnFromRight
-      ? asteroid.x > viewport.width * 0.55
-      : asteroid.x < viewport.width * 0.45
-    if (!isNearby) {
-      continue
-    }
-
     const asteroidClearance =
       Math.abs(candidateY - asteroid.y) - (radius + asteroid.radius + 12)
     minClearance = Math.min(minClearance, asteroidClearance)
   }
 
-  return minClearance
+  return minClearance === Number.POSITIVE_INFINITY ? 24 : minClearance
 }
 
 export function chooseSpawnY({
   viewport,
   shipRect,
   asteroids,
+  grid,
   radius,
   wristSide,
   random = Math.random,
 }) {
   const spawnFromRight = resolveTravelDirection(wristSide) === 'right'
+  const nearbyAsteroids = getSpawnNearbyAsteroids(
+    asteroids,
+    grid,
+    spawnFromRight,
+    viewport
+  )
   const minY = -radius / 2
   const maxY = viewport.height + radius / 2
+  const challengeBandHalfHeight = Math.max(
+    radius + shipRect.h * 0.85,
+    viewport.height * 0.12
+  )
   let bestY = shipRect.centerY
   let bestScore = Number.NEGATIVE_INFINITY
 
   for (let index = 0; index < 8; index += 1) {
-    const candidateY = minY + random() * (maxY - minY)
-    const score =
-      getVerticalClearance(
-        candidateY,
-        radius,
-        shipRect,
-        asteroids,
-        spawnFromRight,
-        viewport
-      ) + random() * 4
+    const candidateY =
+      index === 0
+        ? shipRect.centerY
+        : index < 5
+        ? clamp(
+            shipRect.centerY +
+              (random() * 2 - 1) * challengeBandHalfHeight,
+            minY,
+            maxY
+          )
+        : minY + random() * (maxY - minY)
+    const clearance = getVerticalClearance(
+      candidateY,
+      radius,
+      shipRect,
+      nearbyAsteroids
+    )
+    const distanceFromShip = Math.abs(candidateY - shipRect.centerY)
+    const laneBias = Math.max(0, challengeBandHalfHeight - distanceFromShip) * 0.9
+    const clearanceScore =
+      clearance < 0 ? clearance * 3.5 : Math.min(clearance, 18)
+    const score = laneBias + clearanceScore + random() * 2
 
     if (score > bestScore) {
       bestScore = score
@@ -142,6 +193,7 @@ export function createAsteroid({
   difficulty,
   shipRect,
   asteroids,
+  grid,
   wristSide,
   random = Math.random,
 }) {
@@ -160,6 +212,7 @@ export function createAsteroid({
     viewport,
     shipRect,
     asteroids,
+    grid,
     radius,
     wristSide,
     random,
@@ -350,9 +403,17 @@ export function collectCollisionCandidatesFromGrid(
 ) {
   candidates.length = 0
 
-  const minSlice = getCollisionSliceIndex(shipRect.x - ASTEROID_RADIUS_MAX, grid)
+  const travelDirection = resolveTravelDirection(wristSide)
+  const minSlice = getCollisionSliceIndex(
+    travelDirection === 'right'
+      ? shipRect.x
+      : shipRect.x - ASTEROID_RADIUS_MAX,
+    grid
+  )
   const maxSlice = getCollisionSliceIndex(
-    shipRect.x + shipRect.w + ASTEROID_RADIUS_MAX,
+    travelDirection === 'right'
+      ? shipRect.x + shipRect.w + ASTEROID_RADIUS_MAX
+      : shipRect.x + shipRect.w,
     grid
   )
   const minBucket = getCollisionBucketIndex(shipRect.y - ASTEROID_RADIUS_MAX, grid)
@@ -410,6 +471,29 @@ function intersectionArea(leftRect, rightRect) {
   return (right - left) * (bottom - top)
 }
 
+function getCircleRectOverlapRatio(shipRect, asteroid) {
+  const nearestX = clamp(
+    asteroid.x,
+    shipRect.x,
+    shipRect.x + shipRect.w
+  )
+  const nearestY = clamp(
+    asteroid.y,
+    shipRect.y,
+    shipRect.y + shipRect.h
+  )
+  const dx = asteroid.x - nearestX
+  const dy = asteroid.y - nearestY
+  const distanceSquared = dx * dx + dy * dy
+  const radiusSquared = asteroid.radius * asteroid.radius
+
+  if (distanceSquared > radiusSquared) {
+    return 0
+  }
+
+  return clamp(1 - distanceSquared / radiusSquared, 0, 1)
+}
+
 export function calculateCollisionResult({
   shipRect,
   asteroid,
@@ -427,19 +511,13 @@ export function calculateCollisionResult({
     w: asteroid.radius * 2,
     h: asteroid.radius * 2,
   }
-  const overlapArea = intersectionArea(shipRect, asteroidRect)
-
-  if (overlapArea <= 0) {
+  if (intersectionArea(shipRect, asteroidRect) <= 0) {
     return { hit: false, damage: 0, overlapRatio: 0 }
   }
-
-  const shipArea = shipRect.w * shipRect.h
-  const asteroidArea = asteroidRect.w * asteroidRect.h
-  const overlapRatio = clamp(
-    overlapArea / Math.min(shipArea, asteroidArea),
-    0,
-    1.35
-  )
+  const overlapRatio = getCircleRectOverlapRatio(shipRect, asteroid)
+  if (overlapRatio <= 0) {
+    return { hit: false, damage: 0, overlapRatio: 0 }
+  }
 
   return {
     hit: true,

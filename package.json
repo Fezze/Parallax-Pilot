@@ -1,6 +1,6 @@
 {
   "name": "parallax-pilot-workspace",
-  "version": "2.0.0",
+  "version": "2.0.4",
   "private": true,
   "type": "module",
   "scripts": {
@@ -17,7 +17,8 @@
     "build": "node scripts/zeus-proxy.mjs build",
     "build:raw": "cmd /c \"cd /d zepp-app && zeus build\"",
     "dev": "node scripts/zeus-proxy.mjs dev",
-    "preview": "node scripts/zeus-proxy.mjs preview"
+    "preview": "node scripts/zeus-proxy.mjs preview",
+    "push": "node scripts/git-push-proxy.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
