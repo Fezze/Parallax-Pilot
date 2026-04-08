@@ -72,10 +72,13 @@ Page({
     const isRound = deviceInfo.screenShape === SCREEN_SHAPE_ROUND
     const isSmallRound = isRound && width <= 420
     const isSquare = !isRound
+    const isCompactRound = isRound && width <= 454
     const roundActionButtonH = isSmallRound ? 52 : 58
     const roundNavButtonH = isSmallRound ? 46 : 50
     const roundRowGap = isSmallRound ? 10 : 12
     const pad = Math.round(width * (isRound ? 0.11 : 0.07))
+    const roundActionPad = Math.round(width * 0.07)
+    const roundActionInset = isRound ? Math.max(12, Math.round(width * (isCompactRound ? 0.05 : 0.04))) : 0
     const fullWidth = width - pad * 2
     const isEmptyState = items.length === 0
     const isRoundScoreboard = isRound && !lastSession
@@ -247,8 +250,8 @@ Page({
     createRowButtons({
       width,
       y: actionRowY,
-      safePad: Math.round(width * (isRound ? 0.16 : 0.16)),
-      roundInset: isRound ? Math.max(10, Math.round(width * (isSmallRound ? 0.045 : 0.035))) : 0,
+      safePad: isRound ? roundActionPad : Math.round(width * 0.16),
+      roundInset: roundActionInset,
       gap: isRound ? 0 : 10,
       buttons: [
         {
