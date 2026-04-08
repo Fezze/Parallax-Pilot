@@ -55,7 +55,6 @@
       } from '/zepp-app/shared/view-models.js'
       import {
         resolveTravelDirection,
-        supportsDigitalCrown,
       } from '/zepp-app/shared/device.js'
 
       const viewport = { width: 480, height: 480 }
@@ -80,13 +79,12 @@
         route: parseRouteParams('{"page":2,"mode":"harness"}'),
         difficulty: calculateDifficulty(5000, 1.5),
         travelDirection: resolveTravelDirection('left'),
-        crown: supportsDigitalCrown({ keyType: 'normal_21' }),
         settings: sanitizeSettings({
           controlMode: 'touch',
           wristSide: 'right',
           timeScale: '2',
           spawnMultiplier: 1.3,
-          tiltSensitivity: 1.4,
+          tiltSensitivity: 0.95,
         }),
         asteroid: {
           x: asteroid.x,

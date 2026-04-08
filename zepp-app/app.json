@@ -5,8 +5,8 @@
     "appName": "Parallax Pilot",
     "appType": "app",
     "version": {
-      "code": 17,
-      "name": "2.1.0"
+      "code": 28,
+      "name": "2.1.11"
     },
     "icon": "icon.png",
     "vender": "Fezze",
@@ -32,7 +32,9 @@
             "page/home/index",
             "page/game/index",
             "page/settings/index",
-            "page/results/index"
+            "page/results/index",
+            "page/tilt-calibration/index",
+            "page/tilt-calibration-logs/index"
           ]
         }
       },
@@ -107,7 +109,9 @@
             "page/home/index",
             "page/game/index",
             "page/settings/index",
-            "page/results/index"
+            "page/results/index",
+            "page/tilt-calibration/index",
+            "page/tilt-calibration-logs/index"
           ]
         }
       },
@@ -166,7 +170,9 @@
             "page/home/index",
             "page/game/index",
             "page/settings/index",
-            "page/results/index"
+            "page/results/index",
+            "page/tilt-calibration/index",
+            "page/tilt-calibration-logs/index"
           ]
         }
       },

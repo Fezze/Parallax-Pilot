@@ -1,10 +1,7 @@
 import { getDeviceInfo, SCREEN_SHAPE_ROUND } from '@zos/device'
 import { push } from '@zos/router'
 import { COLORS, ROUTES } from '../../shared/constants.js'
-import {
-  sanitizeControlMode,
-  supportsDigitalCrown,
-} from '../../shared/device.js'
+import { sanitizeControlMode } from '../../shared/device.js'
 import { t } from '../../shared/i18n.js'
 import { createActionButton, createLabel, hideStatusBar } from '../../shared/page-ui.js'
 import { loadScores, loadSettings, saveSettings } from '../../shared/storage.js'
@@ -15,8 +12,7 @@ Page({
 
     const deviceInfo = getDeviceInfo()
     const settings = loadSettings()
-    const crownSupported = supportsDigitalCrown(deviceInfo)
-    const safeControlMode = sanitizeControlMode(settings.controlMode, crownSupported)
+    const safeControlMode = sanitizeControlMode(settings.controlMode)
     if (safeControlMode !== settings.controlMode) {
       saveSettings({
         ...settings,

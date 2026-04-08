@@ -67,10 +67,10 @@ test('last session persistence and route helpers work without Zepp runtime', () 
   assert.equal(resolveTravelDirection('left'), 'right')
 })
 
-test('crown support and available control modes depend on keyType', () => {
+test('device helpers expose only active control modes', () => {
   assert.equal(supportsDigitalCrown({ keyType: 'normal_21' }), true)
   assert.equal(supportsDigitalCrown({ keyType: 'sport_40' }), false)
-  assert.deepEqual(getAvailableControlModes(false), ['tilt', 'touch', 'swipe', 'crown'])
+  assert.deepEqual(getAvailableControlModes(), ['tilt', 'touch', 'swipe'])
 })
 
 test('score pagination and row formatting stay deterministic', () => {

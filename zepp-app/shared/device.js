@@ -13,7 +13,7 @@ export function resolveTravelDirection(wristSide) {
   return wristSide === 'right' ? 'left' : 'right'
 }
 
-export function sanitizeControlMode(controlMode, crownSupported) {
+export function sanitizeControlMode(controlMode) {
   if (!CONTROL_MODES.includes(controlMode)) {
     return 'tilt'
   }

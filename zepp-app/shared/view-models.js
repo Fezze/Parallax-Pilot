@@ -1,7 +1,7 @@
 import { CONTROL_MODES, RESULTS_PAGE_SIZE } from './constants.js'
 import { t } from './i18n.js'
 
-export function getAvailableControlModes(crownSupported) {
+export function getAvailableControlModes() {
   return CONTROL_MODES
 }
 

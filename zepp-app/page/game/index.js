@@ -8,20 +8,8 @@ import {
 } from '@zos/ui'
 import { log } from '@zos/utils'
 import {
-  offDigitalCrown,
   offGesture,
-  offKey,
-  onDigitalCrown,
   onGesture,
-  onKey,
-  KEY_DOWN,
-  KEY_EVENT_CLICK,
-  KEY_EVENT_DOUBLE_CLICK,
-  KEY_EVENT_LONG_PRESS,
-  KEY_EVENT_PRESS,
-  KEY_EVENT_RELEASE,
-  KEY_HOME,
-  KEY_SHORTCUT,
 } from '@zos/interaction'
 import {
   Accelerometer,
@@ -50,29 +38,17 @@ import {
   createShipRect,
   getSpawnIntervalMs,
 } from '../../shared/game-core.js'
-import { sanitizeControlMode, supportsDigitalCrown } from '../../shared/device.js'
-import { appendScore, loadSettings, saveLastSession, saveSettings } from '../../shared/storage.js'
+import { sanitizeControlMode } from '../../shared/device.js'
+import { normalizeTiltInput } from '../../shared/tilt-calibration.js'
+import { appendScore, loadSettings, loadTiltCalibration, saveLastSession, saveSettings } from '../../shared/storage.js'
 
 const FRAME_INTERVAL_MS = 16
 const SHIP_BOUNDARY = 20
 const pageLogger = log.getLogger('game')
-const BUTTON_STEP = 26
 const SQUARE_SPAWN_INTERVAL_FACTOR = 0.84
 const GAME_BRIGHT_TIME_MS = 600000
 const MAX_SPAWNS_PER_TICK = 2
-const ENABLE_INPUT_DEBUG = false
-
-function getLegacyHmApp() {
-  if (typeof hmApp !== 'undefined') {
-    return hmApp
-  }
-
-  if (typeof globalThis !== 'undefined' && globalThis.hmApp) {
-    return globalThis.hmApp
-  }
-
-  return null
-}
+const CONTROL_BASE_SPEED_FACTOR = 0.46
 
 function clampShipY(value, viewportHeight) {
   return clamp(value, SHIP_BOUNDARY, viewportHeight - SHIP_BOUNDARY)
@@ -104,12 +80,6 @@ function updateShipPoints(points, shipRect, wristSide) {
   points[4].x = shipRect.x
   points[4].y = shipRect.centerY
   return points
-}
-
-function debugInput(message) {
-  if (ENABLE_INPUT_DEBUG) {
-    pageLogger.debug(message)
-  }
 }
 
 function hideStatusBar() {
@@ -262,26 +232,13 @@ function drawOutlineShip(canvas, shipPoints) {
   }
 }
 
-function shouldConsumeLegacySpin(controlMode) {
-  return controlMode === 'crown'
-}
-
-function isUpButton(key) {
-  return key === KEY_HOME
-}
-
-function isDownButton(key) {
-  return key === KEY_SHORTCUT || key === KEY_DOWN
-}
-
 Page({
   onInit() {
     const deviceInfo = getDeviceInfo()
-    const crownSupported = supportsDigitalCrown(deviceInfo)
     const loadedSettings = loadSettings()
     const settings = {
       ...loadedSettings,
-      controlMode: sanitizeControlMode(loadedSettings.controlMode, crownSupported),
+      controlMode: sanitizeControlMode(loadedSettings.controlMode),
     }
 
     if (settings.controlMode !== loadedSettings.controlMode) {
@@ -295,10 +252,9 @@ Page({
     }
     this.viewportHalfHeight = this.viewport.height / 2
     this.settings = settings
-    this.crownSupported = crownSupported
+    this.tiltCalibration = loadTiltCalibration()
     this.collisionSliceWidth = COLLISION_SLICE_WIDTH
     this.shipCenterY = deviceInfo.height / 2
-    this.crownCenterY = deviceInfo.height / 2
     this.touchDirection = 0
     this.pointerDown = false
     this.swipeStartTouchY = null
@@ -319,12 +275,10 @@ Page({
     this.finished = false
     this.accelerometer = null
     this.vibrator = new Vibrator()
-    this.buttonDirection = 0
-    this.buttonClickDirection = -1
     this.baseControlSpeed =
       Math.min(this.viewport.width, this.viewport.height) *
-      0.74 *
-      this.settings.tiltSensitivity
+      CONTROL_BASE_SPEED_FACTOR *
+      (this.tiltCalibration ? 1 : this.settings.tiltSensitivity)
     this.shipPoints = Array.from({ length: 5 }, () => ({ x: 0, y: 0 }))
     this.shipRect = createShipRect(
       this.viewport,
@@ -332,7 +286,7 @@ Page({
       this.settings.wristSide
     )
     pageLogger.info(
-      `init keyType=${deviceInfo.keyType || 'unknown'} keyNumber=${deviceInfo.keyNumber || 'unknown'} crownSupported=${crownSupported}`
+      `init keyType=${deviceInfo.keyType || 'unknown'} keyNumber=${deviceInfo.keyNumber || 'unknown'}`
     )
   },
 
@@ -349,8 +303,6 @@ Page({
 
       this.bindCanvasEvents()
       this.bindGestureEvents()
-      this.bindCrownEvents()
-      this.bindHardwareKeyEvents()
       this.bindTiltSensor()
       this.drawFrame()
 
@@ -368,21 +320,6 @@ Page({
     }
 
     offGesture()
-    offDigitalCrown()
-    offKey()
-    const legacyHmApp = getLegacyHmApp()
-    if (
-      legacyHmApp &&
-      typeof legacyHmApp.unregisterSpinEvent === 'function'
-    ) {
-      legacyHmApp.unregisterSpinEvent()
-    }
-    if (
-      legacyHmApp &&
-      typeof legacyHmApp.unregisterKeyEvent === 'function'
-    ) {
-      legacyHmApp.unregisterKeyEvent()
-    }
 
     if (this.accelerometer) {
       this.accelerometer.stop()
@@ -441,130 +378,6 @@ Page({
     })
   },
 
-  bindCrownEvents() {
-    const applyRotary = (source, key, degree) => {
-      debugInput(`${source} key=${key} degree=${degree}`)
-
-      if (this.settings.controlMode !== 'crown') {
-        return
-      }
-
-      this.crownCenterY = clamp(
-        this.crownCenterY - degree * 2.2,
-        SHIP_BOUNDARY,
-        this.viewport.height - SHIP_BOUNDARY
-      )
-      this.shipCenterY = this.crownCenterY
-    }
-
-    pageLogger.info('register onDigitalCrown')
-    onDigitalCrown({
-      callback: (key, degree) => {
-        applyRotary('newapi', key, degree)
-      },
-    })
-
-    const legacyHmApp = getLegacyHmApp()
-    if (
-      legacyHmApp &&
-      typeof legacyHmApp.registerSpinEvent === 'function'
-    ) {
-      pageLogger.info('register hmApp.registerSpinEvent')
-      legacyHmApp.registerSpinEvent((key, degree) => {
-        applyRotary('legacy', key, degree)
-        return shouldConsumeLegacySpin(this.settings.controlMode)
-      })
-    } else {
-      pageLogger.warn('hmApp.registerSpinEvent unavailable')
-    }
-  },
-
-  bindHardwareKeyEvents() {
-    const applyHardwareKey = (source, key, keyEvent) => {
-      debugInput(`${source} key=${key} event=${keyEvent}`)
-
-      if (this.settings.controlMode !== 'crown') {
-        return false
-      }
-
-      if (keyEvent === KEY_EVENT_PRESS) {
-        if (isDownButton(key)) {
-          this.buttonDirection = 1
-          return true
-        }
-      }
-
-      if (keyEvent === KEY_EVENT_LONG_PRESS) {
-        if (isUpButton(key) || isDownButton(key)) {
-          this.buttonDirection = 1
-          return true
-        }
-      }
-
-      if (keyEvent === KEY_EVENT_DOUBLE_CLICK) {
-        if (isUpButton(key) || isDownButton(key)) {
-          this.crownCenterY = clamp(
-            this.crownCenterY + BUTTON_STEP,
-            SHIP_BOUNDARY,
-            this.viewport.height - SHIP_BOUNDARY
-          )
-          this.shipCenterY = this.crownCenterY
-          return true
-        }
-      }
-
-      if (keyEvent === KEY_EVENT_RELEASE) {
-        if (isUpButton(key) || isDownButton(key)) {
-          this.buttonDirection = 0
-          return true
-        }
-      }
-
-      if (keyEvent === KEY_EVENT_CLICK) {
-        if (isUpButton(key)) {
-          this.crownCenterY = clamp(
-            this.crownCenterY + this.buttonClickDirection * BUTTON_STEP,
-            SHIP_BOUNDARY,
-            this.viewport.height - SHIP_BOUNDARY
-          )
-          this.shipCenterY = this.crownCenterY
-          this.buttonClickDirection *= -1
-          return true
-        }
-
-        if (isDownButton(key)) {
-          this.crownCenterY = clamp(
-            this.crownCenterY + BUTTON_STEP,
-            SHIP_BOUNDARY,
-            this.viewport.height - SHIP_BOUNDARY
-          )
-          this.shipCenterY = this.crownCenterY
-          return true
-        }
-      }
-
-      return false
-    }
-
-    pageLogger.info('register onKey')
-    onKey({
-      callback: (key, keyEvent) => applyHardwareKey('newkey', key, keyEvent),
-    })
-
-    const legacyHmApp = getLegacyHmApp()
-    if (
-      legacyHmApp &&
-      typeof legacyHmApp.registerKeyEvent === 'function'
-    ) {
-      pageLogger.info('register hmApp.registerKeyEvent')
-      legacyHmApp.registerKeyEvent((key, action) =>
-        applyHardwareKey('legacykey', key, action)
-      )
-    } else {
-      pageLogger.warn('hmApp.registerKeyEvent unavailable')
-    }
-  },
-
   bindTiltSensor() {
     if (this.settings.controlMode !== 'tilt') {
       return
@@ -578,7 +391,11 @@ Page({
   updateShip(deltaSeconds) {
     if (this.settings.controlMode === 'tilt' && this.accelerometer) {
       const current = this.accelerometer.getCurrent() || { y: 0 }
-      const normalized = clamp(current.y / 18, -1.15, 1.15)
+      const normalized = normalizeTiltInput(
+        current.y,
+        this.tiltCalibration,
+        this.settings.wristSide
+      )
       this.shipCenterY += normalized * this.baseControlSpeed * deltaSeconds
     }
 
@@ -595,13 +412,6 @@ Page({
       this.shipCenterY = this.swipeStartShipY + (
         this.swipeCurrentTouchY - this.swipeStartTouchY
       )
-    }
-
-    if (this.settings.controlMode === 'crown') {
-      if (this.buttonDirection !== 0) {
-        this.crownCenterY += this.buttonDirection * this.baseControlSpeed * deltaSeconds
-      }
-      this.shipCenterY = this.crownCenterY
     }
 
     this.shipCenterY = clampShipY(this.shipCenterY, this.viewport.height)

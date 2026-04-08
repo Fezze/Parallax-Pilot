@@ -22,13 +22,12 @@ test('browser harness loads shared modules without runtime errors', async ({ pag
   expect(payload.route).toEqual({ page: 2, mode: 'harness' })
   expect(payload.difficulty).toBe(8.5)
   expect(payload.travelDirection).toBe('right')
-  expect(payload.crown).toBe(true)
   expect(payload.settings).toEqual({
     controlMode: 'touch',
     wristSide: 'right',
     timeScale: 2,
     spawnMultiplier: 1.3,
-    tiltSensitivity: 1.4,
+    tiltSensitivity: 0.95,
   })
   expect(payload.asteroid.x).toBeGreaterThan(480)
   expect(payload.asteroid.vx).toBeLessThan(0)

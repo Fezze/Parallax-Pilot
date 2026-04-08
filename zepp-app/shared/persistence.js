@@ -8,6 +8,7 @@ import {
   TIME_SCALE_OPTIONS,
   WRIST_SIDES,
 } from './constants.js'
+import { sanitizeTiltCalibration } from './tilt-calibration.js'
 
 function safeParse(rawValue, fallback) {
   if (rawValue == null) {
@@ -110,4 +111,26 @@ export function readLastSession(storage) {
 
 export function writeLastSession(storage, session) {
   return writeJson(storage, STORAGE_KEYS.LAST_SESSION, session)
+}
+
+export function readTiltCalibration(storage) {
+  return sanitizeTiltCalibration(
+    readJson(storage, STORAGE_KEYS.TILT_CALIBRATION, null)
+  )
+}
+
+export function writeTiltCalibration(storage, calibration) {
+  return writeJson(
+    storage,
+    STORAGE_KEYS.TILT_CALIBRATION,
+    sanitizeTiltCalibration(calibration)
+  )
+}
+
+export function readTiltCalibrationReport(storage) {
+  return readJson(storage, STORAGE_KEYS.TILT_CALIBRATION_REPORT, null)
+}
+
+export function writeTiltCalibrationReport(storage, report) {
+  return writeJson(storage, STORAGE_KEYS.TILT_CALIBRATION_REPORT, report)
 }

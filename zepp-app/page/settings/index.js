@@ -2,19 +2,19 @@ import { getDeviceInfo, SCREEN_SHAPE_ROUND } from '@zos/device'
 import { back, push, replace } from '@zos/router'
 import {
   COLORS,
+  FEATURE_FLAGS,
   ROUTES,
   SPAWN_MULTIPLIER_OPTIONS,
   TIME_SCALE_OPTIONS,
-  TILT_SENSITIVITY_OPTIONS,
 } from '../../shared/constants.js'
-import { sanitizeControlMode, supportsDigitalCrown } from '../../shared/device.js'
+import { sanitizeControlMode } from '../../shared/device.js'
 import {
   createActionButton,
   createLabel,
   createRoundButtonPair,
   hideStatusBar,
 } from '../../shared/page-ui.js'
-import { loadSettings, saveSettings } from '../../shared/storage.js'
+import { loadSettings, loadTiltCalibration, saveSettings } from '../../shared/storage.js'
 import {
   cycleOption,
   formatSettingValue,
@@ -36,11 +36,10 @@ Page({
     hideStatusBar()
 
     const deviceInfo = getDeviceInfo()
-    const crownSupported = supportsDigitalCrown(deviceInfo)
     const loadedSettings = loadSettings()
     const settings = {
       ...loadedSettings,
-      controlMode: sanitizeControlMode(loadedSettings.controlMode, crownSupported),
+      controlMode: sanitizeControlMode(loadedSettings.controlMode),
     }
 
     if (settings.controlMode !== loadedSettings.controlMode) {
@@ -61,8 +60,9 @@ Page({
     const rowTextSize = isRound ? 22 : 20
     const footerButtonH = isRound ? 58 : 44
     const footerButtonY = isRound ? height - footerButtonH : height - 58
-    const controlModes = getAvailableControlModes(crownSupported)
-    const tiltEnabled = settings.controlMode === 'tilt'
+    const controlModes = getAvailableControlModes()
+    const tiltCalibration = loadTiltCalibration()
+    const tiltStatus = tiltCalibration ? t('tiltCalibrationReady') : t('tiltCalibrationMissing')
 
     createLabel({
       x: pad,
@@ -157,20 +157,15 @@ Page({
       y: startY + (rowHeight + rowGap) * 4,
       w: fullWidth,
       h: rowHeight,
-      text: `${t('tiltLabel')}  ${formatSettingValue(
-        'tiltSensitivity',
-        settings.tiltSensitivity
-      )}`,
+      text: FEATURE_FLAGS.tiltCalibration
+        ? `${t('tiltCalibrationLabel')}  ${tiltStatus}`
+        : `${t('tiltLabel')}  ${formatSettingValue(
+            'tiltSensitivity',
+            settings.tiltSensitivity
+          )}`,
       textSize: rowTextSize,
-      normalColor: tiltEnabled ? COLORS.button : COLORS.hudInactive,
-      pressColor: tiltEnabled ? COLORS.buttonPress : COLORS.hudInactive,
-      textColor: tiltEnabled ? COLORS.textPrimary : COLORS.textMuted,
-      onClick: tiltEnabled
-        ? () =>
-            updateSetting(
-              'tiltSensitivity',
-              cycleOption(TILT_SENSITIVITY_OPTIONS, settings.tiltSensitivity)
-            )
+      onClick: FEATURE_FLAGS.tiltCalibration
+        ? () => push({ url: ROUTES.TILT_CALIBRATION })
         : () => {},
     })
 

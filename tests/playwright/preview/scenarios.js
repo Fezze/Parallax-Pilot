@@ -45,6 +45,20 @@ const LOCALE_META = {
       timeLabel: 'TIME',
       spawnLabel: 'SPAWN',
       tiltLabel: 'TILT',
+      tiltCalibrationLabel: 'CALIBRATE',
+      tiltCalibrationMissing: 'NOT SET',
+      tiltCalibrationReady: 'READY',
+      tiltCalibrationTitle: 'TILT CALIBRATION',
+      tiltCalibrationLogs: 'CALIBRATION LOGS',
+      tiltCalibrationGuide: 'FOLLOW THE MOTION PROMPTS',
+      tiltCalibrationCenter: 'HOLD CENTER',
+      tiltCalibrationDown: 'TILT DOWN',
+      tiltCalibrationUp: 'TILT UP',
+      tiltCalibrationStep: 'STEP {current} / {total}',
+      tiltCalibrationWaitingStill: 'HOLD STILL {current} / {target}s',
+      tiltCalibrationDebug: 'DEBUG',
+      tiltCalibrationOffset: 'OFFSET',
+      tiltCalibrationNoise: 'NOISE',
       back: 'BACK',
       play: 'PLAY',
       prev: 'PREVIOUS',
@@ -55,7 +69,6 @@ const LOCALE_META = {
       controlMode_tilt: 'TILT',
       controlMode_touch: 'TOUCH',
       controlMode_swipe: 'SWIPE',
-      controlMode_crown: 'ROTARY',
     },
   },
   'pl-PL': {
@@ -74,6 +87,22 @@ const LOCALE_META = {
       timeLabel: 'CZAS',
       spawnLabel: 'ILO\u015a\u0106',
       tiltLabel: 'PRZECHYLENIE',
+      tiltCalibrationLabel: 'KALIBRACJA',
+      tiltCalibrationMissing: 'BRAK',
+      tiltCalibrationReady: 'GOTOWA',
+      tiltCalibrationTitle: 'KALIBRACJA',
+      tiltCalibrationLogs: 'LOGI KALIBRACJI',
+      tiltCalibrationGuide: 'PODĄŻAJ ZA RUCHEM',
+      tiltCalibrationCenter: 'TRZYMAJ NA \u015aRODKU',
+      tiltCalibrationDown: 'PRZECHYL W D\u00d3\u0141',
+      tiltCalibrationUp: 'PRZECHYL W G\u00d3R\u0118',
+      tiltCalibrationStep: 'KROK {current} / {total}',
+      tiltCalibrationWaitingStill: 'BEZ RUCHU {current} / {target}s',
+      tiltCalibrationDebug: 'DEBUG',
+      tiltCalibrationOffset: 'OFFSET',
+      tiltCalibrationNoise: 'SZUM',
+      tiltCalibrationSlowDown: 'WOLNO DÓŁ',
+      tiltCalibrationRatio: 'STOSUNEK',
       back: 'MENU',
       play: 'GRAJ',
       prev: 'POPRZEDNIA',
@@ -84,7 +113,6 @@ const LOCALE_META = {
       controlMode_tilt: 'PRZECHYLENIE',
       controlMode_touch: 'DOTYK',
       controlMode_swipe: 'PRZESUWANIE',
-      controlMode_crown: 'OBR\u00d3T',
     },
   },
 }
@@ -198,7 +226,7 @@ function createSettingsScenario({
   wristSide = 'left',
   timeScale = 1,
   spawnMultiplier = 1.3,
-  tiltSensitivity = 1.4,
+  tiltSensitivity = 0.95,
   expectedTexts,
 }) {
   return createScenarioBase({
@@ -249,6 +277,95 @@ function createResultsScenario({
       : {},
     expectedTexts,
     forbiddenTexts,
+  })
+}
+
+function createTiltCalibrationScenario({
+  locale,
+  deviceInfo,
+  variant,
+}) {
+  return createScenarioBase({
+    locale,
+    pageName: 'tilt-calibration',
+    shape: deviceInfo.screenShape,
+    variant,
+    pageModule: '/zepp-app/page/tilt-calibration/index.js',
+    deviceInfo,
+    localStorage: {},
+    expectedTexts: [
+      t(locale, 'tiltCalibrationTitle'),
+      t(locale, 'tiltCalibrationGuide'),
+      t(locale, 'tiltCalibrationStep', { current: 1, total: 3 }),
+      t(locale, 'tiltCalibrationCenter'),
+      t(locale, 'tiltCalibrationWaitingStill', { current: '0.0', target: '1.4' }),
+    ],
+  })
+}
+
+function createTiltCalibrationLogsScenario({
+  locale,
+  deviceInfo,
+  variant,
+}) {
+  return createScenarioBase({
+    locale,
+    pageName: 'tilt-calibration-logs',
+    shape: deviceInfo.screenShape,
+    variant,
+    pageModule: '/zepp-app/page/tilt-calibration-logs/index.js',
+    deviceInfo,
+    localStorage: {
+      tilt_calibration_report_v1: JSON.stringify({
+        profile: {
+          offset: 0.22,
+          deadzone: 0.74,
+          negativeRange: 6.1,
+          positiveRange: 6.4,
+          responseExponent: 1.08,
+          noisePeak: 0.31,
+          timestamp: 1,
+        },
+        metrics: {
+          offset: 0.22,
+          noisePeak: 0.31,
+          downPeak: 8.2,
+          upPeak: 7.9,
+        },
+        debug: {
+          center: {
+            samples: 24,
+            holdMs: 1440,
+            resets: 1,
+            settleRange: 0.31,
+          },
+          down: {
+            entryMs: 240,
+            peakDelta: 8.2,
+            holdMs: 720,
+            resets: 0,
+            settleRange: 0.36,
+          },
+          up: {
+            entryMs: 220,
+            peakDelta: 7.9,
+            holdMs: 720,
+            resets: 1,
+            settleRange: 0.41,
+          },
+        },
+      }),
+    },
+    expectedTexts: [
+      t(locale, 'tiltCalibrationLogs'),
+      'off',
+      'noise',
+      'down',
+      t(locale, 'tiltCalibrationDebug'),
+      'CTR smp=',
+      'DN  ent=',
+      t(locale, 'back'),
+    ],
   })
 }
 
@@ -361,7 +478,7 @@ function scenariosForDevice(locale, deviceFamily) {
         expectedTexts: [
           t(locale, 'settings'),
           `${t(locale, 'controlLabel')}  ${t(locale, 'controlMode_tilt')}`,
-          isRound ? `${t(locale, 'tiltLabel')}  1.4x` : t(locale, 'back'),
+          isRound ? `${t(locale, 'tiltCalibrationLabel')}  ${t(locale, 'tiltCalibrationMissing')}` : t(locale, 'back'),
         ],
       }),
     ],
@@ -375,7 +492,7 @@ function scenariosForDevice(locale, deviceFamily) {
         expectedTexts: [
           t(locale, 'settings'),
           `${t(locale, 'controlLabel')}  ${t(locale, 'controlMode_touch')}`,
-          isRound ? `${t(locale, 'tiltLabel')}  1.4x` : t(locale, 'play'),
+          isRound ? `${t(locale, 'tiltCalibrationLabel')}  ${t(locale, 'tiltCalibrationMissing')}` : t(locale, 'play'),
         ],
       }),
     ],
@@ -392,20 +509,6 @@ function scenariosForDevice(locale, deviceFamily) {
                 t(locale, 'settings'),
                 `${t(locale, 'controlLabel')}  ${t(locale, 'controlMode_swipe')}`,
                 `${t(locale, 'spawnLabel')}  1.3x`,
-              ],
-            }),
-          ],
-          [
-            `settings-${key}-rotary-${locale}`,
-            createSettingsScenario({
-              locale,
-              deviceInfo,
-              variant: 'rotary',
-              controlMode: 'crown',
-              expectedTexts: [
-                t(locale, 'settings'),
-                `${t(locale, 'controlLabel')}  ${t(locale, 'controlMode_crown')}`,
-                t(locale, 'play'),
               ],
             }),
           ],
@@ -474,6 +577,22 @@ function scenariosForDevice(locale, deviceFamily) {
         deviceInfo,
         variant: 'right',
         wristSide: 'right',
+      }),
+    ],
+    [
+      `tilt-calibration-${key}-${locale}`,
+      createTiltCalibrationScenario({
+        locale,
+        deviceInfo,
+        variant: 'default',
+      }),
+    ],
+    [
+      `tilt-calibration-logs-${key}-${locale}`,
+      createTiltCalibrationLogsScenario({
+        locale,
+        deviceInfo,
+        variant: 'default',
       }),
     ],
   ]

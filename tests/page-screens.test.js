@@ -176,7 +176,7 @@ test('home square layout keeps metadata below the action stack', async () => {
   assert.equal(timeLabel.props.y, 358)
 })
 
-test('settings screen disables tilt row when control mode is not tilt', async () => {
+test('settings screen routes into tilt calibration', async () => {
   resetEnv()
   __seedLocalStorage({
     settings_v1: JSON.stringify({
@@ -184,28 +184,22 @@ test('settings screen disables tilt row when control mode is not tilt', async ()
       wristSide: 'left',
       timeScale: 1,
       spawnMultiplier: 1,
-      tiltSensitivity: 1.4,
+      tiltSensitivity: 0.95,
     }),
   })
 
   const page = await loadPageDefinition('../zepp-app/page/settings/index.js')
   page.build()
 
-  const tiltButton = findButton('TILT')
-  assert.equal(tiltButton.props.normal_color, 0x303030)
-  assert.equal(tiltButton.props.press_color, 0x303030)
-  assert.equal(tiltButton.props.color, 0x9f9f9f)
+  const calibrateButton = findButton('CALIBRATE')
+  calibrateButton.props.click_func()
 
-  tiltButton.props.click_func()
-
-  assert.deepEqual(__getRouterCalls(), [])
-  assert.equal(
-    JSON.parse(__readLocalStorage('settings_v1')).tiltSensitivity,
-    1.4
-  )
+  assert.deepEqual(__getRouterCalls(), [
+    { type: 'push', payload: { url: 'page/tilt-calibration/index' } },
+  ])
 })
 
-test('settings screen cycles tilt sensitivity when tilt mode is active', async () => {
+test('settings screen shows calibration status when a tilt profile exists', async () => {
   resetEnv()
   __seedLocalStorage({
     settings_v1: JSON.stringify({
@@ -213,23 +207,23 @@ test('settings screen cycles tilt sensitivity when tilt mode is active', async (
       wristSide: 'left',
       timeScale: 1,
       spawnMultiplier: 1,
-      tiltSensitivity: 1.4,
+      tiltSensitivity: 0.95,
+    }),
+    tilt_calibration_v1: JSON.stringify({
+      offset: 0.2,
+      deadzone: 0.8,
+      negativeRange: 8,
+      positiveRange: 9,
+      responseExponent: 1.1,
+      noisePeak: 0.3,
+      timestamp: 1,
     }),
   })
 
   const page = await loadPageDefinition('../zepp-app/page/settings/index.js')
   page.build()
 
-  const tiltButton = findButton('TILT')
-  tiltButton.props.click_func()
-
-  assert.equal(
-    JSON.parse(__readLocalStorage('settings_v1')).tiltSensitivity,
-    1.8
-  )
-  assert.deepEqual(__getRouterCalls(), [
-    { type: 'replace', payload: { url: 'page/settings/index' } },
-  ])
+  assert.ok(findButton('CALIBRATE  READY'))
 })
 
 test('settings square layout leaves clear space above footer actions', async () => {
@@ -245,14 +239,14 @@ test('settings square layout leaves clear space above footer actions', async () 
       wristSide: 'left',
       timeScale: 1,
       spawnMultiplier: 1.3,
-      tiltSensitivity: 1.4,
+      tiltSensitivity: 0.95,
     }),
   })
 
   const page = await loadPageDefinition('../zepp-app/page/settings/index.js')
   page.build()
 
-  const tiltButton = findButton('TILT')
+  const tiltButton = findButton('CALIBRATE')
   const backButton = findButton('BACK')
   const playButton = findButton('PLAY')
 
@@ -267,11 +261,11 @@ test('settings screen renders Polish labels and values when the watch language i
   __setLanguage(9)
   __seedLocalStorage({
     settings_v1: JSON.stringify({
-      controlMode: 'crown',
+      controlMode: 'swipe',
       wristSide: 'right',
       timeScale: 3,
       spawnMultiplier: 1.3,
-      tiltSensitivity: 1.4,
+      tiltSensitivity: 0.95,
     }),
   })
 
@@ -281,12 +275,61 @@ test('settings screen renders Polish labels and values when the watch language i
   const texts = getTexts()
   assert.ok(texts.includes('USTAWIENIA'))
   assert.ok(texts.includes('DOTKNIJ, BY ZMIENI\u0106'))
-  assert.ok(findButton('STEROWANIE  OBR\u00d3T'))
+  assert.ok(findButton('STEROWANIE  PRZESUWANIE'))
+  assert.ok(findButton('KALIBRACJA  BRAK'))
   assert.ok(findButton('R\u0118KA  PRAWA'))
   assert.ok(findButton('CZAS  3x'))
   assert.ok(findButton('ILO\u015a\u0106  1.3x'))
   assert.ok(findButton('MENU'))
   assert.ok(findButton('GRAJ'))
+})
+
+test('tilt calibration screen shows guide and initial step state', async () => {
+  resetEnv()
+
+  const page = await loadPageDefinition('../zepp-app/page/tilt-calibration/index.js')
+  page.build()
+
+  const texts = getTexts()
+  assert.ok(texts.includes('TILT CALIBRATION'))
+  assert.ok(texts.includes('FOLLOW THE MOTION PROMPTS'))
+  assert.ok(texts.includes('STEP 1 / 3'))
+  assert.ok(texts.includes('HOLD CENTER'))
+  assert.ok(texts.includes('HOLD STILL 0.0 / 1.4s'))
+
+  page.onDestroy?.()
+})
+
+test('tilt calibration logs use a safe single back action on round screens', async () => {
+  resetEnv()
+  __setDeviceInfo({
+    width: 480,
+    height: 480,
+    screenShape: SCREEN_SHAPE_ROUND,
+  })
+  __seedLocalStorage({
+    tilt_calibration_report_v1: JSON.stringify({
+      metrics: {
+        offset: 0.22,
+        noisePeak: 0.31,
+        downPeak: 8.2,
+        upPeak: 7.9,
+      },
+    }),
+  })
+
+  const page = await loadPageDefinition('../zepp-app/page/tilt-calibration-logs/index.js')
+  page.build()
+
+  const backButton = findButton('BACK')
+  assert.ok(backButton)
+  assert.equal(backButton.props.y, 406)
+  assert.equal(hasExactButtonText('PLAY'), false)
+  assert.ok(getTexts().includes('DEBUG'))
+  backButton.props.click_func()
+  assert.deepEqual(__getRouterCalls(), [
+    { type: 'replace', payload: { url: 'page/settings/index' } },
+  ])
 })
 
 test('results screen keeps nav buttons separate from back/play on round screens', async () => {

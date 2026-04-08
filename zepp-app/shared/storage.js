@@ -4,8 +4,12 @@ import {
   readLastSession,
   readScores,
   readSettings,
+  readTiltCalibration,
+  readTiltCalibrationReport,
   writeLastSession,
   writeSettings,
+  writeTiltCalibration,
+  writeTiltCalibrationReport,
 } from './persistence.js'
 
 let localStorageInstance
@@ -49,4 +53,20 @@ export function loadLastSession() {
 
 export function saveLastSession(session) {
   return writeLastSession(getSessionStorage(), session)
+}
+
+export function loadTiltCalibration() {
+  return readTiltCalibration(getLocalStorage())
+}
+
+export function saveTiltCalibration(calibration) {
+  return writeTiltCalibration(getLocalStorage(), calibration)
+}
+
+export function loadTiltCalibrationReport() {
+  return readTiltCalibrationReport(getLocalStorage())
+}
+
+export function saveTiltCalibrationReport(report) {
+  return writeTiltCalibrationReport(getLocalStorage(), report)
 }

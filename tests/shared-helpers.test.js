@@ -41,6 +41,11 @@ import {
   supportsDigitalCrown,
 } from '../zepp-app/shared/device.js'
 import {
+  buildTiltCalibrationReport,
+  normalizeTiltInput,
+  orientTiltY,
+} from '../zepp-app/shared/tilt-calibration.js'
+import {
   __resetLanguage,
   __setLanguage,
 } from './mocks/zos/settings.mjs'
@@ -97,14 +102,14 @@ test('settings and scores sanitize invalid values before persistence', () => {
     wristSide: 'left',
     timeScale: 3,
     spawnMultiplier: 1,
-    tiltSensitivity: 1,
+    tiltSensitivity: 0.8,
   })
   assert.deepEqual(nullSanitized, {
     controlMode: 'tilt',
     wristSide: 'left',
     timeScale: 1,
     spawnMultiplier: 1,
-    tiltSensitivity: 1,
+    tiltSensitivity: 0.8,
   })
 
   writeScores(storage, { not: 'an array' })
@@ -136,7 +141,7 @@ test('view models format and clamp pagination predictably', () => {
   assert.equal(formatDurationMs(125000), '125s')
   assert.equal(formatDurationMs(12500), '12.5s')
   assert.equal(formatDurationMs(980), '0.98s')
-  assert.equal(formatSettingValue('controlMode', 'crown'), 'ROTARY')
+  assert.equal(formatSettingValue('controlMode', 'swipe'), 'SWIPE')
   assert.equal(formatSettingValue('wristSide', 'left'), 'LEFT')
   assert.equal(formatSettingValue('timeScale', 2), '2x')
   assert.equal(formatSettingValue('unknown', 7), '7')
@@ -146,7 +151,7 @@ test('view models format and clamp pagination predictably', () => {
 test('view models switch setting labels to Polish when the locale is pl-PL', () => {
   __setLanguage(9)
 
-  assert.equal(formatSettingValue('controlMode', 'crown'), 'OBR\u00d3T')
+  assert.equal(formatSettingValue('controlMode', 'swipe'), 'PRZESUWANIE')
   assert.equal(formatSettingValue('wristSide', 'left'), 'LEWA')
 
   __resetLanguage()
@@ -162,10 +167,28 @@ test('device helpers and score entry cover invalid and negative branches', () =>
 
   assert.equal(supportsDigitalCrown(), false)
   assert.equal(supportsDigitalCrown({ keyType: 'normal_20' }), false)
-  assert.equal(sanitizeControlMode('bad', false), 'tilt')
-  assert.equal(sanitizeControlMode('crown', false), 'crown')
+  assert.equal(sanitizeControlMode('bad'), 'tilt')
+  assert.equal(sanitizeControlMode('swipe'), 'swipe')
   assert.equal(entry.survivedMs, 0)
   assert.equal(entry.score, 0)
+})
+
+test('tilt calibration derives stable ranges and softens normalized input near center', () => {
+  const report = buildTiltCalibrationReport({
+    center: [0.1, 0.2, 0.15, 0.18],
+    down: [-7.8, -8.1, -8.4],
+    up: [7.4, 7.8, 8.2],
+  })
+
+  assert.ok(report.profile)
+  assert.ok(report.profile.deadzone > 0.4)
+  assert.ok(report.profile.negativeRange > report.profile.deadzone)
+  assert.ok(report.profile.positiveRange > report.profile.deadzone)
+  assert.equal(normalizeTiltInput(report.profile.offset, report.profile), 0)
+  assert.ok(Math.abs(normalizeTiltInput(report.profile.offset + 1.2, report.profile)) < 0.2)
+  assert.ok(normalizeTiltInput(report.profile.offset + 12, report.profile) <= 1)
+  assert.equal(orientTiltY(5, 'left'), 5)
+  assert.equal(orientTiltY(5, 'right'), -5)
 })
 
 test('asteroid helpers keep movement logic consistent across immutable and in-place paths', () => {
