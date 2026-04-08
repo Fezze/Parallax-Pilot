@@ -12,16 +12,16 @@ import { parseRouteParams } from '../../shared/params.js'
 import { loadLastSession, loadScores } from '../../shared/storage.js'
 import { buildScoreRow, formatDurationMs, paginateScores } from '../../shared/view-models.js'
 
-function createRowButtons({ width, y, buttons, safePad, gap = 10 }) {
+function createRowButtons({ width, y, buttons, safePad, gap = 10, roundInset = 0 }) {
   if (buttons.length === 0) {
     return
   }
 
   if (buttons.length === 2 && gap === 0) {
     createRoundButtonPair({
-      x: safePad,
+      x: safePad + roundInset,
       y,
-      w: width - safePad * 2,
+      w: width - safePad * 2 - roundInset * 2,
       h: buttons[0].h || 44,
       left: buttons[0],
       right: buttons[1],
@@ -233,6 +233,7 @@ Page({
         width,
         y: navRowY,
         safePad: Math.round(width * (isRound ? 0.16 : 0.2)),
+        roundInset: isRound ? Math.max(10, Math.round(width * (isSmallRound ? 0.045 : 0.035))) : 0,
         gap: isRound && navButtons.length === 2 ? 0 : 10,
         buttons: navButtons.map((button) => ({
           ...button,
@@ -247,6 +248,7 @@ Page({
       width,
       y: actionRowY,
       safePad: Math.round(width * (isRound ? 0.16 : 0.16)),
+      roundInset: isRound ? Math.max(10, Math.round(width * (isSmallRound ? 0.045 : 0.035))) : 0,
       gap: isRound ? 0 : 10,
       buttons: [
         {

@@ -63,6 +63,7 @@ Page({
     const rowTextSize = isRound ? (isCompactRound ? 18 : 22) : 20
     const footerButtonH = isRound ? (isCompactRound ? 52 : 58) : 44
     const footerButtonY = isRound ? (isCompactRound ? height - footerButtonH - 12 : height - footerButtonH - 12) : height - 58
+    const roundFooterInset = isRound ? Math.max(12, Math.round(width * (isCompactRound ? 0.05 : 0.04))) : 0
     const controlModes = getAvailableControlModes()
     const tiltCalibration = loadTiltCalibration()
     const tiltStatus = tiltCalibration ? t('tiltCalibrationReady') : t('tiltCalibrationMissing')
@@ -178,9 +179,9 @@ Page({
 
     if (isRound) {
       createRoundButtonPair({
-        x: pad,
+        x: pad + roundFooterInset,
         y: footerButtonY,
-        w: fullWidth,
+        w: fullWidth - roundFooterInset * 2,
         h: footerButtonH,
         left: {
           text: t('back'),
