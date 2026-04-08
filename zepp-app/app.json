@@ -5,8 +5,8 @@
     "appName": "Parallax Pilot",
     "appType": "app",
     "version": {
-      "code": 48,
-      "name": "2.1.31"
+      "code": 49,
+      "name": "2.2.0"
     },
     "icon": "icon.png",
     "vender": "Fezze",
