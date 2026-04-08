@@ -12,7 +12,7 @@ import { parseRouteParams } from '../../shared/params.js'
 import { loadLastSession, loadScores } from '../../shared/storage.js'
 import { buildScoreRow, formatDurationMs, paginateScores } from '../../shared/view-models.js'
 
-function createRowButtons({ width, y, buttons, safePad, gap = 10, roundInset = 0 }) {
+function createRowButtons({ width, y, buttons, safePad, gap = 10, roundInset = 0, fixedButtonWidth }) {
   if (buttons.length === 0) {
     return
   }
@@ -30,7 +30,7 @@ function createRowButtons({ width, y, buttons, safePad, gap = 10, roundInset = 0
   }
 
   const rowWidth = width - safePad * 2
-  const buttonWidth = Math.floor((rowWidth - gap * (buttons.length - 1)) / buttons.length)
+  const buttonWidth = fixedButtonWidth || Math.floor((rowWidth - gap * (buttons.length - 1)) / buttons.length)
   const totalWidth = buttonWidth * buttons.length + gap * (buttons.length - 1)
   let currentX = Math.round((width - totalWidth) / 2)
 
@@ -79,6 +79,8 @@ Page({
     const pad = Math.round(width * (isRound ? 0.11 : 0.07))
     const roundActionPad = Math.round(width * 0.07)
     const roundActionInset = isRound ? Math.max(12, Math.round(width * (isCompactRound ? 0.05 : 0.04))) : 0
+    const roundActionPairWidth = isRound ? width - roundActionPad * 2 - roundActionInset * 2 : 0
+    const roundActionHalfWidth = isRound ? Math.floor(roundActionPairWidth / 2) : 0
     const fullWidth = width - pad * 2
     const isEmptyState = items.length === 0
     const isRoundScoreboard = isRound && !lastSession
@@ -237,6 +239,7 @@ Page({
         y: navRowY,
         safePad: Math.round(width * (isRound ? 0.16 : 0.2)),
         roundInset: isRound ? Math.max(10, Math.round(width * (isSmallRound ? 0.045 : 0.035))) : 0,
+        fixedButtonWidth: isRound && navButtons.length === 1 ? roundActionHalfWidth : undefined,
         gap: isRound && navButtons.length === 2 ? 0 : 10,
         buttons: navButtons.map((button) => ({
           ...button,
