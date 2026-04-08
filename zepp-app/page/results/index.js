@@ -239,7 +239,7 @@ Page({
         y: navRowY,
         safePad: Math.round(width * (isRound ? 0.16 : 0.2)),
         roundInset: isRound ? Math.max(10, Math.round(width * (isSmallRound ? 0.045 : 0.035))) : 0,
-        fixedButtonWidth: isRound && navButtons.length === 1 ? roundActionHalfWidth : undefined,
+        fixedButtonWidth: isRound && navButtons.length === 1 ? roundActionPairWidth : undefined,
         gap: isRound && navButtons.length === 2 ? 0 : 10,
         buttons: navButtons.map((button) => ({
           ...button,
