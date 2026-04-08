@@ -92,7 +92,7 @@ test('home screen renders simplified copy and routes from main actions', async (
       controlMode: 'swipe',
       wristSide: 'left',
       timeScale: 2,
-      spawnMultiplier: 1.6,
+      spawnMultiplier: 1.25,
       tiltSensitivity: 1,
     }),
     scores_v1: JSON.stringify([{ id: 'run-1', timestamp: 1 }]),
@@ -105,7 +105,7 @@ test('home screen renders simplified copy and routes from main actions', async (
   assert.equal(__isStatusBarVisible(), false)
   assert.ok(texts.includes('PARALLAX PILOT'))
   assert.ok(texts.includes('DODGE THE ASTEROIDS'))
-  assert.ok(texts.includes('TIME 2x  SPAWN 1.6x'))
+  assert.ok(texts.includes('TIME 2x  SPAWN 1.25x'))
   assert.ok(texts.includes('1 RUNS SAVED'))
   assert.equal(texts.some((text) => text.includes('CROWN AVAILABLE')), false)
   assert.equal(texts.some((text) => text.startsWith('SHIP ')), false)
@@ -128,7 +128,7 @@ test('home screen renders Polish copy when the watch language is pl-PL', async (
       controlMode: 'swipe',
       wristSide: 'left',
       timeScale: 2,
-      spawnMultiplier: 1.6,
+      spawnMultiplier: 1.25,
       tiltSensitivity: 1,
     }),
     scores_v1: JSON.stringify([{ id: 'run-1', timestamp: 1 }]),
@@ -139,7 +139,7 @@ test('home screen renders Polish copy when the watch language is pl-PL', async (
 
   const texts = getTexts()
   assert.ok(texts.includes('OMIJAJ ASTEROIDY'))
-  assert.ok(texts.includes('CZAS 2x  ILO\u015a\u0106 1.6x'))
+  assert.ok(texts.includes('CZAS 2x  ILO\u015a\u0106 1.25x'))
   assert.ok(texts.includes('WYNIKI: 1'))
   assert.ok(findButton('START'))
   assert.ok(findButton('USTAWIENIA'))
@@ -158,7 +158,7 @@ test('home square layout keeps metadata below the action stack', async () => {
       controlMode: 'touch',
       wristSide: 'left',
       timeScale: 3,
-      spawnMultiplier: 2,
+      spawnMultiplier: 1.25,
       tiltSensitivity: 1,
     }),
     scores_v1: JSON.stringify(Array.from({ length: 12 }, (_, index) => ({ id: `${index}` }))),
@@ -168,7 +168,7 @@ test('home square layout keeps metadata below the action stack', async () => {
   page.build()
 
   const scoreButton = findButton('SCOREBOARD')
-  const timeLabel = findText('TIME 3x  SPAWN 2x')
+  const timeLabel = findText('TIME 3x  SPAWN 1.25x')
 
   assert.ok(scoreButton)
   assert.ok(timeLabel)
@@ -180,7 +180,7 @@ test('settings screen routes into tilt calibration', async () => {
   resetEnv()
   __seedLocalStorage({
     settings_v1: JSON.stringify({
-      controlMode: 'swipe',
+      controlMode: 'tilt',
       wristSide: 'left',
       timeScale: 1,
       spawnMultiplier: 1,
@@ -197,6 +197,28 @@ test('settings screen routes into tilt calibration', async () => {
   assert.deepEqual(__getRouterCalls(), [
     { type: 'push', payload: { url: 'page/tilt-calibration/index' } },
   ])
+})
+
+test('settings screen keeps calibration inactive outside tilt mode', async () => {
+  resetEnv()
+  __seedLocalStorage({
+    settings_v1: JSON.stringify({
+      controlMode: 'touch',
+      wristSide: 'left',
+      timeScale: 1,
+      spawnMultiplier: 1,
+      tiltSensitivity: 0.95,
+    }),
+  })
+
+  const page = await loadPageDefinition('../zepp-app/page/settings/index.js')
+  page.build()
+
+  const calibrateButton = findButton('CALIBRATE  NOT SET')
+  assert.ok(calibrateButton)
+  calibrateButton.props.click_func?.()
+  assert.deepEqual(__getRouterCalls(), [])
+  assert.equal(calibrateButton.props.color, 0x9f9f9f)
 })
 
 test('settings screen shows calibration status when a tilt profile exists', async () => {
@@ -238,7 +260,7 @@ test('settings square layout leaves clear space above footer actions', async () 
       controlMode: 'touch',
       wristSide: 'left',
       timeScale: 1,
-      spawnMultiplier: 1.3,
+      spawnMultiplier: 1.25,
       tiltSensitivity: 0.95,
     }),
   })
@@ -256,6 +278,38 @@ test('settings square layout leaves clear space above footer actions', async () 
   assert.equal(playButton.props.y, 392)
 })
 
+test('settings small round layout keeps footer buttons inside the visible circle', async () => {
+  resetEnv()
+  __setDeviceInfo({
+    width: 416,
+    height: 416,
+    screenShape: SCREEN_SHAPE_ROUND,
+  })
+  __seedLocalStorage({
+    settings_v1: JSON.stringify({
+      controlMode: 'tilt',
+      wristSide: 'left',
+      timeScale: 1,
+      spawnMultiplier: 1,
+      tiltSensitivity: 0.95,
+    }),
+  })
+
+  const page = await loadPageDefinition('../zepp-app/page/settings/index.js')
+  page.build()
+
+  const backButton = findButton('BACK')
+  const playButton = findButton('PLAY')
+  const calibrateButton = findButton('CALIBRATE')
+
+  assert.ok(calibrateButton)
+  assert.ok(backButton)
+  assert.ok(playButton)
+  assert.equal(calibrateButton.props.y < backButton.props.y, true)
+  assert.equal(backButton.props.y, 352)
+  assert.equal(playButton.props.y, 352)
+})
+
 test('settings screen renders Polish labels and values when the watch language is pl-PL', async () => {
   resetEnv()
   __setLanguage(9)
@@ -264,7 +318,7 @@ test('settings screen renders Polish labels and values when the watch language i
       controlMode: 'swipe',
       wristSide: 'right',
       timeScale: 3,
-      spawnMultiplier: 1.3,
+      spawnMultiplier: 1.25,
       tiltSensitivity: 0.95,
     }),
   })
@@ -279,7 +333,7 @@ test('settings screen renders Polish labels and values when the watch language i
   assert.ok(findButton('KALIBRACJA  BRAK'))
   assert.ok(findButton('R\u0118KA  PRAWA'))
   assert.ok(findButton('CZAS  3x'))
-  assert.ok(findButton('ILO\u015a\u0106  1.3x'))
+  assert.ok(findButton('ILO\u015a\u0106  1.25x'))
   assert.ok(findButton('MENU'))
   assert.ok(findButton('GRAJ'))
 })
@@ -377,7 +431,6 @@ test('results screen keeps nav buttons separate from back/play on round screens'
   assert.equal(playButton.props.y, 422)
 
   nextButton.props.click_func()
-  backButton.props.click_func()
 
   assert.deepEqual(__getRouterCalls(), [
     {
@@ -387,11 +440,27 @@ test('results screen keeps nav buttons separate from back/play on round screens'
         params: JSON.stringify({ pageIndex: 1 }),
       },
     },
-    {
-      type: 'push',
-      payload: { url: 'page/home/index' },
-    },
   ])
+})
+
+test('results screen shows the highest scores first on the first page', async () => {
+  resetEnv()
+  __seedLocalStorage({
+    scores_v1: JSON.stringify([
+      { id: 'a', timestamp: 1, score: 1200, survivedMs: 10000 },
+      { id: 'b', timestamp: 2, score: 3400, survivedMs: 8000 },
+      { id: 'c', timestamp: 3, score: 2200, survivedMs: 12000 },
+    ]),
+  })
+
+  const page = await loadPageDefinition('../zepp-app/page/results/index.js')
+  page.onInit(JSON.stringify({ pageIndex: 0 }))
+  page.build()
+
+  const texts = getTexts()
+  assert.ok(texts.includes('01  3400  8.00s'))
+  assert.ok(texts.includes('02  2200  12.0s'))
+  assert.ok(texts.includes('03  1200  10.0s'))
 })
 
 test('results round page-last layout matches the real scoreboard spacing', async () => {
@@ -500,6 +569,121 @@ test('results square pagination keeps the page label above nav and footer rows',
   assert.equal(nextButton.props.y, 344)
   assert.equal(backButton.props.y, 396)
   assert.equal(playButton.props.y, 396)
+})
+
+test('results small round pagination keeps page label and actions above the lower cutout', async () => {
+  resetEnv()
+  __setDeviceInfo({
+    width: 416,
+    height: 416,
+    screenShape: SCREEN_SHAPE_ROUND,
+  })
+  __seedLocalStorage({
+    scores_v1: JSON.stringify(
+      Array.from({ length: 13 }, (_, index) => ({
+        id: `run-${index}`,
+        timestamp: 100 - index,
+        score: 7000 - index * 123,
+        survivedMs: 6000 + index * 210,
+      }))
+    ),
+  })
+
+  const page = await loadPageDefinition('../zepp-app/page/results/index.js')
+  page.onInit(JSON.stringify({ pageIndex: 1 }))
+  page.build()
+
+  const prevButton = findButton('PREVIOUS')
+  const backButton = findButton('BACK')
+  const playButton = findButton('PLAY')
+  const pageLabel = findText('2 / 2')
+
+  assert.ok(prevButton)
+  assert.ok(pageLabel)
+  assert.equal(pageLabel.props.y, 272)
+  assert.equal(prevButton.props.y, 296)
+  assert.equal(backButton.props.y, 352)
+  assert.equal(playButton.props.y, 352)
+})
+
+test('results small round middle page keeps both prev and next above the footer on three pages', async () => {
+  resetEnv()
+  __setDeviceInfo({
+    width: 416,
+    height: 416,
+    screenShape: SCREEN_SHAPE_ROUND,
+  })
+  __seedLocalStorage({
+    scores_v1: JSON.stringify(
+      Array.from({ length: 15 }, (_, index) => ({
+        id: `run-${index}`,
+        timestamp: 100 - index,
+        score: 7000 - index * 123,
+        survivedMs: 6000 + index * 210,
+      }))
+    ),
+  })
+
+  const page = await loadPageDefinition('../zepp-app/page/results/index.js')
+  page.onInit(JSON.stringify({ pageIndex: 1 }))
+  page.build()
+
+  const prevButton = findButton('PREVIOUS')
+  const nextButton = findButton('NEXT')
+  const backButton = findButton('BACK')
+  const playButton = findButton('PLAY')
+  const pageLabel = findText('2 / 3')
+
+  assert.ok(prevButton)
+  assert.ok(nextButton)
+  assert.ok(pageLabel)
+  assert.equal(pageLabel.props.y, 274)
+  assert.equal(prevButton.props.y, 296)
+  assert.equal(nextButton.props.y, 296)
+  assert.equal(backButton.props.y, 352)
+  assert.equal(playButton.props.y, 352)
+})
+
+test('tilt calibration logs small round layout keeps debug rows above the footer', async () => {
+  resetEnv()
+  __setDeviceInfo({
+    width: 416,
+    height: 416,
+    screenShape: SCREEN_SHAPE_ROUND,
+  })
+  __seedLocalStorage({
+    tilt_calibration_report_v1: JSON.stringify({
+      metrics: {
+        offset: 0.22,
+        noisePeak: 0.31,
+        downPeak: 8.2,
+        upPeak: 7.9,
+      },
+      profile: {
+        negativeRange: 6.1,
+        positiveRange: 6.4,
+        deadzone: 0.74,
+        responseExponent: 1.08,
+      },
+      debug: {
+        center: { samples: 24, holdMs: 1440, resets: 1, settleRange: 0.31, avgStepDelta: 0.18, avgDeviation: 0.12 },
+        down: { entryMs: 240, peakDelta: 8.2, holdMs: 720, resets: 0, settleRange: 0.36, avgStepDelta: 0.48, avgDeviation: 0.33 },
+        up: { entryMs: 220, peakDelta: 7.9, holdMs: 720, resets: 1, settleRange: 0.41, avgStepDelta: 0.52, avgDeviation: 0.38 },
+      },
+    }),
+  })
+
+  const page = await loadPageDefinition('../zepp-app/page/tilt-calibration-logs/index.js')
+  page.build()
+
+  const backButton = findButton('BACK')
+  const debugRow = getTexts().find((text) => text.startsWith('UP  ent='))
+  const debugWidget = findText(debugRow)
+
+  assert.ok(backButton)
+  assert.ok(debugWidget)
+  assert.equal(backButton.props.y, 356)
+  assert.equal(debugWidget.props.y < backButton.props.y, true)
 })
 
 test('results screen renders Polish copy when the watch language is pl-PL', async () => {

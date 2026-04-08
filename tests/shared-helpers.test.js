@@ -128,7 +128,11 @@ test('settings and scores sanitize invalid values before persistence', () => {
 
 test('view models format and clamp pagination predictably', () => {
   __resetLanguage()
-  const scores = [{ score: 9, survivedMs: 125000 }]
+  const scores = [
+    { score: 9, survivedMs: 125000, timestamp: 1 },
+    { score: 14, survivedMs: 5000, timestamp: 2 },
+    { score: 14, survivedMs: 7000, timestamp: 1 },
+  ]
   const page = paginateScores(null, 99, 5)
 
   assert.deepEqual(page, {
@@ -136,6 +140,10 @@ test('view models format and clamp pagination predictably', () => {
     pageIndex: 0,
     items: [],
   })
+  assert.deepEqual(
+    paginateScores(scores, 0, 5).items.map((entry) => entry.survivedMs),
+    [7000, 5000, 125000]
+  )
   assert.equal(cycleOption(['a', 'b', 'c'], 'b'), 'c')
   assert.equal(cycleOption(['a', 'b', 'c'], 'missing'), 'b')
   assert.equal(formatDurationMs(125000), '125s')
@@ -204,7 +212,7 @@ test('asteroid helpers keep movement logic consistent across immutable and in-pl
   assert.equal(clamp(-5, 0, 10), 0)
   assert.equal(clamp(15, 0, 10), 10)
   assert.ok(getSpawnIntervalMs(0.1, 0.1) > 900)
-  assert.ok(getSpawnIntervalMs(99, 99) < 1)
+  assert.ok(getSpawnIntervalMs(99, 99) < 10)
   assert.deepEqual(pruned.map((asteroid) => asteroid.id), ['keep'])
   assert.equal(advanceAsteroidsInPlace(inPlace, 1, viewport), inPlace)
   assert.deepEqual(inPlace.map((asteroid) => asteroid.id), ['keep'])

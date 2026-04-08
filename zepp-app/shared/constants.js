@@ -18,7 +18,7 @@ export const STORAGE_KEYS = {
 export const CONTROL_MODES = ['tilt', 'touch', 'swipe']
 export const WRIST_SIDES = ['left', 'right']
 export const TIME_SCALE_OPTIONS = [0.5, 1, 1.5, 2, 3]
-export const SPAWN_MULTIPLIER_OPTIONS = [0.8, 1, 1.3, 1.6, 2]
+export const SPAWN_MULTIPLIER_OPTIONS = [0.75, 0.9, 1, 1.1, 1.25]
 export const TILT_SENSITIVITY_OPTIONS = [0.35, 0.5, 0.65, 0.8, 0.95, 1.1, 1.25, 1.4]
 
 export const CONTROL_MODE_LABELS = {

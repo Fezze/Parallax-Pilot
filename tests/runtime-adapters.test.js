@@ -33,12 +33,12 @@ test('settings storage round-trips defaults and sanitized values', () => {
   writeSettings(storage, {
     ...defaults,
     controlMode: 'swipe',
-    spawnMultiplier: 1.6,
+    spawnMultiplier: 1.25,
   })
 
   const saved = readSettings(storage)
   assert.equal(saved.controlMode, 'swipe')
-  assert.equal(saved.spawnMultiplier, 1.6)
+  assert.equal(saved.spawnMultiplier, 1.25)
 })
 
 test('score history append keeps newest 100 items', () => {

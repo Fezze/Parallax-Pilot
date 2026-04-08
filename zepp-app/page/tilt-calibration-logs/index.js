@@ -16,12 +16,13 @@ Page({
     const debug = report?.debug || {}
     const deviceInfo = getDeviceInfo()
     const isRound = deviceInfo.screenShape === SCREEN_SHAPE_ROUND
+    const isSmallRound = isRound && deviceInfo.width <= 420
     const pad = Math.round(deviceInfo.width * 0.08)
     const fullWidth = deviceInfo.width - pad * 2
-    const footerHeight = isRound ? 46 : 44
-    const footerY = isRound ? deviceInfo.height - 74 : deviceInfo.height - 54
-    const startY = isRound ? 86 : 92
-    const rowGap = isRound ? 28 : 28
+    const footerHeight = isRound ? (isSmallRound ? 42 : 46) : 44
+    const footerY = isRound ? (isSmallRound ? deviceInfo.height - 60 : deviceInfo.height - 74) : deviceInfo.height - 54
+    const startY = isRound ? (isSmallRound ? 76 : 86) : 92
+    const rowGap = isRound ? (isSmallRound ? 23 : 28) : 28
 
     createLabel({
       x: pad,
@@ -29,7 +30,7 @@ Page({
       w: fullWidth,
       h: 32,
       text: t('tiltCalibrationLogs'),
-      textSize: 24,
+      textSize: isSmallRound ? 20 : 24,
       color: COLORS.accent,
     })
 
@@ -55,7 +56,7 @@ Page({
         w: Math.round(fullWidth * 0.34),
         h: 24,
         text: label,
-        textSize: isRound ? 14 : 15,
+        textSize: isRound ? (isSmallRound ? 12 : 14) : 15,
         color: COLORS.textMuted,
         alignH: align.LEFT,
       })
@@ -65,7 +66,7 @@ Page({
         w: Math.round(fullWidth * 0.66) - 6,
         h: 24,
         text: String(value),
-        textSize: isRound ? 16 : 17,
+        textSize: isRound ? (isSmallRound ? 14 : 16) : 17,
         color: COLORS.textPrimary,
         alignH: align.LEFT,
       })
@@ -78,7 +79,7 @@ Page({
       w: fullWidth,
       h: 18,
       text: t('tiltCalibrationDebug'),
-      textSize: 13,
+      textSize: isSmallRound ? 12 : 13,
       color: COLORS.accent,
       alignH: align.LEFT,
     })
@@ -96,7 +97,7 @@ Page({
         w: fullWidth,
         h: 14,
         text: row,
-        textSize: isRound ? 11 : 12,
+        textSize: isRound ? (isSmallRound ? 9 : 11) : 12,
         color: COLORS.textMuted,
         alignH: align.LEFT,
       })
@@ -108,7 +109,7 @@ Page({
       w: fullWidth,
       h: footerHeight,
       text: t('back'),
-      textSize: isRound ? 20 : 18,
+      textSize: isRound ? (isSmallRound ? 18 : 20) : 18,
       onClick: () => replace({ url: ROUTES.SETTINGS }),
     })
   },

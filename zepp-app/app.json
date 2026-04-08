@@ -5,8 +5,8 @@
     "appName": "Parallax Pilot",
     "appType": "app",
     "version": {
-      "code": 28,
-      "name": "2.1.11"
+      "code": 48,
+      "name": "2.1.31"
     },
     "icon": "icon.png",
     "vender": "Fezze",
@@ -19,12 +19,70 @@
   ],
   "runtime": {
     "apiVersion": {
-      "compatible": "4.0",
+      "compatible": "3.6",
       "target": "4.0",
-      "minVersion": "4.0"
+      "minVersion": "3.6"
     }
   },
   "targets": {
+    "round-416": {
+      "module": {
+        "page": {
+          "pages": [
+            "page/home/index",
+            "page/game/index",
+            "page/settings/index",
+            "page/results/index",
+            "page/tilt-calibration/index",
+            "page/tilt-calibration-logs/index"
+          ]
+        }
+      },
+      "platforms": [
+        {
+          "name": "falcon",
+          "deviceSource": 414
+        },
+        {
+          "name": "falcon",
+          "deviceSource": 415
+        }
+      ],
+      "designWidth": 416
+    },
+    "round-454": {
+      "module": {
+        "page": {
+          "pages": [
+            "page/home/index",
+            "page/game/index",
+            "page/settings/index",
+            "page/results/index",
+            "page/tilt-calibration/index",
+            "page/tilt-calibration-logs/index"
+          ]
+        }
+      },
+      "platforms": [
+        {
+          "name": "cheetah-round",
+          "deviceSource": 8192256
+        },
+        {
+          "name": "cheetah-round",
+          "deviceSource": 8192257
+        },
+        {
+          "name": "t-rex-ultra",
+          "deviceSource": 6553856
+        },
+        {
+          "name": "t-rex-ultra",
+          "deviceSource": 6553857
+        }
+      ],
+      "designWidth": 454
+    },
     "round-466": {
       "module": {
         "page": {
@@ -98,6 +156,18 @@
         {
           "name": "active-2-round",
           "deviceSource": 10092807
+        },
+        {
+          "name": "gtr-4",
+          "deviceSource": 7930112
+        },
+        {
+          "name": "gtr-4",
+          "deviceSource": 7930113
+        },
+        {
+          "name": "gtr-4",
+          "deviceSource": 7864577
         }
       ],
       "designWidth": 466
@@ -116,6 +186,18 @@
         }
       },
       "platforms": [
+        {
+          "name": "balance",
+          "deviceSource": 8519936
+        },
+        {
+          "name": "balance",
+          "deviceSource": 8519937
+        },
+        {
+          "name": "balance",
+          "deviceSource": 8519939
+        },
         {
           "name": "balance-2",
           "deviceSource": 9568512
@@ -159,6 +241,14 @@
         {
           "name": "active-max",
           "deviceSource": 10813699
+        },
+        {
+          "name": "cheetah-pro",
+          "deviceSource": 8126720
+        },
+        {
+          "name": "cheetah-pro",
+          "deviceSource": 8126721
         }
       ],
       "designWidth": 480
@@ -208,6 +298,18 @@
         {
           "name": "active",
           "deviceSource": 8323329
+        },
+        {
+          "name": "cheetah-square",
+          "deviceSource": 8257793
+        },
+        {
+          "name": "gts-4",
+          "deviceSource": 7995648
+        },
+        {
+          "name": "gts-4",
+          "deviceSource": 7995649
         }
       ],
       "designWidth": 390

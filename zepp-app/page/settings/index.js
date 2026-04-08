@@ -48,21 +48,25 @@ Page({
 
     const { width, height } = deviceInfo
     const isRound = deviceInfo.screenShape === SCREEN_SHAPE_ROUND
+    const isCompactRound = isRound && width <= 454
     const pad = Math.round(width * 0.07)
     const fullWidth = width - pad * 2
-    const rowHeight = isRound ? Math.round(Math.min(52, height * 0.105)) : Math.round(Math.min(42, height * 0.09))
-    const rowGap = isRound ? 10 : 10
-    const startY = isRound ? 92 : Math.round(height * 0.18)
+    const rowHeight = isRound
+      ? Math.round(Math.min(isCompactRound ? 44 : 52, height * (isCompactRound ? 0.098 : 0.105)))
+      : Math.round(Math.min(42, height * 0.09))
+    const rowGap = isRound ? (isCompactRound ? 8 : 10) : 10
+    const startY = isRound ? (isCompactRound ? 84 : 92) : Math.round(height * 0.18)
     const titleY = isRound ? 24 : 20
-    const titleSize = isRound ? 28 : 26
-    const subtitleY = isRound ? 54 : 48
-    const subtitleSize = isRound ? 16 : 14
-    const rowTextSize = isRound ? 22 : 20
-    const footerButtonH = isRound ? 58 : 44
-    const footerButtonY = isRound ? height - footerButtonH : height - 58
+    const titleSize = isRound ? (isCompactRound ? 26 : 28) : 26
+    const subtitleY = isRound ? (isCompactRound ? 50 : 54) : 48
+    const subtitleSize = isRound ? (isCompactRound ? 14 : 16) : 14
+    const rowTextSize = isRound ? (isCompactRound ? 18 : 22) : 20
+    const footerButtonH = isRound ? (isCompactRound ? 52 : 58) : 44
+    const footerButtonY = isRound ? (isCompactRound ? height - footerButtonH - 12 : height - footerButtonH - 12) : height - 58
     const controlModes = getAvailableControlModes()
     const tiltCalibration = loadTiltCalibration()
     const tiltStatus = tiltCalibration ? t('tiltCalibrationReady') : t('tiltCalibrationMissing')
+    const isTiltCalibrationEnabled = FEATURE_FLAGS.tiltCalibration && settings.controlMode === 'tilt'
 
     createLabel({
       x: pad,
@@ -164,7 +168,10 @@ Page({
             settings.tiltSensitivity
           )}`,
       textSize: rowTextSize,
-      onClick: FEATURE_FLAGS.tiltCalibration
+      normalColor: isTiltCalibrationEnabled ? COLORS.button : 0x101010,
+      pressColor: isTiltCalibrationEnabled ? COLORS.buttonPress : 0x101010,
+      textColor: isTiltCalibrationEnabled ? COLORS.textPrimary : COLORS.textMuted,
+      onClick: isTiltCalibrationEnabled
         ? () => push({ url: ROUTES.TILT_CALIBRATION })
         : () => {},
     })
@@ -177,12 +184,12 @@ Page({
         h: footerButtonH,
         left: {
           text: t('back'),
-          textSize: 20,
+          textSize: isCompactRound ? 18 : 20,
           onClick: () => back(),
         },
         right: {
           text: t('play'),
-          textSize: 20,
+          textSize: isCompactRound ? 18 : 20,
           normalColor: COLORS.accent,
           pressColor: 0xc9a900,
           textColor: COLORS.background,

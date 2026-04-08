@@ -70,24 +70,29 @@ Page({
     )
     const { width, height } = deviceInfo
     const isRound = deviceInfo.screenShape === SCREEN_SHAPE_ROUND
+    const isSmallRound = isRound && width <= 420
     const isSquare = !isRound
-    const roundActionButtonH = 58
-    const roundNavButtonH = 50
-    const roundRowGap = 12
+    const roundActionButtonH = isSmallRound ? 52 : 58
+    const roundNavButtonH = isSmallRound ? 46 : 50
+    const roundRowGap = isSmallRound ? 10 : 12
     const pad = Math.round(width * (isRound ? 0.11 : 0.07))
     const fullWidth = width - pad * 2
     const isEmptyState = items.length === 0
     const isRoundScoreboard = isRound && !lastSession
     const isSquareScoreboard = isSquare && !lastSession
-    const scoreTextSize = isSquareScoreboard ? 15 : 16
+    const scoreTextSize = isSquareScoreboard ? 15 : isSmallRound ? 15 : 16
     const listRowGap = isRoundScoreboard
-      ? 28
+      ? isSmallRound ? 24 : 28
       : isRound && lastSession
         ? 24
         : isSquareScoreboard
           ? 24
           : 24
-    const listTop = lastSession ? (isRound ? 158 : 142) : isRound ? 96 : 104
+    const listTop = lastSession
+      ? (isRound ? (isSmallRound ? 148 : 158) : 142)
+      : isRound
+        ? (isSmallRound ? 88 : 96)
+        : 104
     const hasPrev = pageCount > 1 && pageIndex > 0
     const hasNext = pageCount > 1 && pageIndex < pageCount - 1
     const listBottomY =
@@ -123,7 +128,7 @@ Page({
     }
 
     const actionRowY = isRound
-      ? height - roundActionButtonH
+      ? (isSmallRound ? height - roundActionButtonH - 12 : height - roundActionButtonH)
       : isSquare && !lastSession
         ? height - 54
         : isSquare
@@ -142,7 +147,7 @@ Page({
     )
 
     if (!lastSession) {
-      pagerY = Math.min(pagerY, navRowY - (isRound ? 24 : 20))
+      pagerY = Math.min(pagerY, navRowY - (isRound ? (isSmallRound ? 20 : 24) : 20))
     }
 
     createLabel({
@@ -231,7 +236,7 @@ Page({
         gap: isRound && navButtons.length === 2 ? 0 : 10,
         buttons: navButtons.map((button) => ({
           ...button,
-          textSize: isRound ? 20 : 18,
+          textSize: isRound ? (isSmallRound ? 18 : 20) : 18,
           textWidth: isRound ? undefined : Math.round(width * 0.56),
           h: isRound ? roundNavButtonH : 42,
         })),
@@ -246,13 +251,13 @@ Page({
       buttons: [
         {
           text: t('back'),
-          textSize: isRound ? 20 : 22,
+          textSize: isRound ? (isSmallRound ? 18 : 20) : 22,
           h: isRound ? roundActionButtonH : 44,
           onClick: () => push({ url: ROUTES.HOME }),
         },
         {
           text: t('play'),
-          textSize: isRound ? 20 : 22,
+          textSize: isRound ? (isSmallRound ? 18 : 20) : 22,
           h: isRound ? roundActionButtonH : 44,
           normalColor: COLORS.accent,
           pressColor: 0xc9a900,

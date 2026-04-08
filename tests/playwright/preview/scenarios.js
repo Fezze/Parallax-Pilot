@@ -19,6 +19,24 @@ const ROUND_466_DEVICE = {
   resolution: '466x466',
 }
 
+const ROUND_454_DEVICE = {
+  width: 454,
+  height: 454,
+  screenShape: 'round',
+  keyType: 'normal_21',
+  keyNumber: 2,
+  resolution: '454x454',
+}
+
+const ROUND_416_DEVICE = {
+  width: 416,
+  height: 416,
+  screenShape: 'round',
+  keyType: 'normal_21',
+  keyNumber: 2,
+  resolution: '416x416',
+}
+
 const SQUARE_390X450_DEVICE = {
   width: 390,
   height: 450,
@@ -225,7 +243,7 @@ function createSettingsScenario({
   controlMode,
   wristSide = 'left',
   timeScale = 1,
-  spawnMultiplier = 1.3,
+  spawnMultiplier = 1,
   tiltSensitivity = 0.95,
   expectedTexts,
 }) {
@@ -411,6 +429,7 @@ function createGameScenario({
 }
 
 const pagedScores = createScores(13)
+const pagedScoresThreePages = createScores(15)
 const lastSession = {
   id: 'last',
   timestamp: 9999,
@@ -423,6 +442,8 @@ const lastSession = {
 const DEVICE_FAMILIES = [
   { key: 'round-480', deviceInfo: ROUND_480_DEVICE },
   { key: 'round-466', deviceInfo: ROUND_466_DEVICE },
+  { key: 'round-454', deviceInfo: ROUND_454_DEVICE },
+  { key: 'round-416', deviceInfo: ROUND_416_DEVICE },
   { key: 'square-390x450', deviceInfo: SQUARE_390X450_DEVICE },
 ]
 
@@ -456,13 +477,13 @@ function scenariosForDevice(locale, deviceFamily) {
         controlMode: isRound ? 'swipe' : 'touch',
         wristSide: isRound ? 'right' : 'left',
         timeScale: isRound ? 2 : 3,
-        spawnMultiplier: isRound ? 1.6 : 2,
+        spawnMultiplier: isRound ? 1.25 : 1.25,
         tiltSensitivity: 1,
         scoreCount: isRound ? 5 : 12,
         expectedTexts: isRound
           ? [
               t(locale, 'homeSubtitle'),
-              t(locale, 'homeMeta', { timeScale: 2, spawnMultiplier: 1.6 }),
+              t(locale, 'homeMeta', { timeScale: 2, spawnMultiplier: 1.25 }),
               t(locale, 'savedRuns', { count: 5 }),
             ]
           : [t(locale, 'homeTitle'), t(locale, 'scoreboard'), t(locale, 'savedRuns', { count: 12 })],
@@ -508,7 +529,7 @@ function scenariosForDevice(locale, deviceFamily) {
               expectedTexts: [
                 t(locale, 'settings'),
                 `${t(locale, 'controlLabel')}  ${t(locale, 'controlMode_swipe')}`,
-                `${t(locale, 'spawnLabel')}  1.3x`,
+                `${t(locale, 'spawnLabel')}  1x`,
               ],
             }),
           ],
@@ -559,6 +580,17 @@ function scenariosForDevice(locale, deviceFamily) {
         pageIndex: 1,
         expectedTexts: [t(locale, 'scoreboard'), '2 / 2', t(locale, 'prev'), t(locale, 'back'), t(locale, 'play')],
         forbiddenTexts: [t(locale, 'next')],
+      }),
+    ],
+    [
+      `results-${key}-page-middle-${locale}`,
+      createResultsScenario({
+        locale,
+        deviceInfo,
+        variant: 'page-middle',
+        scores: pagedScoresThreePages,
+        pageIndex: 1,
+        expectedTexts: [t(locale, 'scoreboard'), '2 / 3', t(locale, 'prev'), t(locale, 'next'), t(locale, 'back'), t(locale, 'play')],
       }),
     ],
     [

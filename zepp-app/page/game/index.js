@@ -6,7 +6,6 @@ import {
   setStatusBarVisible,
   widget,
 } from '@zos/ui'
-import { log } from '@zos/utils'
 import {
   offGesture,
   onGesture,
@@ -44,7 +43,6 @@ import { appendScore, loadSettings, loadTiltCalibration, saveLastSession, saveSe
 
 const FRAME_INTERVAL_MS = 16
 const SHIP_BOUNDARY = 20
-const pageLogger = log.getLogger('game')
 const SQUARE_SPAWN_INTERVAL_FACTOR = 0.84
 const GAME_BRIGHT_TIME_MS = 600000
 const MAX_SPAWNS_PER_TICK = 2
@@ -284,9 +282,6 @@ Page({
       this.viewport,
       this.shipCenterY,
       this.settings.wristSide
-    )
-    pageLogger.info(
-      `init keyType=${deviceInfo.keyType || 'unknown'} keyNumber=${deviceInfo.keyNumber || 'unknown'}`
     )
   },
 

@@ -6,7 +6,6 @@ import {
   text_style,
   widget,
 } from '@zos/ui'
-import { createSysTimer } from '@zos/timer'
 import { COLORS } from './constants.js'
 
 const ROUND_PAIR_CLICK_DELAY_MS = 90
@@ -78,13 +77,6 @@ function deferClick(onClick, delayMs = 0) {
       }, delayMs)
       return
     }
-
-    try {
-      createSysTimer(false, delayMs, () => {
-        invoke()
-      })
-      return
-    } catch (_error) {}
 
     if (typeof setTimeout === 'function') {
       setTimeout(() => {
@@ -235,24 +227,20 @@ function createManagedRoundHalfButton({
   textColor = COLORS.textPrimary,
   textSize = 22,
   textWidth = w,
-  clickDelayMs = 0,
 }) {
-  const delayedClick = deferClick(onClick, clickDelayMs)
-  const resolved = resolveButtonTextSpec(text, textSize, textWidth)
-
   return createWidget(widget.BUTTON, {
     x,
     y,
     w,
     h,
-    text: resolved.text,
+    text,
     color: textColor,
-    text_size: resolved.textSize,
+    text_size: textSize,
     text_w: textWidth,
     radius: Math.round(h / 2),
     normal_color: normalColor,
     press_color: pressColor,
-    click_func: delayedClick,
+    click_func: onClick,
   })
 }
 
@@ -273,6 +261,8 @@ export function createRoundButtonPair({
   const leftPressColor = left.pressColor ?? COLORS.buttonPress
   const rightBaseColor = right.normalColor ?? COLORS.button
   const rightPressColor = right.pressColor ?? COLORS.buttonPress
+  const leftClick = deferClick(left.onClick, ROUND_PAIR_CLICK_DELAY_MS)
+  const rightClick = deferClick(right.onClick, ROUND_PAIR_CLICK_DELAY_MS)
   const leftResolved = resolveButtonTextSpec(
     left.text,
     left.textSize ?? 22,
@@ -290,13 +280,12 @@ export function createRoundButtonPair({
     w: buttonWidth,
     h,
     text: leftResolved.text,
-    onClick: left.onClick,
+    onClick: leftClick,
     normalColor: leftBaseColor,
     pressColor: leftPressColor,
     textColor: left.textColor,
-    textSize: left.textSize,
-    textWidth: buttonWidth - labelInset,
-    clickDelayMs: ROUND_PAIR_CLICK_DELAY_MS,
+    textSize: leftResolved.textSize,
+    textWidth: buttonWidth,
   })
 
   createManagedRoundHalfButton({
@@ -305,12 +294,11 @@ export function createRoundButtonPair({
     w: buttonWidth,
     h,
     text: rightResolved.text,
-    onClick: right.onClick,
+    onClick: rightClick,
     normalColor: rightBaseColor,
     pressColor: rightPressColor,
     textColor: right.textColor,
-    textSize: right.textSize,
-    textWidth: buttonWidth - labelInset,
-    clickDelayMs: ROUND_PAIR_CLICK_DELAY_MS,
+    textSize: rightResolved.textSize,
+    textWidth: buttonWidth,
   })
 }

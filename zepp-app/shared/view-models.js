@@ -11,7 +11,21 @@ export function cycleOption(options, currentValue) {
 }
 
 export function paginateScores(scores, pageIndex = 0, pageSize = RESULTS_PAGE_SIZE) {
-  const safeScores = Array.isArray(scores) ? scores : []
+  const safeScores = Array.isArray(scores)
+    ? [...scores].sort((left, right) => {
+        const scoreDelta = (right.score || 0) - (left.score || 0)
+        if (scoreDelta !== 0) {
+          return scoreDelta
+        }
+
+        const survivedDelta = (right.survivedMs || 0) - (left.survivedMs || 0)
+        if (survivedDelta !== 0) {
+          return survivedDelta
+        }
+
+        return (right.timestamp || 0) - (left.timestamp || 0)
+      })
+    : []
   const pageCount = Math.max(1, Math.ceil(safeScores.length / pageSize))
   const clampedPageIndex = Math.min(Math.max(pageIndex, 0), pageCount - 1)
   const start = clampedPageIndex * pageSize

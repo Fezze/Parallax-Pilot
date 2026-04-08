@@ -15,7 +15,7 @@ export function clamp(value, min, max) {
 }
 
 export function calculateDifficulty(elapsedMs, timeScale) {
-  return 1 + (elapsedMs / 1000) * timeScale
+  return 1 + (elapsedMs / 1000) * timeScale * 0.55
 }
 
 export function calculateFinalScore(survivedMs, settings) {
@@ -61,11 +61,11 @@ export function createShipRect(viewport, shipCenterY, wristSide) {
 }
 
 export function getSpawnIntervalMs(difficulty, spawnMultiplier) {
-  return 1020 / (0.9 + difficulty * spawnMultiplier * 0.18)
+  return 1180 / (0.92 + difficulty * spawnMultiplier * 0.11)
 }
 
 function getAsteroidSpeed(difficulty, randomUnit = Math.random()) {
-  return 115 + difficulty * 15 + randomUnit * 40
+  return 96 + difficulty * 9 + randomUnit * 28
 }
 
 function getAsteroidDamage(radius) {

@@ -22,7 +22,7 @@ function sequenceRandom(values) {
 }
 
 test('difficulty and final score follow the planned formula', () => {
-  assert.equal(calculateDifficulty(5000, 1.5), 8.5)
+  assert.equal(calculateDifficulty(5000, 1.5), 5.125)
   assert.equal(
     calculateFinalScore(4321, {
       timeScale: 2,
@@ -129,8 +129,8 @@ test('spawn interval still accelerates but much more gently over time', () => {
 
   assert.ok(early > mid)
   assert.ok(mid > late)
-  assert.ok(mid > 300)
-  assert.ok(late > 200)
+  assert.ok(mid > 430)
+  assert.ok(late > 300)
 })
 
 test('asteroid creation respects travel direction and score entries snapshot settings', () => {
