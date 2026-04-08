@@ -13,7 +13,25 @@ function readVersion() {
   return JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')).version
 }
 
+if (dryRun) {
+  console.log(`Dry run: git push ${passthroughArgs.join(' ')}`.trim())
+  console.log('Dry run: version bump happens only after a successful push.')
+  process.exit(0)
+}
+
 const beforeVersion = readVersion()
+const initialPush = spawnSync(
+  'git',
+  ['push', ...passthroughArgs],
+  {
+    cwd: repoRoot,
+    stdio: 'inherit',
+  }
+)
+
+if (initialPush.status !== 0) {
+  process.exit(initialPush.status || 1)
+}
 
 const versionBump = spawnSync(
   process.execPath,
@@ -21,7 +39,6 @@ const versionBump = spawnSync(
     path.join(__dirname, 'version-proxy.mjs'),
     'minor',
     '--stage',
-    ...(dryRun ? ['--dry-run'] : []),
   ],
   {
     cwd: repoRoot,
@@ -33,13 +50,7 @@ if (versionBump.status !== 0) {
   process.exit(versionBump.status || 1)
 }
 
-if (dryRun) {
-  console.log(`Dry run: git push ${passthroughArgs.join(' ')}`.trim())
-  process.exit(0)
-}
-
 const afterVersion = readVersion()
-
 const commitVersion = spawnSync(
   'git',
   [
@@ -61,7 +72,7 @@ if (commitVersion.status !== 0) {
   process.exit(commitVersion.status || 1)
 }
 
-const push = spawnSync(
+const versionPush = spawnSync(
   'git',
   ['push', ...passthroughArgs],
   {
@@ -70,8 +81,8 @@ const push = spawnSync(
   }
 )
 
-if (push.status !== 0) {
-  process.exit(push.status || 1)
+if (versionPush.status !== 0) {
+  process.exit(versionPush.status || 1)
 }
 
 console.log(`Push completed with version bump: ${beforeVersion} -> ${afterVersion}`)
