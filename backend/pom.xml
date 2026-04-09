@@ -5,17 +5,18 @@
   <parent>
     <groupId>org.springframework.boot</groupId>
     <artifactId>spring-boot-starter-parent</artifactId>
-    <version>3.5.6</version>
+    <version>4.0.5</version>
     <relativePath/>
   </parent>
   <groupId>com.parallaxpilot</groupId>
   <artifactId>leaderboard-backend</artifactId>
-  <version>0.0.1-SNAPSHOT</version>
+  <version>0.0.2-SNAPSHOT</version>
   <name>leaderboard-backend</name>
   <description>Parallax Pilot leaderboard backend</description>
   <properties>
     <java.version>17</java.version>
-    <aws.sdk.version>2.31.58</aws.sdk.version>
+    <aws.sdk.version>2.33.13</aws.sdk.version>
+    <testcontainers.version>2.0.4</testcontainers.version>
   </properties>
   <dependencies>
     <dependency>
@@ -55,13 +56,20 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>org.testcontainers</groupId>
-      <artifactId>junit-jupiter</artifactId>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-webmvc-test</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.testcontainers</groupId>
-      <artifactId>localstack</artifactId>
+      <artifactId>testcontainers-junit-jupiter</artifactId>
+      <version>${testcontainers.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers-localstack</artifactId>
+      <version>${testcontainers.version}</version>
       <scope>test</scope>
     </dependency>
   </dependencies>

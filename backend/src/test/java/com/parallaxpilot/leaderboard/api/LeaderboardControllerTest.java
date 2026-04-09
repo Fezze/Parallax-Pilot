@@ -12,9 +12,9 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -29,13 +29,12 @@ import com.parallaxpilot.leaderboard.service.LeaderboardService;
 @WebMvcTest(LeaderboardController.class)
 class LeaderboardControllerTest {
 
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper().findAndRegisterModules();
+
     @Autowired
     private MockMvc mockMvc;
 
-    @Autowired
-    private ObjectMapper objectMapper;
-
-    @MockBean
+    @MockitoBean
     private LeaderboardService leaderboardService;
 
     @Test
@@ -56,7 +55,7 @@ class LeaderboardControllerTest {
 
         mockMvc.perform(post("/v1/scores:submit")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsBytes(request)))
+                .content(OBJECT_MAPPER.writeValueAsBytes(request)))
             .andExpect(status().isAccepted())
             .andExpect(jsonPath("$.bestUpdated").value(true))
             .andExpect(jsonPath("$.classification.exactRank").value(4));

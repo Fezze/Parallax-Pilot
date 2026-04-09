@@ -42,12 +42,12 @@ public abstract class LocalStackIntegrationSupport {
         registry.add("app.leaderboard.table-prefix", () -> "pp_");
     }
 
-    static void bootstrapResources() {
+    protected static void bootstrapResources() {
         createTableIfMissing("pp_score_submissions");
         createTableIfMissing("pp_best_scores");
         createTableIfMissing("pp_leaderboard_entries");
         createQueueIfMissing("pp_score-submissions");
-        createBucketIfMissing("pp_leaderboard-snapshots");
+        createBucketIfMissing("pp-leaderboard-snapshots");
     }
 
     private static void createTableIfMissing(String tableName) {
