@@ -2,6 +2,7 @@ package com.parallaxpilot.leaderboard.api;
 
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -22,6 +23,8 @@ import com.parallaxpilot.leaderboard.api.dto.LeaderboardEntryResponse;
 import com.parallaxpilot.leaderboard.api.dto.LeaderboardResponse;
 import com.parallaxpilot.leaderboard.api.dto.PlayerBestScoresResponse;
 import com.parallaxpilot.leaderboard.api.dto.RankClassificationResponse;
+import com.parallaxpilot.leaderboard.api.dto.SeasonCutoverRequest;
+import com.parallaxpilot.leaderboard.api.dto.SeasonMetadataResponse;
 import com.parallaxpilot.leaderboard.api.dto.SubmitScoreRequest;
 import com.parallaxpilot.leaderboard.api.dto.SubmitScoreResponse;
 import com.parallaxpilot.leaderboard.service.LeaderboardService;
@@ -51,7 +54,15 @@ class LeaderboardControllerTest {
         );
 
         when(leaderboardService.submitScore(request))
-            .thenReturn(new SubmitScoreResponse(true, false, true, new RankClassificationResponse("player-1", 4, null, "global")));
+            .thenReturn(new SubmitScoreResponse(
+                true,
+                false,
+                true,
+                false,
+                false,
+                List.of(),
+                new RankClassificationResponse("player-1", 4, null, "global", 20)
+            ));
 
         mockMvc.perform(post("/v1/scores:submit")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -67,7 +78,8 @@ class LeaderboardControllerTest {
             .thenReturn(new LeaderboardResponse(
                 "global",
                 "global",
-                List.of(new LeaderboardEntryResponse("player-1", "Pilot", 1200, 15000, 1))
+                List.of(new LeaderboardEntryResponse("player-1", "Pilot", 1200, 15000, 1)),
+                1
             ));
 
         mockMvc.perform(get("/v1/leaderboards/global"))
@@ -86,5 +98,33 @@ class LeaderboardControllerTest {
         mockMvc.perform(get("/v1/players/player-1/best"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.bestScores.global.score").value(1200));
+    }
+
+    @Test
+    void returnsAroundMeLeaderboard() throws Exception {
+        when(leaderboardService.getAroundMe("global", "player-1"))
+            .thenReturn(new LeaderboardResponse(
+                "global",
+                "global",
+                List.of(new LeaderboardEntryResponse("player-1", "Pilot", 1200, 15000, 4)),
+                20
+            ));
+
+        mockMvc.perform(get("/v1/leaderboards/global/around-me").param("playerId", "player-1"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.entries[0].rank").value(4));
+    }
+
+    @Test
+    void cutsOverSeason() throws Exception {
+        var request = new SeasonCutoverRequest("2026-S2", Instant.parse("2026-07-01T00:00:00Z"));
+        when(leaderboardService.cutoverSeason(request))
+            .thenReturn(new SeasonMetadataResponse("2026-S2", Instant.parse("2026-07-01T00:00:00Z"), null, true));
+
+        mockMvc.perform(patch("/v1/admin/seasons:cutover")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(OBJECT_MAPPER.writeValueAsBytes(request)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.seasonKey").value("2026-S2"));
     }
 }

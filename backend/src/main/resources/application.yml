@@ -13,6 +13,13 @@ app:
     table-prefix: pp_
     exact-rank-threshold: 100
     idempotency-ttl-days: 14
+    projection-queue-name: pp_score-submissions
+    around-me-window: 2
+    rate-limit-per-minute: 20
+    quarantine-score-threshold: 100000
+    quarantine-survived-ms: 7200000
+    max-leaderboard-scan: 2000
+    consumer-fixed-delay-ms: 5000
 
 aws:
   region: eu-west-2

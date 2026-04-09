@@ -5,6 +5,7 @@ import java.util.List;
 public record LeaderboardResponse(
     String scope,
     String scopeKey,
-    List<LeaderboardEntryResponse> entries
+    List<LeaderboardEntryResponse> entries,
+    Integer totalPlayers
 ) {
 }

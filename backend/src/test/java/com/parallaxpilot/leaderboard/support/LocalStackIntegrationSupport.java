@@ -14,14 +14,17 @@ import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeDefinition;
 import software.amazon.awssdk.services.dynamodb.model.BillingMode;
 import software.amazon.awssdk.services.dynamodb.model.CreateTableRequest;
+import software.amazon.awssdk.services.dynamodb.model.DeleteItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.KeySchemaElement;
 import software.amazon.awssdk.services.dynamodb.model.KeyType;
 import software.amazon.awssdk.services.dynamodb.model.ResourceNotFoundException;
+import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
 import software.amazon.awssdk.services.dynamodb.model.ScalarAttributeType;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.CreateBucketRequest;
 import software.amazon.awssdk.services.s3.model.HeadBucketRequest;
 import software.amazon.awssdk.services.sqs.SqsClient;
+import software.amazon.awssdk.services.sqs.model.PurgeQueueInProgressException;
 
 @Testcontainers
 public abstract class LocalStackIntegrationSupport {
@@ -40,6 +43,7 @@ public abstract class LocalStackIntegrationSupport {
         registry.add("aws.region", LOCALSTACK::getRegion);
         registry.add("aws.endpoint", () -> LOCALSTACK.getEndpointOverride(LocalStackContainer.Service.DYNAMODB).toString());
         registry.add("app.leaderboard.table-prefix", () -> "pp_");
+        registry.add("app.leaderboard.consumer-fixed-delay-ms", () -> "600000");
     }
 
     protected static void bootstrapResources() {
@@ -47,8 +51,22 @@ public abstract class LocalStackIntegrationSupport {
         createTableIfMissing("pp_best_scores");
         createTableIfMissing("pp_leaderboard_entries");
         createTableIfMissing("pp_idempotency");
+        createTableIfMissing("pp_risk_signals");
+        createTableIfMissing("pp_season_metadata");
+        createTableIfMissing("pp_abuse_counters");
         createQueueIfMissing("pp_score-submissions");
         createBucketIfMissing("pp-leaderboard-snapshots");
+    }
+
+    protected static void resetResources() {
+        clearTable("pp_score_submissions");
+        clearTable("pp_best_scores");
+        clearTable("pp_leaderboard_entries");
+        clearTable("pp_idempotency");
+        clearTable("pp_risk_signals");
+        clearTable("pp_season_metadata");
+        clearTable("pp_abuse_counters");
+        purgeQueue("pp_score-submissions");
     }
 
     private static void createTableIfMissing(String tableName) {
@@ -78,6 +96,17 @@ public abstract class LocalStackIntegrationSupport {
             var present = queues.stream().anyMatch(url -> url.endsWith("/" + queueName));
             if (!present) {
                 client.createQueue(builder -> builder.queueName(queueName));
+            }
+        }
+    }
+
+    private static void purgeQueue(String queueName) {
+        try (var client = sqsClient()) {
+            try {
+                var queueUrl = client.getQueueUrl(builder -> builder.queueName(queueName)).queueUrl();
+                client.purgeQueue(builder -> builder.queueUrl(queueUrl));
+            } catch (PurgeQueueInProgressException ignored) {
+                // LocalStack tests can hit purge twice in a short window; stale messages are acceptable here.
             }
         }
     }
@@ -121,5 +150,20 @@ public abstract class LocalStackIntegrationSupport {
         return StaticCredentialsProvider.create(
             AwsBasicCredentials.create(LOCALSTACK.getAccessKey(), LOCALSTACK.getSecretKey())
         );
+    }
+
+    private static void clearTable(String tableName) {
+        try (var client = dynamoDbClient()) {
+            var scan = client.scan(ScanRequest.builder().tableName(tableName).build());
+            for (var item : scan.items()) {
+                client.deleteItem(DeleteItemRequest.builder()
+                    .tableName(tableName)
+                    .key(java.util.Map.of(
+                        "pk", item.get("pk"),
+                        "sk", item.get("sk")
+                    ))
+                    .build());
+            }
+        }
     }
 }

@@ -4,6 +4,7 @@ public record RankClassificationResponse(
     String playerId,
     Integer exactRank,
     String approximateBand,
-    String scope
+    String scope,
+    Integer totalPlayers
 ) {
 }

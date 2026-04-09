@@ -7,17 +7,24 @@ import java.util.List;
 
 import org.springframework.stereotype.Component;
 
+import com.parallaxpilot.leaderboard.service.SeasonService;
+
 @Component
 public class ScopeResolver {
 
+    private final SeasonService seasonService;
+
+    public ScopeResolver(SeasonService seasonService) {
+        this.seasonService = seasonService;
+    }
+
     public List<ScopeKey> resolve(Instant playedAt) {
         var utc = ZonedDateTime.ofInstant(playedAt, ZoneOffset.UTC);
-        var quarter = ((utc.getMonthValue() - 1) / 3) + 1;
 
         return List.of(
             new ScopeKey(ScopeKind.GLOBAL, "global"),
             new ScopeKey(ScopeKind.DAILY, utc.toLocalDate().toString()),
-            new ScopeKey(ScopeKind.SEASONAL, utc.getYear() + "-Q" + quarter)
+            new ScopeKey(ScopeKind.SEASONAL, seasonService.resolveSeasonKey(playedAt))
         );
     }
 }

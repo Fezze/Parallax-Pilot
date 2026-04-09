@@ -15,6 +15,8 @@ import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.QueryRequest;
+import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
+import software.amazon.awssdk.services.dynamodb.model.DeleteItemRequest;
 
 @Component
 public class DynamoDbJsonRepository {
@@ -73,6 +75,37 @@ public class DynamoDbJsonRepository {
         return response.items().stream()
             .map(item -> readJson(item.get("payload").s(), type))
             .toList();
+    }
+
+    public <T> List<T> scanAll(String tableSuffix, Class<T> type) {
+        var response = dynamoDbClient.scan(ScanRequest.builder()
+            .tableName(tableName(tableSuffix))
+            .build());
+
+        return response.items().stream()
+            .map(item -> readJson(item.get("payload").s(), type))
+            .toList();
+    }
+
+    public void delete(String tableSuffix, String pk, String sk) {
+        dynamoDbClient.deleteItem(DeleteItemRequest.builder()
+            .tableName(tableName(tableSuffix))
+            .key(Map.of(
+                "pk", AttributeValue.fromS(pk),
+                "sk", AttributeValue.fromS(sk)
+            ))
+            .build());
+    }
+
+    public void clearTable(String tableSuffix) {
+        var response = dynamoDbClient.scan(ScanRequest.builder()
+            .tableName(tableName(tableSuffix))
+            .attributesToGet("pk", "sk")
+            .build());
+
+        for (var item : response.items()) {
+            delete(tableSuffix, item.get("pk").s(), item.get("sk").s());
+        }
     }
 
     private String tableName(String suffix) {

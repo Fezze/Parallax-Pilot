@@ -1,6 +1,7 @@
 package com.parallaxpilot.leaderboard.domain;
 
 import java.time.Instant;
+import java.util.List;
 
 public record ScoreSubmission(
     String submissionId,
@@ -10,6 +11,9 @@ public record ScoreSubmission(
     long survivedMs,
     Instant playedAt,
     String clientVersion,
-    String deviceModel
+    String deviceModel,
+    boolean suspicious,
+    boolean quarantined,
+    List<String> riskReasons
 ) {
 }

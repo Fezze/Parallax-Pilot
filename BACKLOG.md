@@ -13,10 +13,13 @@
 - Add seasonal metadata and an explicit cutover job instead of deriving active seasonal behavior only from current time.
 - Add `around-me` endpoint and a stable approximate-rank model outside the exact top window.
 - Add structured logs, metrics, and basic alerting/dashboarding for submits, duplicates, and projection lag.
+- Add Terraform for AWS infrastructure so environments are provisioned from code instead of ad hoc setup.
+- Add GitHub Actions delivery pipeline for backend build, test, artifact publish, and environment deploy flow on top of the existing app pipeline assumptions.
 
 ## P3
 - Replace demo defaults in `Settings App` and `Side Service` with real player identity onboarding and API configuration flow.
 - Add offline queueing in `Side Service` so submit and refresh do not get lost without network.
 - Add admin/debug view for rank divergence, duplicate submissions, and suspicious flags.
 - Add S3 snapshot export for recovery and leaderboard projection comparison.
+- Add Terraform plan/apply promotion flow per environment with remote state, secrets wiring, and approval gates.
 - Add CI/CD for backend and companion phone-side with a dedicated release pipeline.
