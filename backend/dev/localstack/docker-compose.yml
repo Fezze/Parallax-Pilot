@@ -8,4 +8,5 @@ services:
       AWS_DEFAULT_REGION: eu-west-2
       DEBUG: 0
     volumes:
-      - "./.localstack:/var/lib/localstack"
+      - "./.data:/var/lib/localstack"
+      - "./init:/etc/localstack/init/ready.d"

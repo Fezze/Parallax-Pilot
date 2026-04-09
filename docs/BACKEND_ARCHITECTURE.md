@@ -39,9 +39,9 @@ This design avoids a separate mobile app while still using a production-shaped b
 - Secrets/config: AWS Parameter Store or Secrets Manager
 
 ### Local development
-- LocalStack exposes DynamoDB, SQS, and S3 endpoints
-- Spring `local` profile points AWS clients to LocalStack
-- Startup bootstrap creates required tables and queues if missing
+- LocalStack is a dev/test dependency, not part of the main runtime package
+- local run assets live under `backend/dev/localstack/`
+- integration tests use LocalStack containers to create DynamoDB, SQS, and S3 resources on demand
 
 ## API Surface
 ### Write path
@@ -84,7 +84,9 @@ This design avoids a separate mobile app while still using a production-shaped b
 - Burst load is absorbed with queue-based projection flow in the target architecture; local implementation keeps a synchronous fallback path for simplicity
 
 ## Implementation Status In Repo
-- `backend/`: Spring Boot service scaffold with DynamoDB-backed repositories and LocalStack profile
+- `backend/`: Spring Boot service scaffold with DynamoDB-backed repositories
+- `backend/dev/localstack/`: local-only LocalStack runtime assets
+- `backend/src/test/`: LocalStack-based integration test coverage
 - `zepp-app/app-side/`: phone-side online sync service
 - `zepp-app/setting/`: phone leaderboard UI inside Zepp app
 - `tests/playwright/`: screenshot coverage extended for the phone leaderboard screen

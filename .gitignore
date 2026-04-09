@@ -6,3 +6,7 @@ coverage/
 output/playwright/
 backend/target/
 backend/.localstack/
+backend/dev/localstack/.data/
+backend/.tools/
+backend/.m2repo/
+backend/.m2home/
