@@ -2,29 +2,43 @@ package com.parallaxpilot.leaderboard.service;
 
 import java.util.ArrayList;
 
+import com.parallaxpilot.leaderboard.domain.BestScoreRecord;
+import com.parallaxpilot.leaderboard.domain.LeaderboardKeys;
+import com.parallaxpilot.leaderboard.domain.LeaderboardEntry;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import com.parallaxpilot.leaderboard.domain.LeaderboardEntry;
 import com.parallaxpilot.leaderboard.repository.DynamoDbJsonRepository;
+import com.parallaxpilot.leaderboard.repository.LeaderboardTables;
+import com.parallaxpilot.leaderboard.repository.ProjectionIndexRepository;
 import com.parallaxpilot.leaderboard.repository.ProjectionQueueRepository;
+import com.parallaxpilot.leaderboard.repository.RebuildLockRepository;
 
 @Service
 public class ProjectionService {
 
     private final ProjectionQueueRepository projectionQueueRepository;
     private final DynamoDbJsonRepository repository;
+    private final ProjectionIndexRepository projectionIndexRepository;
+    private final RebuildLockRepository rebuildLockRepository;
 
     public ProjectionService(
         ProjectionQueueRepository projectionQueueRepository,
-        DynamoDbJsonRepository repository
+        DynamoDbJsonRepository repository,
+        ProjectionIndexRepository projectionIndexRepository,
+        RebuildLockRepository rebuildLockRepository
     ) {
         this.projectionQueueRepository = projectionQueueRepository;
         this.repository = repository;
+        this.projectionIndexRepository = projectionIndexRepository;
+        this.rebuildLockRepository = rebuildLockRepository;
     }
 
     @Scheduled(fixedDelayString = "${app.leaderboard.consumer-fixed-delay-ms:5000}")
     void scheduledDrain() {
+        if (rebuildLockRepository.isActive()) {
+            return;
+        }
         drainProjectionQueue();
     }
 
@@ -37,20 +51,43 @@ public class ProjectionService {
         var processed = new ArrayList<ProjectionQueueRepository.QueuedProjectionTask>();
         for (var task : tasks) {
             var payload = task.payload();
-            repository.put(
-                "leaderboard_entries",
-                payload.scopeKind().name() + "#" + payload.scopeKey(),
-                leaderboardSortKey(payload.score(), payload.playedAt().toEpochMilli(), payload.playerId()),
-                new LeaderboardEntry(
-                    payload.playerId(),
-                    payload.nickname(),
-                    payload.scopeKind(),
-                    payload.scopeKey(),
-                    payload.score(),
-                    payload.survivedMs(),
-                    payload.playedAt()
-                )
+            var currentBest = repository.get(
+                LeaderboardTables.BEST_SCORES,
+                payload.playerId(),
+                LeaderboardKeys.scopePartitionKey(payload.scopeKind(), payload.scopeKey()),
+                BestScoreRecord.class
             );
+
+            if (currentBest.isPresent() && matches(payload, currentBest.get())) {
+                var newSortKey = leaderboardSortKey(payload.score(), payload.playedAt().toEpochMilli(), payload.playerId());
+                var currentIndex = projectionIndexRepository.get(payload.playerId(), payload.scopeKind(), payload.scopeKey());
+
+                if (currentIndex.isPresent() && !currentIndex.get().leaderboardSortKey().equals(newSortKey)) {
+                    repository.delete(
+                        LeaderboardTables.LEADERBOARD_ENTRIES,
+                        LeaderboardKeys.scopePartitionKey(payload.scopeKind(), payload.scopeKey()),
+                        currentIndex.get().leaderboardSortKey()
+                    );
+                }
+
+                if (currentIndex.isEmpty() || !currentIndex.get().leaderboardSortKey().equals(newSortKey)) {
+                    repository.put(
+                        LeaderboardTables.LEADERBOARD_ENTRIES,
+                        LeaderboardKeys.scopePartitionKey(payload.scopeKind(), payload.scopeKey()),
+                        newSortKey,
+                        new LeaderboardEntry(
+                            payload.playerId(),
+                            payload.nickname(),
+                            payload.scopeKind(),
+                            payload.scopeKey(),
+                            payload.score(),
+                            payload.survivedMs(),
+                            payload.playedAt()
+                        )
+                    );
+                    projectionIndexRepository.put(payload.playerId(), payload.scopeKind(), payload.scopeKey(), newSortKey);
+                }
+            }
             processed.add(task);
         }
 
@@ -71,5 +108,11 @@ public class ProjectionService {
     private String leaderboardSortKey(int score, long epochMillis, String playerId) {
         long inverseScore = Integer.MAX_VALUE - score;
         return "%010d#%013d#%s".formatted(inverseScore, epochMillis, playerId);
+    }
+
+    private boolean matches(com.parallaxpilot.leaderboard.domain.ProjectionTask payload, BestScoreRecord best) {
+        return payload.score() == best.score()
+            && payload.survivedMs() == best.survivedMs()
+            && payload.playedAt().equals(best.playedAt());
     }
 }

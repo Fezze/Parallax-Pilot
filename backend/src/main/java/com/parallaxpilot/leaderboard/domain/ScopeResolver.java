@@ -22,7 +22,7 @@ public class ScopeResolver {
         var utc = ZonedDateTime.ofInstant(playedAt, ZoneOffset.UTC);
 
         return List.of(
-            new ScopeKey(ScopeKind.GLOBAL, "global"),
+            new ScopeKey(ScopeKind.GLOBAL, ScopeKind.GLOBAL.apiValue()),
             new ScopeKey(ScopeKind.DAILY, utc.toLocalDate().toString()),
             new ScopeKey(ScopeKind.SEASONAL, seasonService.resolveSeasonKey(playedAt))
         );

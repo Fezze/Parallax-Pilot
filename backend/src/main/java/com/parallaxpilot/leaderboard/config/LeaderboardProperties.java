@@ -13,6 +13,7 @@ public record LeaderboardProperties(
     int quarantineScoreThreshold,
     long quarantineSurvivedMs,
     int maxLeaderboardScan,
-    long consumerFixedDelayMs
+    long consumerFixedDelayMs,
+    int rebuildLockTtlMinutes
 ) {
 }

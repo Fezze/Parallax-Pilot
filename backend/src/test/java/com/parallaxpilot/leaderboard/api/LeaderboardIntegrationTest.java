@@ -26,6 +26,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.parallaxpilot.leaderboard.api.dto.SeasonCutoverRequest;
 import com.parallaxpilot.leaderboard.api.dto.SubmitScoreRequest;
+import com.parallaxpilot.leaderboard.domain.ProjectionTask;
+import com.parallaxpilot.leaderboard.domain.ScopeKind;
+import com.parallaxpilot.leaderboard.repository.ProjectionQueueRepository;
 import com.parallaxpilot.leaderboard.service.LeaderboardService;
 import com.parallaxpilot.leaderboard.support.LocalStackIntegrationSupport;
 
@@ -42,6 +45,9 @@ class LeaderboardIntegrationTest extends LocalStackIntegrationSupport {
 
     @Autowired
     private LeaderboardService leaderboardService;
+
+    @Autowired
+    private ProjectionQueueRepository projectionQueueRepository;
 
     @BeforeAll
     static void bootstrap() {
@@ -157,6 +163,58 @@ class LeaderboardIntegrationTest extends LocalStackIntegrationSupport {
             .andExpect(jsonPath("$.bestScores.global.score").value(2600))
             .andExpect(jsonPath("$.bestScores.daily.score").value(2600))
             .andExpect(jsonPath("$.bestScores.seasonal.score").value(2600));
+    }
+
+    @Test
+    void staleProjectionTaskDoesNotReintroduceOldLeaderboardEntry() throws Exception {
+        var first = new SubmitScoreRequest(
+            "sub-stale-1",
+            "player-stale",
+            "Stale",
+            1800,
+            12000,
+            Instant.parse("2026-04-09T14:00:00Z"),
+            "2.4.3",
+            "balance-2"
+        );
+        var better = new SubmitScoreRequest(
+            "sub-stale-2",
+            "player-stale",
+            "Stale",
+            2600,
+            18000,
+            Instant.parse("2026-04-09T14:05:00Z"),
+            "2.4.3",
+            "balance-2"
+        );
+
+        mockMvc.perform(post("/v1/scores:submit").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsBytes(first)))
+            .andExpect(status().isAccepted());
+        mockMvc.perform(post("/v1/scores:submit").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsBytes(better)))
+            .andExpect(status().isAccepted());
+        mockMvc.perform(post("/v1/admin/projections:drain"))
+            .andExpect(status().isOk());
+
+        projectionQueueRepository.publish(new ProjectionTask(
+            "stale-task",
+            "player-stale",
+            "Stale",
+            ScopeKind.GLOBAL,
+            "global",
+            1800,
+            12000,
+            Instant.parse("2026-04-09T14:00:00Z")
+        ));
+
+        mockMvc.perform(post("/v1/admin/projections:drain"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.processedMessages").value(1));
+
+        mockMvc.perform(get("/v1/leaderboards/global"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.entries[0].playerId").value("player-stale"))
+            .andExpect(jsonPath("$.entries[0].score").value(2600))
+            .andExpect(jsonPath("$.totalPlayers").value(1));
     }
 
     @Test
@@ -288,5 +346,82 @@ class LeaderboardIntegrationTest extends LocalStackIntegrationSupport {
         } finally {
             executor.shutdownNow();
         }
+    }
+
+    @Test
+    void rateLimitUsesServerTimeNotClientPlayedAtBuckets() throws Exception {
+        for (int index = 0; index < 24; index += 1) {
+            var request = new SubmitScoreRequest(
+                "sub-rate-" + index,
+                "player-rate",
+                "Rate",
+                1000 + index,
+                10000,
+                Instant.parse("2026-04-09T10:" + String.format("%02d", index % 60) + ":00Z"),
+                "2.4.3",
+                "balance-2"
+            );
+
+            mockMvc.perform(post("/v1/scores:submit")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(request)))
+                .andExpect(status().isAccepted());
+        }
+
+        var throttledRequest = new SubmitScoreRequest(
+            "sub-rate-final",
+            "player-rate",
+            "Rate",
+            2000,
+            10000,
+            Instant.parse("2025-01-01T00:00:00Z"),
+            "2.4.3",
+            "balance-2"
+        );
+
+        mockMvc.perform(post("/v1/scores:submit")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsBytes(throttledRequest)))
+            .andExpect(status().isAccepted())
+            .andExpect(jsonPath("$.quarantined").value(true))
+            .andExpect(jsonPath("$.riskReasons[0]").value("rate-limit"));
+    }
+
+    @Test
+    void rebuildPurgesQueueBeforeRepublishing() throws Exception {
+        var current = new SubmitScoreRequest(
+            "sub-replay-current",
+            "player-replay",
+            "Replay",
+            5000,
+            25000,
+            Instant.parse("2026-04-09T19:00:00Z"),
+            "2.4.3",
+            "balance-2"
+        );
+
+        mockMvc.perform(post("/v1/scores:submit")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsBytes(current)))
+            .andExpect(status().isAccepted());
+
+        projectionQueueRepository.publish(new ProjectionTask(
+            "old-replay-task",
+            "player-replay",
+            "Replay",
+            ScopeKind.GLOBAL,
+            "global",
+            1500,
+            9000,
+            Instant.parse("2026-04-09T18:00:00Z")
+        ));
+
+        mockMvc.perform(post("/v1/admin/projections:rebuild"))
+            .andExpect(status().isOk());
+
+        mockMvc.perform(get("/v1/leaderboards/global"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.entries[0].playerId").value("player-replay"))
+            .andExpect(jsonPath("$.entries[0].score").value(5000));
     }
 }

@@ -13,6 +13,7 @@ import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.DeleteMessageBatchRequest;
 import software.amazon.awssdk.services.sqs.model.DeleteMessageBatchRequestEntry;
 import software.amazon.awssdk.services.sqs.model.Message;
+import software.amazon.awssdk.services.sqs.model.PurgeQueueInProgressException;
 import software.amazon.awssdk.services.sqs.model.ReceiveMessageRequest;
 import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
 
@@ -69,6 +70,14 @@ public class ProjectionQueueRepository {
             .queueUrl(queueUrl())
             .entries(entries)
             .build());
+    }
+
+    public void purge() {
+        try {
+            sqsClient.purgeQueue(builder -> builder.queueUrl(queueUrl()));
+        } catch (PurgeQueueInProgressException ignored) {
+            // SQS allows only one purge per short interval; existing queue state is already being reset.
+        }
     }
 
     private String queueUrl() {

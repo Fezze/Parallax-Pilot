@@ -20,6 +20,7 @@ app:
     quarantine-survived-ms: 7200000
     max-leaderboard-scan: 2000
     consumer-fixed-delay-ms: 5000
+    rebuild-lock-ttl-minutes: 15
 
 aws:
   region: eu-west-2

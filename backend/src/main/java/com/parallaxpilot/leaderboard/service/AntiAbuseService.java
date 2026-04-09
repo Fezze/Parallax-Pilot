@@ -8,8 +8,10 @@ import org.springframework.stereotype.Service;
 
 import com.parallaxpilot.leaderboard.api.dto.SubmitScoreRequest;
 import com.parallaxpilot.leaderboard.config.LeaderboardProperties;
+import com.parallaxpilot.leaderboard.domain.RiskSignals;
 import com.parallaxpilot.leaderboard.domain.RiskSignalRecord;
 import com.parallaxpilot.leaderboard.repository.DynamoDbJsonRepository;
+import com.parallaxpilot.leaderboard.repository.LeaderboardTables;
 import com.parallaxpilot.leaderboard.repository.RateLimitRepository;
 
 @Service
@@ -31,20 +33,20 @@ public class AntiAbuseService {
 
     public Assessment assess(SubmitScoreRequest request) {
         var reasons = new ArrayList<String>();
-        var currentWindowCount = rateLimitRepository.incrementPlayerWindow(request.playerId(), request.playedAt());
+        var currentWindowCount = rateLimitRepository.incrementPlayerWindow(request.playerId(), Instant.now());
 
         if (currentWindowCount > properties.rateLimitPerMinute()) {
-            reasons.add("rate-limit");
+            reasons.add(RiskSignals.RATE_LIMIT);
         }
         if (request.score() > properties.quarantineScoreThreshold()) {
-            reasons.add("score-outlier");
+            reasons.add(RiskSignals.SCORE_OUTLIER);
         }
         if (request.survivedMs() > properties.quarantineSurvivedMs()) {
-            reasons.add("survival-outlier");
+            reasons.add(RiskSignals.SURVIVAL_OUTLIER);
         }
 
         var quarantined = !reasons.isEmpty();
-        persistSignals(request.submissionId(), request.playerId(), reasons, quarantined, request.playedAt());
+        persistSignals(request.submissionId(), request.playerId(), reasons, quarantined, Instant.now());
         return new Assessment(quarantined, List.copyOf(reasons));
     }
 
@@ -60,11 +62,11 @@ public class AntiAbuseService {
                 submissionId,
                 playerId,
                 reason,
-                quarantined ? "high" : "medium",
+                quarantined ? RiskSignals.SEVERITY_HIGH : RiskSignals.SEVERITY_MEDIUM,
                 quarantined,
                 createdAt
             );
-            repository.put("risk_signals", submissionId, reason, signal);
+            repository.put(LeaderboardTables.RISK_SIGNALS, submissionId, reason, signal);
         }
     }
 

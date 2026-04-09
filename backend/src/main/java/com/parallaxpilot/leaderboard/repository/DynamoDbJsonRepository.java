@@ -37,9 +37,9 @@ public class DynamoDbJsonRepository {
 
     public <T> void put(String tableSuffix, String pk, String sk, T payload) {
         var item = new HashMap<String, AttributeValue>();
-        item.put("pk", AttributeValue.fromS(pk));
-        item.put("sk", AttributeValue.fromS(sk));
-        item.put("payload", AttributeValue.fromS(writeJson(payload)));
+        item.put(DynamoDbAttributes.PK, AttributeValue.fromS(pk));
+        item.put(DynamoDbAttributes.SK, AttributeValue.fromS(sk));
+        item.put(DynamoDbAttributes.PAYLOAD, AttributeValue.fromS(writeJson(payload)));
 
         dynamoDbClient.putItem(PutItemRequest.builder()
             .tableName(tableName(tableSuffix))
@@ -51,8 +51,8 @@ public class DynamoDbJsonRepository {
         var response = dynamoDbClient.getItem(GetItemRequest.builder()
             .tableName(tableName(tableSuffix))
             .key(Map.of(
-                "pk", AttributeValue.fromS(pk),
-                "sk", AttributeValue.fromS(sk)
+                DynamoDbAttributes.PK, AttributeValue.fromS(pk),
+                DynamoDbAttributes.SK, AttributeValue.fromS(sk)
             ))
             .build());
 
@@ -60,52 +60,69 @@ public class DynamoDbJsonRepository {
             return Optional.empty();
         }
 
-        return Optional.of(readJson(response.item().get("payload").s(), type));
+        return Optional.of(readJson(response.item().get(DynamoDbAttributes.PAYLOAD).s(), type));
     }
 
     public <T> List<T> queryByPartitionKey(String tableSuffix, String pk, Class<T> type, int limit) {
         var response = dynamoDbClient.query(QueryRequest.builder()
             .tableName(tableName(tableSuffix))
-            .keyConditionExpression("pk = :pk")
+            .keyConditionExpression(DynamoDbAttributes.PK + " = :pk")
             .expressionAttributeValues(Map.of(":pk", AttributeValue.fromS(pk)))
             .limit(limit)
             .scanIndexForward(true)
             .build());
 
         return response.items().stream()
-            .map(item -> readJson(item.get("payload").s(), type))
+            .map(item -> readJson(item.get(DynamoDbAttributes.PAYLOAD).s(), type))
             .toList();
     }
 
     public <T> List<T> scanAll(String tableSuffix, Class<T> type) {
-        var response = dynamoDbClient.scan(ScanRequest.builder()
-            .tableName(tableName(tableSuffix))
-            .build());
+        var items = new java.util.ArrayList<T>();
+        Map<String, AttributeValue> lastEvaluatedKey = null;
 
-        return response.items().stream()
-            .map(item -> readJson(item.get("payload").s(), type))
-            .toList();
+        do {
+            var request = ScanRequest.builder().tableName(tableName(tableSuffix));
+            if (lastEvaluatedKey != null && !lastEvaluatedKey.isEmpty()) {
+                request.exclusiveStartKey(lastEvaluatedKey);
+            }
+
+            var response = dynamoDbClient.scan(request.build());
+            items.addAll(response.items().stream()
+                .map(item -> readJson(item.get(DynamoDbAttributes.PAYLOAD).s(), type))
+                .toList());
+            lastEvaluatedKey = response.lastEvaluatedKey();
+        } while (lastEvaluatedKey != null && !lastEvaluatedKey.isEmpty());
+
+        return items;
     }
 
     public void delete(String tableSuffix, String pk, String sk) {
         dynamoDbClient.deleteItem(DeleteItemRequest.builder()
             .tableName(tableName(tableSuffix))
             .key(Map.of(
-                "pk", AttributeValue.fromS(pk),
-                "sk", AttributeValue.fromS(sk)
+                DynamoDbAttributes.PK, AttributeValue.fromS(pk),
+                DynamoDbAttributes.SK, AttributeValue.fromS(sk)
             ))
             .build());
     }
 
     public void clearTable(String tableSuffix) {
-        var response = dynamoDbClient.scan(ScanRequest.builder()
-            .tableName(tableName(tableSuffix))
-            .attributesToGet("pk", "sk")
-            .build());
+        Map<String, AttributeValue> lastEvaluatedKey = null;
+        do {
+            var request = ScanRequest.builder()
+                .tableName(tableName(tableSuffix))
+                .attributesToGet(DynamoDbAttributes.PK, DynamoDbAttributes.SK);
+            if (lastEvaluatedKey != null && !lastEvaluatedKey.isEmpty()) {
+                request.exclusiveStartKey(lastEvaluatedKey);
+            }
 
-        for (var item : response.items()) {
-            delete(tableSuffix, item.get("pk").s(), item.get("sk").s());
-        }
+            var response = dynamoDbClient.scan(request.build());
+            for (var item : response.items()) {
+                delete(tableSuffix, item.get(DynamoDbAttributes.PK).s(), item.get(DynamoDbAttributes.SK).s());
+            }
+            lastEvaluatedKey = response.lastEvaluatedKey();
+        } while (lastEvaluatedKey != null && !lastEvaluatedKey.isEmpty());
     }
 
     private String tableName(String suffix) {

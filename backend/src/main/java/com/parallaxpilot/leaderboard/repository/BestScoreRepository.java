@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 
 import com.parallaxpilot.leaderboard.config.LeaderboardProperties;
 import com.parallaxpilot.leaderboard.domain.BestScoreRecord;
+import com.parallaxpilot.leaderboard.domain.LeaderboardKeys;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
@@ -33,26 +34,26 @@ public class BestScoreRepository {
 
     public boolean putIfBetter(BestScoreRecord record) {
         var item = new HashMap<String, AttributeValue>();
-        item.put("pk", AttributeValue.fromS(record.playerId()));
-        item.put("sk", AttributeValue.fromS(record.scopeKind().name() + "#" + record.scopeKey()));
-        item.put("payload", AttributeValue.fromS(writeJson(record)));
-        item.put("score", AttributeValue.fromN(Integer.toString(record.score())));
-        item.put("survivedMs", AttributeValue.fromN(Long.toString(record.survivedMs())));
-        item.put("playedAt", AttributeValue.fromS(record.playedAt().toString()));
+        item.put(DynamoDbAttributes.PK, AttributeValue.fromS(record.playerId()));
+        item.put(DynamoDbAttributes.SK, AttributeValue.fromS(LeaderboardKeys.scopePartitionKey(record.scopeKind(), record.scopeKey())));
+        item.put(DynamoDbAttributes.PAYLOAD, AttributeValue.fromS(writeJson(record)));
+        item.put(DynamoDbAttributes.SCORE, AttributeValue.fromN(Integer.toString(record.score())));
+        item.put(DynamoDbAttributes.SURVIVED_MS, AttributeValue.fromN(Long.toString(record.survivedMs())));
+        item.put(DynamoDbAttributes.PLAYED_AT, AttributeValue.fromS(record.playedAt().toString()));
 
         try {
             dynamoDbClient.putItem(PutItemRequest.builder()
-                .tableName(properties.tablePrefix() + "best_scores")
+                .tableName(properties.tablePrefix() + LeaderboardTables.BEST_SCORES)
                 .item(item)
                 .conditionExpression(
-                    "attribute_not_exists(pk) OR #score < :score OR "
+                    "attribute_not_exists(" + DynamoDbAttributes.PK + ") OR #score < :score OR "
                         + "(#score = :score AND #survivedMs < :survivedMs) OR "
                         + "(#score = :score AND #survivedMs = :survivedMs AND #playedAt > :playedAt)"
                 )
                 .expressionAttributeNames(Map.of(
-                    "#score", "score",
-                    "#survivedMs", "survivedMs",
-                    "#playedAt", "playedAt"
+                    "#score", DynamoDbAttributes.SCORE,
+                    "#survivedMs", DynamoDbAttributes.SURVIVED_MS,
+                    "#playedAt", DynamoDbAttributes.PLAYED_AT
                 ))
                 .expressionAttributeValues(Map.of(
                     ":score", AttributeValue.fromN(Integer.toString(record.score())),

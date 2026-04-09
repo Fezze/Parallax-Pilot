@@ -7,6 +7,7 @@ import java.util.Map;
 import org.springframework.stereotype.Component;
 
 import com.parallaxpilot.leaderboard.config.LeaderboardProperties;
+import com.parallaxpilot.leaderboard.domain.LeaderboardKeys;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.ReturnValue;
@@ -28,15 +29,15 @@ public class RateLimitRepository {
         var expiresAt = playedAt.plus(5, ChronoUnit.MINUTES).getEpochSecond();
 
         var response = dynamoDbClient.updateItem(UpdateItemRequest.builder()
-            .tableName(properties.tablePrefix() + "abuse_counters")
+            .tableName(properties.tablePrefix() + LeaderboardTables.ABUSE_COUNTERS)
             .key(Map.of(
-                "pk", AttributeValue.fromS("player#" + playerId),
-                "sk", AttributeValue.fromS(minuteWindow)
+                DynamoDbAttributes.PK, AttributeValue.fromS(LeaderboardKeys.playerRateLimitPartition(playerId)),
+                DynamoDbAttributes.SK, AttributeValue.fromS(minuteWindow)
             ))
             .updateExpression("ADD #count :one SET #expiresAt = :expiresAt")
             .expressionAttributeNames(Map.of(
-                "#count", "count",
-                "#expiresAt", "expiresAt"
+                "#count", DynamoDbAttributes.COUNT,
+                "#expiresAt", DynamoDbAttributes.EXPIRES_AT
             ))
             .expressionAttributeValues(Map.of(
                 ":one", AttributeValue.fromN("1"),
@@ -45,6 +46,6 @@ public class RateLimitRepository {
             .returnValues(ReturnValue.UPDATED_NEW)
             .build());
 
-        return Integer.parseInt(response.attributes().get("count").n());
+        return Integer.parseInt(response.attributes().get(DynamoDbAttributes.COUNT).n());
     }
 }

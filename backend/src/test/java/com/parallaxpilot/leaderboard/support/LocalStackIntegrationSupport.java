@@ -50,10 +50,12 @@ public abstract class LocalStackIntegrationSupport {
         createTableIfMissing("pp_score_submissions");
         createTableIfMissing("pp_best_scores");
         createTableIfMissing("pp_leaderboard_entries");
+        createTableIfMissing("pp_projection_index");
         createTableIfMissing("pp_idempotency");
         createTableIfMissing("pp_risk_signals");
         createTableIfMissing("pp_season_metadata");
         createTableIfMissing("pp_abuse_counters");
+        createTableIfMissing("pp_admin_state");
         createQueueIfMissing("pp_score-submissions");
         createBucketIfMissing("pp-leaderboard-snapshots");
     }
@@ -62,10 +64,12 @@ public abstract class LocalStackIntegrationSupport {
         clearTable("pp_score_submissions");
         clearTable("pp_best_scores");
         clearTable("pp_leaderboard_entries");
+        clearTable("pp_projection_index");
         clearTable("pp_idempotency");
         clearTable("pp_risk_signals");
         clearTable("pp_season_metadata");
         clearTable("pp_abuse_counters");
+        clearTable("pp_admin_state");
         purgeQueue("pp_score-submissions");
     }
 

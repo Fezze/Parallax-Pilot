@@ -7,6 +7,7 @@ import java.util.Map;
 import org.springframework.stereotype.Component;
 
 import com.parallaxpilot.leaderboard.config.LeaderboardProperties;
+import com.parallaxpilot.leaderboard.domain.LeaderboardKeys;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
@@ -28,14 +29,14 @@ public class IdempotencyRepository {
 
         try {
             dynamoDbClient.putItem(PutItemRequest.builder()
-                .tableName(properties.tablePrefix() + "idempotency")
+                .tableName(properties.tablePrefix() + LeaderboardTables.IDEMPOTENCY)
                 .item(Map.of(
-                    "pk", AttributeValue.fromS("submission"),
-                    "sk", AttributeValue.fromS(submissionId),
-                    "createdAt", AttributeValue.fromS(createdAt.toString()),
-                    "expiresAt", AttributeValue.fromN(Long.toString(expiresAt))
+                    DynamoDbAttributes.PK, AttributeValue.fromS(LeaderboardKeys.SUBMISSION_PARTITION),
+                    DynamoDbAttributes.SK, AttributeValue.fromS(submissionId),
+                    DynamoDbAttributes.CREATED_AT, AttributeValue.fromS(createdAt.toString()),
+                    DynamoDbAttributes.EXPIRES_AT, AttributeValue.fromN(Long.toString(expiresAt))
                 ))
-                .conditionExpression("attribute_not_exists(pk)")
+                .conditionExpression("attribute_not_exists(" + DynamoDbAttributes.PK + ")")
                 .build());
             return true;
         } catch (ConditionalCheckFailedException error) {

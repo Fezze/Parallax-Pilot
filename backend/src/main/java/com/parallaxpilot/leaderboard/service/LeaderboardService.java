@@ -8,6 +8,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.parallaxpilot.leaderboard.api.dto.AdminDrainResponse;
 import com.parallaxpilot.leaderboard.api.dto.AdminReplayResponse;
@@ -21,8 +23,10 @@ import com.parallaxpilot.leaderboard.api.dto.SubmitScoreRequest;
 import com.parallaxpilot.leaderboard.api.dto.SubmitScoreResponse;
 import com.parallaxpilot.leaderboard.config.LeaderboardProperties;
 import com.parallaxpilot.leaderboard.domain.BestScoreRecord;
+import com.parallaxpilot.leaderboard.domain.LeaderboardKeys;
 import com.parallaxpilot.leaderboard.domain.LeaderboardEntry;
 import com.parallaxpilot.leaderboard.domain.ProjectionTask;
+import com.parallaxpilot.leaderboard.domain.RankingBands;
 import com.parallaxpilot.leaderboard.domain.ScopeKind;
 import com.parallaxpilot.leaderboard.domain.ScopeKey;
 import com.parallaxpilot.leaderboard.domain.ScopeResolver;
@@ -30,10 +34,14 @@ import com.parallaxpilot.leaderboard.domain.ScoreSubmission;
 import com.parallaxpilot.leaderboard.repository.BestScoreRepository;
 import com.parallaxpilot.leaderboard.repository.DynamoDbJsonRepository;
 import com.parallaxpilot.leaderboard.repository.IdempotencyRepository;
+import com.parallaxpilot.leaderboard.repository.LeaderboardTables;
 import com.parallaxpilot.leaderboard.repository.ProjectionQueueRepository;
+import com.parallaxpilot.leaderboard.repository.RebuildLockRepository;
 
 @Service
 public class LeaderboardService {
+    private static final String REBUILD_IN_PROGRESS = "Leaderboard rebuild in progress";
+    private static final String REBUILD_ALREADY_IN_PROGRESS = "Leaderboard rebuild already in progress";
 
     private static final Comparator<LeaderboardEntry> LEADERBOARD_ORDER = Comparator
         .comparingInt(LeaderboardEntry::score).reversed()
@@ -48,6 +56,7 @@ public class LeaderboardService {
     private final ScopeResolver scopeResolver;
     private final AntiAbuseService antiAbuseService;
     private final SeasonService seasonService;
+    private final RebuildLockRepository rebuildLockRepository;
     private final LeaderboardProperties properties;
 
     public LeaderboardService(
@@ -59,6 +68,7 @@ public class LeaderboardService {
         ScopeResolver scopeResolver,
         AntiAbuseService antiAbuseService,
         SeasonService seasonService,
+        RebuildLockRepository rebuildLockRepository,
         LeaderboardProperties properties
     ) {
         this.repository = repository;
@@ -69,10 +79,14 @@ public class LeaderboardService {
         this.scopeResolver = scopeResolver;
         this.antiAbuseService = antiAbuseService;
         this.seasonService = seasonService;
+        this.rebuildLockRepository = rebuildLockRepository;
         this.properties = properties;
     }
 
     public SubmitScoreResponse submitScore(SubmitScoreRequest request) {
+        if (rebuildLockRepository.isActive()) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, REBUILD_IN_PROGRESS);
+        }
         if (!idempotencyRepository.acquire(request.submissionId(), request.playedAt())) {
             return new SubmitScoreResponse(
                 true,
@@ -99,7 +113,7 @@ public class LeaderboardService {
             assessment.quarantined(),
             assessment.reasons()
         );
-        repository.put("score_submissions", "submission", request.submissionId(), submission);
+        repository.put(LeaderboardTables.SCORE_SUBMISSIONS, LeaderboardKeys.SUBMISSION_PARTITION, request.submissionId(), submission);
 
         if (assessment.quarantined()) {
             return new SubmitScoreResponse(
@@ -184,9 +198,9 @@ public class LeaderboardService {
         for (var scopeKind : ScopeKind.values()) {
             var scopeKey = activeScopeKey(scopeKind);
             repository
-                .get("best_scores", playerId, scopeKind.name() + "#" + scopeKey, BestScoreRecord.class)
+                .get(LeaderboardTables.BEST_SCORES, playerId, LeaderboardKeys.scopePartitionKey(scopeKind, scopeKey), BestScoreRecord.class)
                 .ifPresent(best -> bestScores.put(
-                    scopeKind.name().toLowerCase(),
+                    scopeKind.apiValue(),
                     new PlayerBestScoresResponse.ScoreView(
                         best.score(),
                         best.survivedMs(),
@@ -199,8 +213,7 @@ public class LeaderboardService {
     }
 
     public RankClassificationResponse classify(String playerId) {
-        for (var scope : List.of("global", "daily", "seasonal")) {
-            var scopeKind = scopeKind(scope);
+        for (var scopeKind : ScopeKind.values()) {
             var scopeKey = activeScopeKey(scopeKind);
             var ranked = rankEntries(scopeKind, scopeKey);
             var playerIndex = indexOfPlayer(ranked, playerId);
@@ -208,19 +221,19 @@ public class LeaderboardService {
             if (playerIndex >= 0) {
                 var rank = playerIndex + 1;
                 if (rank <= properties.exactRankThreshold()) {
-                    return new RankClassificationResponse(playerId, rank, null, scope, ranked.size());
+                    return new RankClassificationResponse(playerId, rank, null, scopeKind.apiValue(), ranked.size());
                 }
                 return new RankClassificationResponse(
                     playerId,
                     null,
                     approximateBand(rank, ranked.size()),
-                    scope,
+                    scopeKind.apiValue(),
                     ranked.size()
                 );
             }
         }
 
-        return new RankClassificationResponse(playerId, null, "unranked", "global", 0);
+        return new RankClassificationResponse(playerId, null, RankingBands.UNRANKED, ScopeKind.GLOBAL.apiValue(), 0);
     }
 
     public AdminDrainResponse drainProjectionQueue() {
@@ -228,33 +241,27 @@ public class LeaderboardService {
     }
 
     public AdminReplayResponse rebuildProjections() {
-        var submissions = repository.scanAll("score_submissions", ScoreSubmission.class).stream()
+        if (!rebuildLockRepository.tryAcquire()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, REBUILD_ALREADY_IN_PROGRESS);
+        }
+        var submissions = repository.scanAll(LeaderboardTables.SCORE_SUBMISSIONS, ScoreSubmission.class).stream()
             .sorted(Comparator.comparing(ScoreSubmission::playedAt))
             .toList();
 
-        repository.clearTable("best_scores");
-        repository.clearTable("leaderboard_entries");
+        try {
+            repository.clearTable(LeaderboardTables.BEST_SCORES);
+            repository.clearTable(LeaderboardTables.LEADERBOARD_ENTRIES);
+            repository.clearTable(LeaderboardTables.PROJECTION_INDEX);
+            projectionQueueRepository.purge();
 
-        int bestUpdatesApplied = 0;
-        int projectionMessages = 0;
-        for (var submission : submissions) {
-            if (submission.quarantined()) {
-                continue;
-            }
-            for (var scope : scopeResolver.resolve(submission.playedAt())) {
-                var best = new BestScoreRecord(
-                    submission.playerId(),
-                    submission.nickname(),
-                    scope.scopeKind(),
-                    scope.scopeKey(),
-                    submission.score(),
-                    submission.survivedMs(),
-                    submission.playedAt()
-                );
-                if (bestScoreRepository.putIfBetter(best)) {
-                    bestUpdatesApplied += 1;
-                    projectionQueueRepository.publish(new ProjectionTask(
-                        submission.submissionId(),
+            int bestUpdatesApplied = 0;
+            int projectionMessages = 0;
+            for (var submission : submissions) {
+                if (submission.quarantined()) {
+                    continue;
+                }
+                for (var scope : scopeResolver.resolve(submission.playedAt())) {
+                    var best = new BestScoreRecord(
                         submission.playerId(),
                         submission.nickname(),
                         scope.scopeKind(),
@@ -262,14 +269,29 @@ public class LeaderboardService {
                         submission.score(),
                         submission.survivedMs(),
                         submission.playedAt()
-                    ));
-                    projectionMessages += 1;
+                    );
+                    if (bestScoreRepository.putIfBetter(best)) {
+                        bestUpdatesApplied += 1;
+                        projectionQueueRepository.publish(new ProjectionTask(
+                            submission.submissionId(),
+                            submission.playerId(),
+                            submission.nickname(),
+                            scope.scopeKind(),
+                            scope.scopeKey(),
+                            submission.score(),
+                            submission.survivedMs(),
+                            submission.playedAt()
+                        ));
+                        projectionMessages += 1;
+                    }
                 }
             }
-        }
 
-        projectionService.drainProjectionQueueFully();
-        return new AdminReplayResponse(submissions.size(), bestUpdatesApplied, projectionMessages);
+            projectionService.drainProjectionQueueFully();
+            return new AdminReplayResponse(submissions.size(), bestUpdatesApplied, projectionMessages);
+        } finally {
+            rebuildLockRepository.release();
+        }
     }
 
     public SeasonMetadataResponse getActiveSeason() {
@@ -280,7 +302,7 @@ public class LeaderboardService {
                     .filter(scope -> scope.scopeKind() == ScopeKind.SEASONAL)
                     .findFirst()
                     .map(ScopeKey::scopeKey)
-                    .orElse("seasonal");
+                    .orElse(ScopeKind.SEASONAL.apiValue());
                 return new com.parallaxpilot.leaderboard.domain.SeasonMetadataRecord(seasonKey, now, null, true);
             });
 
@@ -296,7 +318,7 @@ public class LeaderboardService {
         var entries = repository
             .queryByPartitionKey(
                 "leaderboard_entries",
-                scopeKind.name() + "#" + scopeKey,
+                LeaderboardKeys.scopePartitionKey(scopeKind, scopeKey),
                 LeaderboardEntry.class,
                 properties.maxLeaderboardScan()
             )
@@ -337,32 +359,27 @@ public class LeaderboardService {
 
     private String approximateBand(int rank, int totalPlayers) {
         if (totalPlayers <= 0) {
-            return "unranked";
+            return RankingBands.UNRANKED;
         }
 
         var percentile = (double) rank / totalPlayers;
         if (percentile <= 0.10d) {
-            return "top-10%";
+            return RankingBands.TOP_10;
         }
         if (percentile <= 0.25d) {
-            return "top-25%";
+            return RankingBands.TOP_25;
         }
         if (percentile <= 0.50d) {
-            return "top-50%";
+            return RankingBands.TOP_50;
         }
         if (percentile <= 0.75d) {
-            return "top-75%";
+            return RankingBands.TOP_75;
         }
-        return "bottom-25%";
+        return RankingBands.BOTTOM_25;
     }
 
     private ScopeKind scopeKind(String scope) {
-        return switch (scope.toLowerCase()) {
-            case "global" -> ScopeKind.GLOBAL;
-            case "daily" -> ScopeKind.DAILY;
-            case "seasonal" -> ScopeKind.SEASONAL;
-            default -> throw new IllegalArgumentException("Unsupported scope: " + scope);
-        };
+        return ScopeKind.fromApi(scope);
     }
 
     private String activeScopeKey(ScopeKind scopeKind) {

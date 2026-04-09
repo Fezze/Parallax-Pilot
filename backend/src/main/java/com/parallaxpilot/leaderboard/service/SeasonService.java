@@ -8,8 +8,10 @@ import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 
+import com.parallaxpilot.leaderboard.domain.LeaderboardKeys;
 import com.parallaxpilot.leaderboard.domain.SeasonMetadataRecord;
 import com.parallaxpilot.leaderboard.repository.DynamoDbJsonRepository;
+import com.parallaxpilot.leaderboard.repository.LeaderboardTables;
 
 @Service
 public class SeasonService {
@@ -27,18 +29,18 @@ public class SeasonService {
     }
 
     public Optional<SeasonMetadataRecord> getActiveSeason() {
-        return repository.scanAll("season_metadata", SeasonMetadataRecord.class).stream()
+        return repository.scanAll(LeaderboardTables.SEASON_METADATA, SeasonMetadataRecord.class).stream()
             .filter(SeasonMetadataRecord::active)
             .max(Comparator.comparing(SeasonMetadataRecord::startsAt));
     }
 
     public SeasonMetadataRecord cutover(String seasonKey, Instant startsAt) {
-        var all = repository.scanAll("season_metadata", SeasonMetadataRecord.class);
+        var all = repository.scanAll(LeaderboardTables.SEASON_METADATA, SeasonMetadataRecord.class);
         for (var season : all) {
             if (season.active()) {
                 repository.put(
-                    "season_metadata",
-                    "season",
+                    LeaderboardTables.SEASON_METADATA,
+                    LeaderboardKeys.SEASON_PARTITION,
                     season.seasonKey(),
                     new SeasonMetadataRecord(season.seasonKey(), season.startsAt(), startsAt, false)
                 );
@@ -46,12 +48,12 @@ public class SeasonService {
         }
 
         var next = new SeasonMetadataRecord(seasonKey, startsAt, null, true);
-        repository.put("season_metadata", "season", seasonKey, next);
+        repository.put(LeaderboardTables.SEASON_METADATA, LeaderboardKeys.SEASON_PARTITION, seasonKey, next);
         return next;
     }
 
     private Optional<SeasonMetadataRecord> findSeasonFor(Instant playedAt) {
-        return repository.scanAll("season_metadata", SeasonMetadataRecord.class).stream()
+        return repository.scanAll(LeaderboardTables.SEASON_METADATA, SeasonMetadataRecord.class).stream()
             .filter(season -> !playedAt.isBefore(season.startsAt()))
             .filter(season -> season.endsAt() == null || playedAt.isBefore(season.endsAt()))
             .max(Comparator.comparing(SeasonMetadataRecord::startsAt));
