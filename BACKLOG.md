@@ -2,9 +2,9 @@
 
 ## P1
 - Add a real watch-to-`Side Service` score transport; today the phone leaderboard exists, but watch submit is not wired end-to-end.
-- Replace current DynamoDB writes with conditional writes and a dedicated idempotency store because the current backend is still vulnerable to race conditions.
 - Move leaderboard projection updates out of the request path into an async SQS worker; the current shape does not match the target architecture and will not scale cleanly.
-- Add backend integration tests against LocalStack; today there is bootstrap plus web/domain tests only.
+- Extend conditional writes and dedupe beyond `best_scores`, especially for projection writes and replay safety.
+- Add concurrency tests against LocalStack for parallel submissions of the same player.
 - Add backend-only versioning and release rules so backend-only work does not bump the watch app version.
 
 ## P2

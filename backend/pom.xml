@@ -10,7 +10,7 @@
   </parent>
   <groupId>com.parallaxpilot</groupId>
   <artifactId>leaderboard-backend</artifactId>
-  <version>0.0.3-SNAPSHOT</version>
+  <version>0.0.4-SNAPSHOT</version>
   <name>leaderboard-backend</name>
   <description>Parallax Pilot leaderboard backend</description>
   <properties>

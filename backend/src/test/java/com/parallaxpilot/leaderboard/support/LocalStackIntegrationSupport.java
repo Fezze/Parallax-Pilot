@@ -46,6 +46,7 @@ public abstract class LocalStackIntegrationSupport {
         createTableIfMissing("pp_score_submissions");
         createTableIfMissing("pp_best_scores");
         createTableIfMissing("pp_leaderboard_entries");
+        createTableIfMissing("pp_idempotency");
         createQueueIfMissing("pp_score-submissions");
         createBucketIfMissing("pp-leaderboard-snapshots");
     }

@@ -95,4 +95,46 @@ class LeaderboardIntegrationTest extends LocalStackIntegrationSupport {
             .andExpect(jsonPath("$.duplicate").value(true))
             .andExpect(jsonPath("$.bestUpdated").value(false));
     }
+
+    @Test
+    void lowerScoreDoesNotReplaceExistingBestScore() throws Exception {
+        var betterRequest = new SubmitScoreRequest(
+            "sub-int-best-1",
+            "player-int-best",
+            "Nova",
+            2600,
+            21000,
+            Instant.parse("2026-04-09T14:00:00Z"),
+            "2.4.3",
+            "balance-2"
+        );
+        var worseRequest = new SubmitScoreRequest(
+            "sub-int-best-2",
+            "player-int-best",
+            "Nova",
+            1200,
+            10000,
+            Instant.parse("2026-04-09T14:05:00Z"),
+            "2.4.3",
+            "balance-2"
+        );
+
+        mockMvc.perform(post("/v1/scores:submit")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsBytes(betterRequest)))
+            .andExpect(status().isAccepted())
+            .andExpect(jsonPath("$.bestUpdated").value(true));
+
+        mockMvc.perform(post("/v1/scores:submit")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsBytes(worseRequest)))
+            .andExpect(status().isAccepted())
+            .andExpect(jsonPath("$.bestUpdated").value(false));
+
+        mockMvc.perform(get("/v1/players/player-int-best/best"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.bestScores.global.score").value(2600))
+            .andExpect(jsonPath("$.bestScores.daily.score").value(2600))
+            .andExpect(jsonPath("$.bestScores.seasonal.score").value(2600));
+    }
 }

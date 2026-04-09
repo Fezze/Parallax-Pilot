@@ -12,6 +12,7 @@ app:
   leaderboard:
     table-prefix: pp_
     exact-rank-threshold: 100
+    idempotency-ttl-days: 14
 
 aws:
   region: eu-west-2

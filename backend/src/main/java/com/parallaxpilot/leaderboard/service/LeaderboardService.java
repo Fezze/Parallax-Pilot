@@ -20,7 +20,9 @@ import com.parallaxpilot.leaderboard.domain.LeaderboardEntry;
 import com.parallaxpilot.leaderboard.domain.ScopeKind;
 import com.parallaxpilot.leaderboard.domain.ScopeResolver;
 import com.parallaxpilot.leaderboard.domain.ScoreSubmission;
+import com.parallaxpilot.leaderboard.repository.BestScoreRepository;
 import com.parallaxpilot.leaderboard.repository.DynamoDbJsonRepository;
+import com.parallaxpilot.leaderboard.repository.IdempotencyRepository;
 
 @Service
 public class LeaderboardService {
@@ -31,25 +33,27 @@ public class LeaderboardService {
         .thenComparing(LeaderboardEntry::playerId);
 
     private final DynamoDbJsonRepository repository;
+    private final BestScoreRepository bestScoreRepository;
+    private final IdempotencyRepository idempotencyRepository;
     private final ScopeResolver scopeResolver;
     private final LeaderboardProperties properties;
 
     public LeaderboardService(
         DynamoDbJsonRepository repository,
+        BestScoreRepository bestScoreRepository,
+        IdempotencyRepository idempotencyRepository,
         ScopeResolver scopeResolver,
         LeaderboardProperties properties
     ) {
         this.repository = repository;
+        this.bestScoreRepository = bestScoreRepository;
+        this.idempotencyRepository = idempotencyRepository;
         this.scopeResolver = scopeResolver;
         this.properties = properties;
     }
 
     public SubmitScoreResponse submitScore(SubmitScoreRequest request) {
-        var duplicate = repository
-            .get("score_submissions", "submission", request.submissionId(), ScoreSubmission.class)
-            .isPresent();
-
-        if (duplicate) {
+        if (!idempotencyRepository.acquire(request.submissionId(), request.playedAt())) {
             return new SubmitScoreResponse(true, true, false, classify(request.playerId()));
         }
 
@@ -67,29 +71,17 @@ public class LeaderboardService {
 
         boolean bestUpdated = false;
         for (var scope : scopeResolver.resolve(request.playedAt())) {
-            var existing = repository.get(
-                "best_scores",
+            var best = new BestScoreRecord(
                 request.playerId(),
-                scope.scopeKind().name() + "#" + scope.scopeKey(),
-                BestScoreRecord.class
+                request.nickname(),
+                scope.scopeKind(),
+                scope.scopeKey(),
+                request.score(),
+                request.survivedMs(),
+                request.playedAt()
             );
 
-            if (existing.isEmpty() || isBetter(submission, existing.get())) {
-                var best = new BestScoreRecord(
-                    request.playerId(),
-                    request.nickname(),
-                    scope.scopeKind(),
-                    scope.scopeKey(),
-                    request.score(),
-                    request.survivedMs(),
-                    request.playedAt()
-                );
-                repository.put(
-                    "best_scores",
-                    request.playerId(),
-                    scope.scopeKind().name() + "#" + scope.scopeKey(),
-                    best
-                );
+            if (bestScoreRepository.putIfBetter(best)) {
                 repository.put(
                     "leaderboard_entries",
                     scope.scopeKind().name() + "#" + scope.scopeKey(),
@@ -198,16 +190,6 @@ public class LeaderboardService {
             .findFirst()
             .map(com.parallaxpilot.leaderboard.domain.ScopeKey::scopeKey)
             .orElseThrow();
-    }
-
-    private boolean isBetter(ScoreSubmission submission, BestScoreRecord existing) {
-        if (submission.score() != existing.score()) {
-            return submission.score() > existing.score();
-        }
-        if (submission.survivedMs() != existing.survivedMs()) {
-            return submission.survivedMs() > existing.survivedMs();
-        }
-        return submission.playedAt().isBefore(existing.playedAt());
     }
 
     private String leaderboardSortKey(BestScoreRecord record) {

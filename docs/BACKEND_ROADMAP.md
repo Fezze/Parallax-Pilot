@@ -5,6 +5,10 @@ Addressed:
 - Spring Boot API scaffold
 - basic submit and leaderboard endpoints
 - LocalStack bootstrap for DynamoDB, SQS, and S3
+- backend integration tests with LocalStack
+- backend coverage reporting on `mvn verify`
+- dedicated idempotency table
+- conditional writes for `best_scores`
 - basic `global/daily/seasonal` scope model
 - Zepp `Side Service` and `Settings App`
 - screenshot coverage for the phone leaderboard screen
@@ -12,19 +16,18 @@ Addressed:
 Missing or partial:
 - no real async pipeline on SQS
 - no durable replay/rebuild from the event log
-- no dedicated idempotency table and no safe conditional writes
+- leaderboard projections are still updated synchronously in the request path
 - no rate limiting or anti-abuse
 - no production-grade observability
-- no backend integration tests with LocalStack
 - no seasonal cutover or reset jobs
 - no real watch -> phone submit contract
 - no CI/CD or deployment setup
 
 ## Roadmap
 ### Phase 1: Correctness baseline
-- Split the write path into `submission log -> best score update -> leaderboard projection`.
-- Replace current plain DynamoDB writes with conditional writes to avoid race conditions on concurrent submits.
-- Add a dedicated idempotency record keyed by `submissionId` with TTL and safe retry behavior.
+- Finish splitting the write path into `submission log -> best score update -> leaderboard projection`.
+- Extend conditional writes from `best_scores` to the remaining write path and add safer projection dedupe.
+- Harden the dedicated idempotency record keyed by `submissionId` with TTL lifecycle and replay semantics.
 - Replace the generic JSON repository shape with explicit source-of-truth and projection records.
 - Add request validation for score, time, and device metadata plus a consistent error model.
 
@@ -54,7 +57,7 @@ Missing or partial:
 - Add Micrometer metrics for submit latency, duplicate ratio, projection lag, and leaderboard read latency.
 - Add health/readiness checks and LocalStack smoke checks.
 - Add dashboards and alerts for queue backlog, projection failures, and suspicious traffic spikes.
-- Add LocalStack integration tests and concurrency tests for parallel submissions.
+- Add concurrency tests for parallel submissions and projection drift.
 
 ### Phase 6: Delivery
 - Add CI for backend tests, frontend tests, and screenshot validation.
