@@ -1,0 +1,28 @@
+spring:
+  application:
+    name: leaderboard-backend
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+app:
+  leaderboard:
+    table-prefix: pp_
+    exact-rank-threshold: 100
+
+aws:
+  region: eu-west-2
+  endpoint: ""
+
+---
+spring:
+  config:
+    activate:
+      on-profile: local
+
+aws:
+  region: eu-west-2
+  endpoint: http://localhost:4566

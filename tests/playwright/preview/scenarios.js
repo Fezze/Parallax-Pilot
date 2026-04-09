@@ -1,5 +1,11 @@
 const DEFAULT_LOCALE = 'en-US'
 const CONFIGURED_LOCALES = ['en-US', 'pl-PL']
+const PHONE_DEVICE = {
+  width: 390,
+  height: 844,
+  screenShape: 'phone',
+  resolution: '390x844',
+}
 
 const ROUND_480_DEVICE = {
   width: 480,
@@ -179,6 +185,7 @@ function createScenarioBase({
   pageModule,
   deviceInfo,
   localStorage,
+  settingsStorage = {},
   sessionStorage = {},
   initParams,
   expectedTexts = [],
@@ -195,12 +202,61 @@ function createScenarioBase({
     deviceInfo,
     resolution: deviceInfo.resolution || `${deviceInfo.width}x${deviceInfo.height}`,
     localStorage,
+    settingsStorage,
     sessionStorage,
     initParams,
     expectedTexts,
     forbiddenTexts,
     afterBuild,
   }
+}
+
+function createPhoneLeaderboardScenario({
+  locale,
+  variant,
+  scope,
+  expectedTexts,
+}) {
+  return createScenarioBase({
+    locale,
+    pageName: 'phone-leaderboard',
+    shape: 'phone',
+    variant,
+    pageModule: '/zepp-app/setting/index.js',
+    deviceInfo: PHONE_DEVICE,
+    expectedTexts,
+    settingsStorage: {
+      leaderboard_active_scope: scope,
+      leaderboard_api_base_url: 'http://localhost:8080',
+      leaderboard_player_id: 'demo-player',
+      leaderboard_last_sync_at: '2026-04-09T12:00:00Z',
+      leaderboard_player_best_cache: JSON.stringify({
+        playerId: 'demo-player',
+        bestScores: {
+          [scope]: {
+            score: 1420,
+            survivedMs: 18000,
+            playedAt: '2026-04-09T12:00:00Z',
+          },
+        },
+      }),
+      leaderboard_player_classification_cache: JSON.stringify({
+        playerId: 'demo-player',
+        exactRank: scope === 'global' ? 4 : null,
+        approximateBand: scope === 'global' ? null : 'top-10%',
+        scope,
+      }),
+      [`leaderboard_${scope}_cache`]: JSON.stringify({
+        scope,
+        scopeKey: scope === 'global' ? 'global' : scope === 'daily' ? '2026-04-09' : '2026-Q2',
+        entries: [
+          { playerId: 'pilot-1', nickname: 'Nova', score: 1820, survivedMs: 21000, rank: 1 },
+          { playerId: 'pilot-2', nickname: 'Comet', score: 1710, survivedMs: 19600, rank: 2 },
+          { playerId: 'demo-player', nickname: 'Pilot', score: 1420, survivedMs: 18000, rank: 4 },
+        ],
+      }),
+    },
+  })
 }
 
 function createHomeScenario({
@@ -631,5 +687,25 @@ function scenariosForDevice(locale, deviceFamily) {
 }
 
 export const previewScenarios = Object.fromEntries(
-  CONFIGURED_LOCALES.flatMap((locale) => DEVICE_FAMILIES.flatMap((deviceFamily) => scenariosForDevice(locale, deviceFamily)))
+  [
+    ...CONFIGURED_LOCALES.flatMap((locale) => DEVICE_FAMILIES.flatMap((deviceFamily) => scenariosForDevice(locale, deviceFamily))),
+    [
+      'phone-leaderboard-global-en-US',
+      createPhoneLeaderboardScenario({
+        locale: 'en-US',
+        variant: 'global',
+        scope: 'global',
+        expectedTexts: ['Leaderboard', 'Refresh leaderboard', 'Player: demo-player', 'Rank: 4 (Exact)', '01  Nova  1820'],
+      }),
+    ],
+    [
+      'phone-leaderboard-daily-pl-PL',
+      createPhoneLeaderboardScenario({
+        locale: 'pl-PL',
+        variant: 'daily',
+        scope: 'daily',
+        expectedTexts: ['Leaderboard', 'Odswiez leaderboard', 'Gracz: demo-player', 'Pozycja: top-10% (Przyblizona)', '01  Nova  1820'],
+      }),
+    ],
+  ]
 )
