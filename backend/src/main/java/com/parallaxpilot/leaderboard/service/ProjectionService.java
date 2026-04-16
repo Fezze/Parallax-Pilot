@@ -23,6 +23,7 @@ public class ProjectionService {
     private final DynamoDbJsonRepository repository;
     private final ProjectionIndexRepository projectionIndexRepository;
     private final ProjectionProcessedRepository projectionProcessedRepository;
+    private final LeaderboardEntryRepository leaderboardEntryRepository;
     private final RebuildLockRepository rebuildLockRepository;
 
     public ProjectionService(
@@ -30,12 +31,14 @@ public class ProjectionService {
         DynamoDbJsonRepository repository,
         ProjectionIndexRepository projectionIndexRepository,
         ProjectionProcessedRepository projectionProcessedRepository,
+        LeaderboardEntryRepository leaderboardEntryRepository,
         RebuildLockRepository rebuildLockRepository
     ) {
         this.projectionQueueRepository = projectionQueueRepository;
         this.repository = repository;
         this.projectionIndexRepository = projectionIndexRepository;
         this.projectionProcessedRepository = projectionProcessedRepository;
+        this.leaderboardEntryRepository = leaderboardEntryRepository;
         this.rebuildLockRepository = rebuildLockRepository;
     }
 
