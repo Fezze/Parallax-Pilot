@@ -45,6 +45,10 @@ public class ProjectionIndexRepository {
         repository.delete(LeaderboardTables.PROJECTION_INDEX, playerId, key(scopeKind, scopeKey));
     }
 
+    public void clearTable() {
+        repository.clearTable(LeaderboardTables.PROJECTION_INDEX);
+    }
+
     private String key(ScopeKind scopeKind, String scopeKey) {
         return LeaderboardKeys.scopePartitionKey(scopeKind, scopeKey);
     }

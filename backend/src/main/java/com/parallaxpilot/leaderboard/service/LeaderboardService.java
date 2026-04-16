@@ -254,14 +254,14 @@ public class LeaderboardService {
         if (!rebuildLockRepository.tryAcquire()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, REBUILD_ALREADY_IN_PROGRESS);
         }
-        var submissions = repository.scanAll(LeaderboardTables.SCORE_SUBMISSIONS, ScoreSubmission.class).stream()
+        var submissions = submissionRepository.scanAll().stream()
             .sorted(Comparator.comparing(ScoreSubmission::playedAt))
             .toList();
 
         try {
-            repository.clearTable(LeaderboardTables.BEST_SCORES);
-            repository.clearTable(LeaderboardTables.LEADERBOARD_ENTRIES);
-            repository.clearTable(LeaderboardTables.PROJECTION_INDEX);
+            bestScoreRepository.clearTable();
+            leaderboardEntryRepository.clearTable();        
+            projectionIndexRepository.clearTable();
             projectionQueueRepository.purge();
 
             int bestUpdatesApplied = 0;

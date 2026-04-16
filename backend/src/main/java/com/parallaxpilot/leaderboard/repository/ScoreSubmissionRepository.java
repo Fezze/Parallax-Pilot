@@ -10,6 +10,10 @@ import org.springframework.stereotype.Component;
 import com.parallaxpilot.leaderboard.config.LeaderboardProperties;
 import com.parallaxpilot.leaderboard.domain.ScoreSubmission;
 import com.parallaxpilot.leaderboard.domain.LeaderboardKeys;
+import software.amazon.awssdk.services.dynamodb.model.QueryRequest;
+import java.util.List;
+import java.util.ArrayList;
+import com.fasterxml.jackson.core.JsonProcessingException;
 
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
@@ -48,6 +52,30 @@ public class ScoreSubmissionRepository {
             return objectMapper.writeValueAsString(value);
         } catch (JsonProcessingException error) {
             throw new IllegalStateException("Failed to serialize score submission", error);
+        }
+    }
+
+    public List<ScoreSubmission> scanAll() {
+        var table = properties.tablePrefix() + LeaderboardTables.SCORE_SUBMISSIONS;
+        var response = dynamoDbClient.query(QueryRequest.builder()
+            .tableName(table)
+            .keyConditionExpression(DynamoDbAttributes.PK + " = :pk")
+            .expressionAttributeValues(Map.of(":pk", AttributeValue.fromS(LeaderboardKeys.SUBMISSION_PARTITION)))
+            .build());
+
+        var result = new ArrayList<ScoreSubmission>();
+        for (var item : response.items()) {
+            var payload = item.get(DynamoDbAttributes.PAYLOAD).s();
+            result.add(readJson(payload, ScoreSubmission.class));
+        }
+        return result;
+    }
+
+    private <T> T readJson(String value, Class<T> type) {
+        try {
+            return objectMapper.readValue(value, type);
+        } catch (JsonProcessingException error) {
+            throw new IllegalStateException("Failed to deserialize score submission", error);
         }
     }
 }

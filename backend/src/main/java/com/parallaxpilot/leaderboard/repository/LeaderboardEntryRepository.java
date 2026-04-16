@@ -15,7 +15,10 @@ import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
 import software.amazon.awssdk.services.dynamodb.model.DeleteItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
+import java.util.List;
+import java.util.ArrayList;
 
 @Component
 public class LeaderboardEntryRepository {
@@ -59,6 +62,20 @@ public class LeaderboardEntryRepository {
                 DynamoDbAttributes.SK, AttributeValue.fromS(sortKey)
             ))
             .build());
+    }
+
+    public void clearTable() {
+        var table = properties.tablePrefix() + LeaderboardTables.LEADERBOARD_ENTRIES;
+        var scan = dynamoDbClient.scan(ScanRequest.builder().tableName(table).build());
+        for (var item : scan.items()) {
+            dynamoDbClient.deleteItem(DeleteItemRequest.builder()
+                .tableName(table)
+                .key(Map.of(
+                    DynamoDbAttributes.PK, item.get(DynamoDbAttributes.PK),
+                    DynamoDbAttributes.SK, item.get(DynamoDbAttributes.SK)
+                ))
+                .build());
+        }
     }
 
     private String writeJson(Object value) {
