@@ -51,6 +51,7 @@ public abstract class LocalStackIntegrationSupport {
         createTableIfMissing("pp_best_scores");
         createTableIfMissing("pp_leaderboard_entries");
         createTableIfMissing("pp_projection_index");
+        createTableIfMissing("pp_projection_processed");
         createTableIfMissing("pp_idempotency");
         createTableIfMissing("pp_risk_signals");
         createTableIfMissing("pp_season_metadata");
@@ -65,6 +66,7 @@ public abstract class LocalStackIntegrationSupport {
         clearTable("pp_best_scores");
         clearTable("pp_leaderboard_entries");
         clearTable("pp_projection_index");
+        clearTable("pp_projection_processed");
         clearTable("pp_idempotency");
         clearTable("pp_risk_signals");
         clearTable("pp_season_metadata");
