@@ -9,47 +9,109 @@ Addressed:
 - backend coverage reporting on `mvn verify`
 - dedicated idempotency table
 - conditional writes for `best_scores`
+- async SQS-backed projection pipeline for `leaderboard_entries`
+- replay/rebuild from `score_submissions`
+- `around-me` leaderboard window
+- baseline approximate rank banding outside exact rank window
+- anti-abuse baseline with rate limit, risk log, and quarantine
+- seasonal metadata and manual cutover endpoint
+- concurrency tests for parallel submissions
 - basic `global/daily/seasonal` scope model
 - Zepp `Side Service` and `Settings App`
 - screenshot coverage for the phone leaderboard screen
 
 Missing or partial:
-- no real async pipeline on SQS
-- no durable replay/rebuild from the event log
-- leaderboard projections are still updated synchronously in the request path
-- no rate limiting or anti-abuse
+- no projection dedupe beyond best-score conditional writes
+- no separate worker deployment for projection processing
+- no S3 snapshot/export layer for recovery
+- no automated seasonal reset job
+- anti-abuse is only a baseline and does not include richer anomaly heuristics
 - no production-grade observability
-- no seasonal cutover or reset jobs
 - no real watch -> phone submit contract
 - no CI/CD or deployment setup
 
 ## Roadmap
 ### Phase 1: Correctness baseline
-- Finish splitting the write path into `submission log -> best score update -> leaderboard projection`.
 - Extend conditional writes from `best_scores` to the remaining write path and add safer projection dedupe.
 - Harden the dedicated idempotency record keyed by `submissionId` with TTL lifecycle and replay semantics.
 - Replace the generic JSON repository shape with explicit source-of-truth and projection records.
 - Add request validation for score, time, and device metadata plus a consistent error model.
 
+### Phase 1 — plan implementacji (zadania wykonawcze)
+
+Priorytet: wysoki — celem jest zapewnienie deterministycznej poprawności zapisów i odporności na duplikaty przed dalszym rozwojem asynchronicznym.
+
+Checklist (wykonawcze):
+- [ ] Walidacja żądań
+	- DTO: `ScoreSubmissionRequest` z JSR-303 (`@NotNull`, `@Min`/`@Max`, format czasu).
+	- Globalny handler błędów -> spójny model `ErrorResponse`.
+	- Unit + integracyjne testy walidacji.
+
+- [ ] Idempotency
+	- Schemat tabeli idempotency: `submissionId` (PK), `status`, `createdAt`, `ttl`.
+	- Repo + service: atomowy check-and-put (put-if-absent) oraz TTL lifecycle.
+	- Testy jednostkowe i integracyjne (konkurencyjne duplikaty).
+
+- [ ] Conditional writes: rozszerzenie
+	- Zastosować conditional writes dla wszystkich krytycznych zapisów (`leaderboard_entries`, `best_scores`, inne projekcje).
+	- Testy konkurencyjne i scenariusze wyścigów.
+
+- [ ] Projekcja — deduplikacja i worker
+	- Wyodrębnić logikę projekcji do dedykowanego worker'a (sketch + interface).
+	- Deduplikacja po `submissionId` (tablica processed / token dedupe).
+	- Replay-safe semantics (idempotent processing + replays możliwe bez podwójnych wpisów).
+	- Integracyjne testy replay + worker.
+
+- [ ] Zastąpienie generycznego JSON repo
+	- Zdefiniować explicite source-of-truth records i projection records (schematy, konwertery).
+	- Migracje / dokumentacja schematów.
+	- Testy serializacji i konwersji.
+
+- [ ] Testy i walidacja
+	- Integration tests z LocalStack (DynamoDB/SQS/S3) dla krytycznych flow.
+	- Concurrency tests (równoległe submity) w ramach `mvn verify`.
+	- Coverage reporting włączony na `mvn verify`.
+
+- [ ] Screenshoty / UI
+	- Jeśli dodawane są nowe ekrany/admin UI: dodać Playwright screenshot scenario dla każdego nowego ekranu.
+	- Screenshoty muszą pokrywać istniejącą matrycę locale/shape/resolution używaną w repo.
+
+Z kryteriami akceptacji:
+- Wszystkie powyższe zadania ukończone i oznaczone (checkboxy).
+- `mvn verify` (pełen build + integracyjne z LocalStack) przechodzi bez błędów.
+- Concurrency tests wykazują brak duplikatów / poprawną idempotencję.
+- Dla zmian UI: wygenerowane Playwright screenshoty sprawdzone i zaakceptowane (zgodność z matrycą).
+
+Kroki zamknięcia przy każdej zmianie:
+1. Uruchom: `mvn -DskipTests=false verify` (lokalnie z LocalStack).
+2. Jeśli build OK -> stwórz commit z opisem zakresu prac.
+3. Otwórz PR z checklistą testów i linkami do artefaktów (build/logi/screenshoty).
+
+Krótki harmonogram (orientacyjny):
+- Tydzień 1: walidacja żądań, globalny handler, podstawowy idempotency service + testy.
+- Tydzień 2: rozszerzenie conditional writes + concurrency tests.
+- Tydzień 3: worker dedupe + replay tests + integracje z LocalStack.
+- Tydzień 4: dokumentacja schematów, migracje, końcowe testy i commit.
+
+Uwagi operacyjne:
+- Zgodnie z regułami projektu: każda zmiana kodu kończy się uruchomieniem buildu i commitem; każda zmiana UI musi mieć Playwright screenshot coverage.
+- Trzymać matrycę screensize/locale/shape spójną z istniejącymi testami w repo.
+
 ### Phase 2: Async leaderboard processing
-- Move leaderboard projection updates out of the request path into an SQS consumer.
 - Keep append-only `score_submissions` as the only replay input.
-- Add projection workers for `best_scores` and `leaderboard_entries`.
-- Add a replay job that rebuilds projections from the submission log.
+- Extract projection processing into a dedicated worker deployment instead of in-process polling.
+- Add projection dedupe/drift protection for `leaderboard_entries`.
+- Harden replay flows with admin safety checks and rebuild observability.
 - Add S3 snapshot export for recovery and leaderboard drift debugging.
 
 ### Phase 3: Ranking quality
-- Implement exact rank only for the supported range and approximate banding outside it.
-- Add an `around-me` leaderboard window for the phone UI.
 - Finalize tie-break rules and stable rank behavior for ties.
-- Add season metadata and explicit cutover rules for `seasonal`.
 - Add safe daily and seasonal reset flow with atomic active-scope switching.
+- Add season rollover automation instead of manual cutover only.
 
 ### Phase 4: Abuse resistance
-- Add request throttling per player, device, and IP.
-- Add suspicious submission rules for outlier scores, impossible frequency, replay patterns, and version anomalies.
-- Add quarantine/flag flow instead of hard reject for some suspicious results.
-- Persist risk signals and suspicious reasons next to submissions.
+- Extend suspicious submission rules with replay patterns, version anomalies, and richer heuristics.
+- Add per-device/IP throttling in addition to current player-based throttling.
 - Add admin/debug tooling for submission inspection and rank divergence checks.
 
 ### Phase 5: Operability
@@ -57,7 +119,7 @@ Missing or partial:
 - Add Micrometer metrics for submit latency, duplicate ratio, projection lag, and leaderboard read latency.
 - Add health/readiness checks and LocalStack smoke checks.
 - Add dashboards and alerts for queue backlog, projection failures, and suspicious traffic spikes.
-- Add concurrency tests for parallel submissions and projection drift.
+- Extend concurrency tests to projection drift and queue replay edge cases.
 
 ### Phase 6: Delivery
 - Add CI for backend tests, frontend tests, and screenshot validation.

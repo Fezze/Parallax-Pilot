@@ -10,6 +10,7 @@ public final class DynamoDbAttributes {
     public static final String PLAYED_AT = "playedAt";
     public static final String CREATED_AT = "createdAt";
     public static final String EXPIRES_AT = "expiresAt";
+    public static final String STATUS = "status";
     public static final String COUNT = "count";
 
     private DynamoDbAttributes() {

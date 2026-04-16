@@ -2,16 +2,14 @@
 
 ## P1
 - Add a real watch-to-`Side Service` score transport; today the phone leaderboard exists, but watch submit is not wired end-to-end.
-- Move leaderboard projection updates out of the request path into an async SQS worker; the current shape does not match the target architecture and will not scale cleanly.
-- Extend conditional writes and dedupe beyond `best_scores`, especially for projection writes and replay safety.
-- Add concurrency tests against LocalStack for parallel submissions of the same player.
+- Add projection dedupe and stronger consistency guarantees for `leaderboard_entries`, especially for replay and queue redelivery safety.
+- Split projection processing into a dedicated worker runtime instead of in-process scheduled draining.
 - Add backend-only versioning and release rules so backend-only work does not bump the watch app version.
 
 ## P2
-- Add anti-abuse baseline: rate limiting, suspicious submission rules, risk log, and quarantine flow.
-- Add replay/rebuild tooling from `score_submissions` into `best_scores` and `leaderboard_entries`.
-- Add seasonal metadata and an explicit cutover job instead of deriving active seasonal behavior only from current time.
-- Add `around-me` endpoint and a stable approximate-rank model outside the exact top window.
+- Extend anti-abuse beyond the current baseline with IP/device throttling and richer anomaly rules.
+- Add automated seasonal rollover/reset jobs instead of manual cutover only.
+- Finalize rank stability and tie-break behavior for equal scores.
 - Add structured logs, metrics, and basic alerting/dashboarding for submits, duplicates, and projection lag.
 - Add Terraform for AWS infrastructure so environments are provisioned from code instead of ad hoc setup.
 - Add GitHub Actions delivery pipeline for backend build, test, artifact publish, and environment deploy flow on top of the existing app pipeline assumptions.

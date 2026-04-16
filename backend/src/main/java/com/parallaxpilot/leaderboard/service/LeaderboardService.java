@@ -115,6 +115,9 @@ public class LeaderboardService {
         );
         repository.put(LeaderboardTables.SCORE_SUBMISSIONS, LeaderboardKeys.SUBMISSION_PARTITION, request.submissionId(), submission);
 
+        // mark idempotency as completed for this submission (prevents reprocessing on replay)
+        idempotencyRepository.complete(request.submissionId());
+
         if (assessment.quarantined()) {
             return new SubmitScoreResponse(
                 true,
@@ -153,6 +156,9 @@ public class LeaderboardService {
                 bestUpdated = true;
             }
         }
+
+        // finalize idempotency after successful processing
+        idempotencyRepository.complete(request.submissionId());
 
         return new SubmitScoreResponse(
             true,

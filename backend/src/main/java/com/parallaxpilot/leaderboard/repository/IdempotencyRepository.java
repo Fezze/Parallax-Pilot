@@ -12,6 +12,7 @@ import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest;
 
 @Component
 public class IdempotencyRepository {
@@ -34,9 +35,29 @@ public class IdempotencyRepository {
                     DynamoDbAttributes.PK, AttributeValue.fromS(LeaderboardKeys.SUBMISSION_PARTITION),
                     DynamoDbAttributes.SK, AttributeValue.fromS(submissionId),
                     DynamoDbAttributes.CREATED_AT, AttributeValue.fromS(createdAt.toString()),
-                    DynamoDbAttributes.EXPIRES_AT, AttributeValue.fromN(Long.toString(expiresAt))
+                    DynamoDbAttributes.EXPIRES_AT, AttributeValue.fromN(Long.toString(expiresAt)),
+                    DynamoDbAttributes.STATUS, AttributeValue.fromS("ACQUIRED")
                 ))
                 .conditionExpression("attribute_not_exists(" + DynamoDbAttributes.PK + ")")
+                .build());
+            return true;
+        } catch (ConditionalCheckFailedException error) {
+            return false;
+        }
+    }
+
+    public boolean complete(String submissionId) {
+        try {
+            dynamoDbClient.updateItem(UpdateItemRequest.builder()
+                .tableName(properties.tablePrefix() + LeaderboardTables.IDEMPOTENCY)
+                .key(Map.of(
+                    DynamoDbAttributes.PK, AttributeValue.fromS(LeaderboardKeys.SUBMISSION_PARTITION),
+                    DynamoDbAttributes.SK, AttributeValue.fromS(submissionId)
+                ))
+                .updateExpression("SET #status = :completed")
+                .expressionAttributeNames(Map.of("#status", DynamoDbAttributes.STATUS))
+                .expressionAttributeValues(Map.of(":completed", AttributeValue.fromS("COMPLETED")))
+                .conditionExpression("attribute_exists(" + DynamoDbAttributes.PK + ")")
                 .build());
             return true;
         } catch (ConditionalCheckFailedException error) {
