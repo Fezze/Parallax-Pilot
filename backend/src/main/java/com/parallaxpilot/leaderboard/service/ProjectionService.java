@@ -10,7 +10,6 @@ import com.parallaxpilot.leaderboard.repository.BestScoreRepository;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import com.parallaxpilot.leaderboard.repository.DynamoDbJsonRepository;
 import com.parallaxpilot.leaderboard.repository.LeaderboardTables;
 import com.parallaxpilot.leaderboard.repository.ProjectionIndexRepository;      
 import com.parallaxpilot.leaderboard.repository.ProjectionQueueRepository;      
@@ -21,7 +20,6 @@ import com.parallaxpilot.leaderboard.repository.RebuildLockRepository;
 public class ProjectionService {
 
     private final ProjectionQueueRepository projectionQueueRepository;
-    private final DynamoDbJsonRepository repository;
     private final ProjectionIndexRepository projectionIndexRepository;
     private final ProjectionProcessedRepository projectionProcessedRepository;
     private final LeaderboardEntryRepository leaderboardEntryRepository;
@@ -30,7 +28,6 @@ public class ProjectionService {
 
     public ProjectionService(
         ProjectionQueueRepository projectionQueueRepository,
-        DynamoDbJsonRepository repository,
         ProjectionIndexRepository projectionIndexRepository,
         ProjectionProcessedRepository projectionProcessedRepository,
         LeaderboardEntryRepository leaderboardEntryRepository,
@@ -38,7 +35,6 @@ public class ProjectionService {
         RebuildLockRepository rebuildLockRepository
     ) {
         this.projectionQueueRepository = projectionQueueRepository;
-        this.repository = repository;
         this.projectionIndexRepository = projectionIndexRepository;
         this.projectionProcessedRepository = projectionProcessedRepository;
         this.leaderboardEntryRepository = leaderboardEntryRepository;
@@ -77,8 +73,7 @@ public class ProjectionService {
                 var currentIndex = projectionIndexRepository.get(payload.playerId(), payload.scopeKind(), payload.scopeKey());
 
                 if (currentIndex.isPresent() && !currentIndex.get().leaderboardSortKey().equals(newSortKey)) {
-                    repository.delete(
-                        LeaderboardTables.LEADERBOARD_ENTRIES,
+                    leaderboardEntryRepository.delete(
                         LeaderboardKeys.scopePartitionKey(payload.scopeKind(), payload.scopeKey()),
                         currentIndex.get().leaderboardSortKey()
                     );
@@ -95,8 +90,7 @@ public class ProjectionService {
                         payload.playedAt()
                     );
 
-                    boolean entryInserted = repository.putIfNotExists(
-                        LeaderboardTables.LEADERBOARD_ENTRIES,
+                    boolean entryInserted = leaderboardEntryRepository.putIfNotExists(
                         LeaderboardKeys.scopePartitionKey(payload.scopeKind(), payload.scopeKey()),
                         newSortKey,
                         entry
@@ -114,8 +108,7 @@ public class ProjectionService {
 
                         if (!indexSet) {
                             // rollback leaderboard entry to keep state consistent
-                            repository.delete(
-                                LeaderboardTables.LEADERBOARD_ENTRIES,
+                            leaderboardEntryRepository.delete(
                                 LeaderboardKeys.scopePartitionKey(payload.scopeKind(), payload.scopeKey()),
                                 newSortKey
                             );

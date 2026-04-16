@@ -10,7 +10,6 @@ import org.springframework.stereotype.Service;
 
 import com.parallaxpilot.leaderboard.domain.LeaderboardKeys;
 import com.parallaxpilot.leaderboard.domain.SeasonMetadataRecord;
-import com.parallaxpilot.leaderboard.repository.DynamoDbJsonRepository;
 import com.parallaxpilot.leaderboard.repository.SeasonMetadataRepository;
 import com.parallaxpilot.leaderboard.repository.LeaderboardTables;
 
@@ -49,7 +48,7 @@ public class SeasonService {
     }
 
     private Optional<SeasonMetadataRecord> findSeasonFor(Instant playedAt) {
-        return repository.scanAll(LeaderboardTables.SEASON_METADATA, SeasonMetadataRecord.class).stream()
+        return seasonRepository.findAll().stream()
             .filter(season -> !playedAt.isBefore(season.startsAt()))
             .filter(season -> season.endsAt() == null || playedAt.isBefore(season.endsAt()))
             .max(Comparator.comparing(SeasonMetadataRecord::startsAt));

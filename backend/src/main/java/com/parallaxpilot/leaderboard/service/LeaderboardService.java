@@ -32,7 +32,6 @@ import com.parallaxpilot.leaderboard.domain.ScopeKey;
 import com.parallaxpilot.leaderboard.domain.ScopeResolver;
 import com.parallaxpilot.leaderboard.domain.ScoreSubmission;
 import com.parallaxpilot.leaderboard.repository.BestScoreRepository;
-import com.parallaxpilot.leaderboard.repository.DynamoDbJsonRepository;
 import com.parallaxpilot.leaderboard.repository.ScoreSubmissionRepository;
 import com.parallaxpilot.leaderboard.repository.IdempotencyRepository;
 import com.parallaxpilot.leaderboard.repository.LeaderboardTables;
@@ -49,7 +48,6 @@ public class LeaderboardService {
         .thenComparing(LeaderboardEntry::playedAt)
         .thenComparing(LeaderboardEntry::playerId);
 
-    private final DynamoDbJsonRepository repository;
     private final BestScoreRepository bestScoreRepository;
     private final IdempotencyRepository idempotencyRepository;
     private final ProjectionQueueRepository projectionQueueRepository;
@@ -62,7 +60,6 @@ public class LeaderboardService {
     private final LeaderboardProperties properties;
 
     public LeaderboardService(
-        DynamoDbJsonRepository repository,
         BestScoreRepository bestScoreRepository,
         IdempotencyRepository idempotencyRepository,
         ProjectionQueueRepository projectionQueueRepository,
@@ -74,7 +71,6 @@ public class LeaderboardService {
         ScoreSubmissionRepository submissionRepository,
         LeaderboardProperties properties
     ) {
-        this.repository = repository;
         this.bestScoreRepository = bestScoreRepository;
         this.idempotencyRepository = idempotencyRepository;
         this.projectionQueueRepository = projectionQueueRepository;
