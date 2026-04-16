@@ -33,6 +33,7 @@ import com.parallaxpilot.leaderboard.domain.ScopeResolver;
 import com.parallaxpilot.leaderboard.domain.ScoreSubmission;
 import com.parallaxpilot.leaderboard.repository.BestScoreRepository;
 import com.parallaxpilot.leaderboard.repository.DynamoDbJsonRepository;
+import com.parallaxpilot.leaderboard.repository.ScoreSubmissionRepository;
 import com.parallaxpilot.leaderboard.repository.IdempotencyRepository;
 import com.parallaxpilot.leaderboard.repository.LeaderboardTables;
 import com.parallaxpilot.leaderboard.repository.ProjectionQueueRepository;
@@ -57,6 +58,7 @@ public class LeaderboardService {
     private final AntiAbuseService antiAbuseService;
     private final SeasonService seasonService;
     private final RebuildLockRepository rebuildLockRepository;
+    private final ScoreSubmissionRepository submissionRepository;
     private final LeaderboardProperties properties;
 
     public LeaderboardService(
@@ -69,6 +71,7 @@ public class LeaderboardService {
         AntiAbuseService antiAbuseService,
         SeasonService seasonService,
         RebuildLockRepository rebuildLockRepository,
+        ScoreSubmissionRepository submissionRepository,
         LeaderboardProperties properties
     ) {
         this.repository = repository;
@@ -80,6 +83,7 @@ public class LeaderboardService {
         this.antiAbuseService = antiAbuseService;
         this.seasonService = seasonService;
         this.rebuildLockRepository = rebuildLockRepository;
+        this.submissionRepository = submissionRepository;
         this.properties = properties;
     }
 
@@ -113,7 +117,7 @@ public class LeaderboardService {
             assessment.quarantined(),
             assessment.reasons()
         );
-        repository.put(LeaderboardTables.SCORE_SUBMISSIONS, LeaderboardKeys.SUBMISSION_PARTITION, request.submissionId(), submission);
+        submissionRepository.put(submission);
 
         // mark idempotency as completed for this submission (prevents reprocessing on replay)
         idempotencyRepository.complete(request.submissionId());
