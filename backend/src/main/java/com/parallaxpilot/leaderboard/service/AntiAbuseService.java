@@ -11,6 +11,7 @@ import com.parallaxpilot.leaderboard.config.LeaderboardProperties;
 import com.parallaxpilot.leaderboard.domain.RiskSignals;
 import com.parallaxpilot.leaderboard.domain.RiskSignalRecord;
 import com.parallaxpilot.leaderboard.repository.DynamoDbJsonRepository;
+import com.parallaxpilot.leaderboard.repository.RiskSignalRepository;
 import com.parallaxpilot.leaderboard.repository.LeaderboardTables;
 import com.parallaxpilot.leaderboard.repository.RateLimitRepository;
 
@@ -18,15 +19,18 @@ import com.parallaxpilot.leaderboard.repository.RateLimitRepository;
 public class AntiAbuseService {
 
     private final RateLimitRepository rateLimitRepository;
+    private final RiskSignalRepository riskSignalRepository;
     private final DynamoDbJsonRepository repository;
     private final LeaderboardProperties properties;
 
     public AntiAbuseService(
         RateLimitRepository rateLimitRepository,
+        RiskSignalRepository riskSignalRepository,
         DynamoDbJsonRepository repository,
         LeaderboardProperties properties
     ) {
         this.rateLimitRepository = rateLimitRepository;
+        this.riskSignalRepository = riskSignalRepository;
         this.repository = repository;
         this.properties = properties;
     }
@@ -66,7 +70,7 @@ public class AntiAbuseService {
                 quarantined,
                 createdAt
             );
-            repository.put(LeaderboardTables.RISK_SIGNALS, submissionId, reason, signal);
+            riskSignalRepository.put(signal);
         }
     }
 

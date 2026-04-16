@@ -11,15 +11,16 @@ import org.springframework.stereotype.Service;
 import com.parallaxpilot.leaderboard.domain.LeaderboardKeys;
 import com.parallaxpilot.leaderboard.domain.SeasonMetadataRecord;
 import com.parallaxpilot.leaderboard.repository.DynamoDbJsonRepository;
+import com.parallaxpilot.leaderboard.repository.SeasonMetadataRepository;
 import com.parallaxpilot.leaderboard.repository.LeaderboardTables;
 
 @Service
 public class SeasonService {
 
-    private final DynamoDbJsonRepository repository;
+    private final SeasonMetadataRepository seasonRepository;
 
-    public SeasonService(DynamoDbJsonRepository repository) {
-        this.repository = repository;
+    public SeasonService(SeasonMetadataRepository seasonRepository) {
+        this.seasonRepository = seasonRepository;
     }
 
     public String resolveSeasonKey(Instant playedAt) {
@@ -29,26 +30,21 @@ public class SeasonService {
     }
 
     public Optional<SeasonMetadataRecord> getActiveSeason() {
-        return repository.scanAll(LeaderboardTables.SEASON_METADATA, SeasonMetadataRecord.class).stream()
+        return seasonRepository.findAll().stream()
             .filter(SeasonMetadataRecord::active)
             .max(Comparator.comparing(SeasonMetadataRecord::startsAt));
     }
 
     public SeasonMetadataRecord cutover(String seasonKey, Instant startsAt) {
-        var all = repository.scanAll(LeaderboardTables.SEASON_METADATA, SeasonMetadataRecord.class);
+        var all = seasonRepository.findAll();
         for (var season : all) {
             if (season.active()) {
-                repository.put(
-                    LeaderboardTables.SEASON_METADATA,
-                    LeaderboardKeys.SEASON_PARTITION,
-                    season.seasonKey(),
-                    new SeasonMetadataRecord(season.seasonKey(), season.startsAt(), startsAt, false)
-                );
+                seasonRepository.put(new SeasonMetadataRecord(season.seasonKey(), season.startsAt(), startsAt, false));
             }
         }
 
         var next = new SeasonMetadataRecord(seasonKey, startsAt, null, true);
-        repository.put(LeaderboardTables.SEASON_METADATA, LeaderboardKeys.SEASON_PARTITION, seasonKey, next);
+        seasonRepository.put(next);
         return next;
     }
 
