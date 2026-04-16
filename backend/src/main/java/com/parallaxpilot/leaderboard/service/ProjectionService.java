@@ -1,5 +1,6 @@
 package com.parallaxpilot.leaderboard.service;
 
+import java.time.Instant;
 import java.util.ArrayList;
 
 import com.parallaxpilot.leaderboard.domain.BestScoreRecord;
@@ -10,8 +11,9 @@ import org.springframework.stereotype.Service;
 
 import com.parallaxpilot.leaderboard.repository.DynamoDbJsonRepository;
 import com.parallaxpilot.leaderboard.repository.LeaderboardTables;
-import com.parallaxpilot.leaderboard.repository.ProjectionIndexRepository;
-import com.parallaxpilot.leaderboard.repository.ProjectionQueueRepository;
+import com.parallaxpilot.leaderboard.repository.ProjectionIndexRepository;      
+import com.parallaxpilot.leaderboard.repository.ProjectionQueueRepository;      
+import com.parallaxpilot.leaderboard.repository.ProjectionProcessedRepository;
 import com.parallaxpilot.leaderboard.repository.RebuildLockRepository;
 
 @Service
@@ -20,17 +22,20 @@ public class ProjectionService {
     private final ProjectionQueueRepository projectionQueueRepository;
     private final DynamoDbJsonRepository repository;
     private final ProjectionIndexRepository projectionIndexRepository;
+    private final ProjectionProcessedRepository projectionProcessedRepository;
     private final RebuildLockRepository rebuildLockRepository;
 
     public ProjectionService(
         ProjectionQueueRepository projectionQueueRepository,
         DynamoDbJsonRepository repository,
         ProjectionIndexRepository projectionIndexRepository,
+        ProjectionProcessedRepository projectionProcessedRepository,
         RebuildLockRepository rebuildLockRepository
     ) {
         this.projectionQueueRepository = projectionQueueRepository;
         this.repository = repository;
         this.projectionIndexRepository = projectionIndexRepository;
+        this.projectionProcessedRepository = projectionProcessedRepository;
         this.rebuildLockRepository = rebuildLockRepository;
     }
 
@@ -51,6 +56,13 @@ public class ProjectionService {
         var processed = new ArrayList<ProjectionQueueRepository.QueuedProjectionTask>();
         for (var task : tasks) {
             var payload = task.payload();
+
+            // dedupe projection processing by submissionId
+            if (!projectionProcessedRepository.acquire(payload.submissionId(), Instant.now())) {
+                // already processed - delete message and continue
+                processed.add(task);
+                continue;
+            }
             var currentBest = repository.get(
                 LeaderboardTables.BEST_SCORES,
                 payload.playerId(),
