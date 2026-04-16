@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import com.parallaxpilot.leaderboard.domain.BestScoreRecord;
 import com.parallaxpilot.leaderboard.domain.LeaderboardKeys;
 import com.parallaxpilot.leaderboard.domain.LeaderboardEntry;
+import com.parallaxpilot.leaderboard.repository.BestScoreRepository;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -24,6 +25,7 @@ public class ProjectionService {
     private final ProjectionIndexRepository projectionIndexRepository;
     private final ProjectionProcessedRepository projectionProcessedRepository;
     private final LeaderboardEntryRepository leaderboardEntryRepository;
+    private final BestScoreRepository bestScoreRepository;
     private final RebuildLockRepository rebuildLockRepository;
 
     public ProjectionService(
@@ -32,6 +34,7 @@ public class ProjectionService {
         ProjectionIndexRepository projectionIndexRepository,
         ProjectionProcessedRepository projectionProcessedRepository,
         LeaderboardEntryRepository leaderboardEntryRepository,
+        BestScoreRepository bestScoreRepository,
         RebuildLockRepository rebuildLockRepository
     ) {
         this.projectionQueueRepository = projectionQueueRepository;
@@ -39,6 +42,7 @@ public class ProjectionService {
         this.projectionIndexRepository = projectionIndexRepository;
         this.projectionProcessedRepository = projectionProcessedRepository;
         this.leaderboardEntryRepository = leaderboardEntryRepository;
+        this.bestScoreRepository = bestScoreRepository;
         this.rebuildLockRepository = rebuildLockRepository;
     }
 
@@ -66,12 +70,7 @@ public class ProjectionService {
                 processed.add(task);
                 continue;
             }
-            var currentBest = repository.get(
-                LeaderboardTables.BEST_SCORES,
-                payload.playerId(),
-                LeaderboardKeys.scopePartitionKey(payload.scopeKind(), payload.scopeKey()),
-                BestScoreRecord.class
-            );
+            var currentBest = bestScoreRepository.get(payload.playerId(), payload.scopeKind(), payload.scopeKey());
 
             if (currentBest.isPresent() && matches(payload, currentBest.get())) {
                 var newSortKey = leaderboardSortKey(payload.score(), payload.playedAt().toEpochMilli(), payload.playerId());

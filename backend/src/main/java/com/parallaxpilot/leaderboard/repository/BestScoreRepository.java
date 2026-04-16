@@ -11,6 +11,9 @@ import com.parallaxpilot.leaderboard.config.LeaderboardProperties;
 import com.parallaxpilot.leaderboard.domain.BestScoreRecord;
 import com.parallaxpilot.leaderboard.domain.LeaderboardKeys;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
+import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import java.util.Optional;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
@@ -64,6 +67,31 @@ public class BestScoreRepository {
             return true;
         } catch (ConditionalCheckFailedException error) {
             return false;
+        }
+    }
+
+    public Optional<BestScoreRecord> get(String playerId, ScopeKind scopeKind, String scopeKey) {
+        var response = dynamoDbClient.getItem(GetItemRequest.builder()
+            .tableName(properties.tablePrefix() + LeaderboardTables.BEST_SCORES)
+            .key(Map.of(
+                DynamoDbAttributes.PK, AttributeValue.fromS(playerId),
+                DynamoDbAttributes.SK, AttributeValue.fromS(LeaderboardKeys.scopePartitionKey(scopeKind, scopeKey))
+            ))
+            .build());
+
+        if (!response.hasItem()) {
+            return Optional.empty();
+        }
+
+        var payload = response.item().get(DynamoDbAttributes.PAYLOAD).s();
+        return Optional.of(readJson(payload, BestScoreRecord.class));
+    }
+
+    private <T> T readJson(String value, Class<T> type) {
+        try {
+            return objectMapper.readValue(value, type);
+        } catch (JsonProcessingException error) {
+            throw new IllegalStateException("Failed to deserialize best score", error);
         }
     }
 
