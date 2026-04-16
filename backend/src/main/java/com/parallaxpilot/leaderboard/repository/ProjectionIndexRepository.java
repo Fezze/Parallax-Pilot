@@ -30,6 +30,17 @@ public class ProjectionIndexRepository {
         );
     }
 
+    public boolean putIfMatches(String playerId, ScopeKind scopeKind, String scopeKey, String leaderboardSortKey, ProjectionIndexRecord expected) {
+        var record = new ProjectionIndexRecord(playerId, scopeKind, scopeKey, leaderboardSortKey);
+        return repository.putIfMatches(
+            LeaderboardTables.PROJECTION_INDEX,
+            playerId,
+            key(scopeKind, scopeKey),
+            record,
+            expected
+        );
+    }
+
     public void delete(String playerId, ScopeKind scopeKind, String scopeKey) {
         repository.delete(LeaderboardTables.PROJECTION_INDEX, playerId, key(scopeKind, scopeKey));
     }

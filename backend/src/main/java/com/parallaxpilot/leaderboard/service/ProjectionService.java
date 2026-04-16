@@ -83,21 +83,42 @@ public class ProjectionService {
                 }
 
                 if (currentIndex.isEmpty() || !currentIndex.get().leaderboardSortKey().equals(newSortKey)) {
-                    repository.put(
+                    var entry = new LeaderboardEntry(
+                        payload.playerId(),
+                        payload.nickname(),
+                        payload.scopeKind(),
+                        payload.scopeKey(),
+                        payload.score(),
+                        payload.survivedMs(),
+                        payload.playedAt()
+                    );
+
+                    boolean entryInserted = repository.putIfNotExists(
                         LeaderboardTables.LEADERBOARD_ENTRIES,
                         LeaderboardKeys.scopePartitionKey(payload.scopeKind(), payload.scopeKey()),
                         newSortKey,
-                        new LeaderboardEntry(
+                        entry
+                    );
+
+                    if (entryInserted) {
+                        var expected = currentIndex.isPresent() ? currentIndex.get() : null;
+                        boolean indexSet = projectionIndexRepository.putIfMatches(
                             payload.playerId(),
-                            payload.nickname(),
                             payload.scopeKind(),
                             payload.scopeKey(),
-                            payload.score(),
-                            payload.survivedMs(),
-                            payload.playedAt()
-                        )
-                    );
-                    projectionIndexRepository.put(payload.playerId(), payload.scopeKind(), payload.scopeKey(), newSortKey);
+                            newSortKey,
+                            expected
+                        );
+
+                        if (!indexSet) {
+                            // rollback leaderboard entry to keep state consistent
+                            repository.delete(
+                                LeaderboardTables.LEADERBOARD_ENTRIES,
+                                LeaderboardKeys.scopePartitionKey(payload.scopeKind(), payload.scopeKey()),
+                                newSortKey
+                            );
+                        }
+                    }
                 }
             }
             processed.add(task);

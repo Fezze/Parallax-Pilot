@@ -14,6 +14,8 @@ import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
+import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.QueryRequest;
 import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
 import software.amazon.awssdk.services.dynamodb.model.DeleteItemRequest;
@@ -45,6 +47,52 @@ public class DynamoDbJsonRepository {
             .tableName(tableName(tableSuffix))
             .item(item)
             .build());
+    }
+
+    public <T> boolean putIfNotExists(String tableSuffix, String pk, String sk, T payload) {
+        var item = new HashMap<String, AttributeValue>();
+        item.put(DynamoDbAttributes.PK, AttributeValue.fromS(pk));
+        item.put(DynamoDbAttributes.SK, AttributeValue.fromS(sk));
+        item.put(DynamoDbAttributes.PAYLOAD, AttributeValue.fromS(writeJson(payload)));
+
+        try {
+            dynamoDbClient.putItem(PutItemRequest.builder()
+                .tableName(tableName(tableSuffix))
+                .item(item)
+                .conditionExpression("attribute_not_exists(" + DynamoDbAttributes.PK + ")")
+                .build());
+            return true;
+        } catch (ConditionalCheckFailedException e) {
+            return false;
+        }
+    }
+
+    public <T> boolean putIfMatches(String tableSuffix, String pk, String sk, T payload, Object expectedPayload) {
+        var item = new HashMap<String, AttributeValue>();
+        item.put(DynamoDbAttributes.PK, AttributeValue.fromS(pk));
+        item.put(DynamoDbAttributes.SK, AttributeValue.fromS(sk));
+        item.put(DynamoDbAttributes.PAYLOAD, AttributeValue.fromS(writeJson(payload)));
+
+        var builder = PutItemRequest.builder()
+            .tableName(tableName(tableSuffix))
+            .item(item);
+
+        if (expectedPayload == null) {
+            builder = builder.conditionExpression("attribute_not_exists(" + DynamoDbAttributes.PK + ")");
+        } else {
+            var expectedJson = writeJson(expectedPayload);
+            builder = builder
+                .conditionExpression("attribute_not_exists(" + DynamoDbAttributes.PK + ") OR #payload = :expected")
+                .expressionAttributeNames(Map.of("#payload", DynamoDbAttributes.PAYLOAD))
+                .expressionAttributeValues(Map.of(":expected", AttributeValue.fromS(expectedJson)));
+        }
+
+        try {
+            dynamoDbClient.putItem(builder.build());
+            return true;
+        } catch (ConditionalCheckFailedException e) {
+            return false;
+        }
     }
 
     public <T> Optional<T> get(String tableSuffix, String pk, String sk, Class<T> type) {
