@@ -32,11 +32,13 @@ import com.parallaxpilot.leaderboard.domain.ScopeKey;
 import com.parallaxpilot.leaderboard.domain.ScopeResolver;
 import com.parallaxpilot.leaderboard.domain.ScoreSubmission;
 import com.parallaxpilot.leaderboard.repository.BestScoreRepository;
-import com.parallaxpilot.leaderboard.repository.ScoreSubmissionRepository;
 import com.parallaxpilot.leaderboard.repository.IdempotencyRepository;
-import com.parallaxpilot.leaderboard.repository.LeaderboardTables;
+import com.parallaxpilot.leaderboard.repository.LeaderboardEntryRepository;
+import com.parallaxpilot.leaderboard.repository.ProjectionIndexRepository;
+import com.parallaxpilot.leaderboard.repository.ProjectionProcessedRepository;
 import com.parallaxpilot.leaderboard.repository.ProjectionQueueRepository;
 import com.parallaxpilot.leaderboard.repository.RebuildLockRepository;
+import com.parallaxpilot.leaderboard.repository.ScoreSubmissionRepository;
 
 @Service
 public class LeaderboardService {
@@ -57,6 +59,9 @@ public class LeaderboardService {
     private final SeasonService seasonService;
     private final RebuildLockRepository rebuildLockRepository;
     private final ScoreSubmissionRepository submissionRepository;
+    private final LeaderboardEntryRepository leaderboardEntryRepository;
+    private final ProjectionIndexRepository projectionIndexRepository;
+    private final ProjectionProcessedRepository projectionProcessedRepository;
     private final LeaderboardProperties properties;
 
     public LeaderboardService(
@@ -69,6 +74,9 @@ public class LeaderboardService {
         SeasonService seasonService,
         RebuildLockRepository rebuildLockRepository,
         ScoreSubmissionRepository submissionRepository,
+        LeaderboardEntryRepository leaderboardEntryRepository,
+        ProjectionIndexRepository projectionIndexRepository,
+        ProjectionProcessedRepository projectionProcessedRepository,
         LeaderboardProperties properties
     ) {
         this.bestScoreRepository = bestScoreRepository;
@@ -80,6 +88,9 @@ public class LeaderboardService {
         this.seasonService = seasonService;
         this.rebuildLockRepository = rebuildLockRepository;
         this.submissionRepository = submissionRepository;
+        this.leaderboardEntryRepository = leaderboardEntryRepository;
+        this.projectionIndexRepository = projectionIndexRepository;
+        this.projectionProcessedRepository = projectionProcessedRepository;
         this.properties = properties;
     }
 
@@ -115,10 +126,8 @@ public class LeaderboardService {
         );
         submissionRepository.put(submission);
 
-        // mark idempotency as completed for this submission (prevents reprocessing on replay)
-        idempotencyRepository.complete(request.submissionId());
-
         if (assessment.quarantined()) {
+            idempotencyRepository.complete(request.submissionId());
             return new SubmitScoreResponse(
                 true,
                 false,
@@ -203,8 +212,8 @@ public class LeaderboardService {
         var bestScores = new LinkedHashMap<String, PlayerBestScoresResponse.ScoreView>();
         for (var scopeKind : ScopeKind.values()) {
             var scopeKey = activeScopeKey(scopeKind);
-            repository
-                .get(LeaderboardTables.BEST_SCORES, playerId, LeaderboardKeys.scopePartitionKey(scopeKind, scopeKey), BestScoreRecord.class)
+            bestScoreRepository
+                .get(playerId, scopeKind, scopeKey)
                 .ifPresent(best -> bestScores.put(
                     scopeKind.apiValue(),
                     new PlayerBestScoresResponse.ScoreView(
@@ -256,8 +265,9 @@ public class LeaderboardService {
 
         try {
             bestScoreRepository.clearTable();
-            leaderboardEntryRepository.clearTable();        
+            leaderboardEntryRepository.clearTable();
             projectionIndexRepository.clearTable();
+            projectionProcessedRepository.clearTable();
             projectionQueueRepository.purge();
 
             int bestUpdatesApplied = 0;
@@ -321,11 +331,9 @@ public class LeaderboardService {
     }
 
     private List<LeaderboardEntryResponse> rankEntries(ScopeKind scopeKind, String scopeKey) {
-        var entries = repository
+        var entries = leaderboardEntryRepository
             .queryByPartitionKey(
-                "leaderboard_entries",
                 LeaderboardKeys.scopePartitionKey(scopeKind, scopeKey),
-                LeaderboardEntry.class,
                 properties.maxLeaderboardScan()
             )
             .stream()

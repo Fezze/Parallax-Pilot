@@ -13,7 +13,6 @@ import com.parallaxpilot.leaderboard.domain.LeaderboardKeys;
 import software.amazon.awssdk.services.dynamodb.model.QueryRequest;
 import java.util.List;
 import java.util.ArrayList;
-import com.fasterxml.jackson.core.JsonProcessingException;
 
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;

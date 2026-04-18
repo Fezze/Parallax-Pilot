@@ -1,24 +1,21 @@
 package com.parallaxpilot.leaderboard.repository;
 
-import java.util.HashMap;
-import java.util.Map;
-
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.stereotype.Component;
-
 import com.parallaxpilot.leaderboard.config.LeaderboardProperties;
 import com.parallaxpilot.leaderboard.domain.LeaderboardEntry;
-import com.parallaxpilot.leaderboard.domain.LeaderboardKeys;
+import org.springframework.stereotype.Component;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
 import software.amazon.awssdk.services.dynamodb.model.DeleteItemRequest;
-import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
-import java.util.List;
-import java.util.ArrayList;
+import software.amazon.awssdk.services.dynamodb.model.QueryRequest;
+import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
 
 @Component
 public class LeaderboardEntryRepository {
@@ -64,17 +61,47 @@ public class LeaderboardEntryRepository {
             .build());
     }
 
+    public List<LeaderboardEntry> queryByPartitionKey(String partitionKey, int limit) {
+        var response = dynamoDbClient.query(QueryRequest.builder()
+            .tableName(properties.tablePrefix() + LeaderboardTables.LEADERBOARD_ENTRIES)
+            .keyConditionExpression(DynamoDbAttributes.PK + " = :pk")
+            .expressionAttributeValues(Map.of(":pk", AttributeValue.fromS(partitionKey)))
+            .limit(limit)
+            .scanIndexForward(true)
+            .build());
+
+        return response.items().stream()
+            .map(item -> readJson(item.get(DynamoDbAttributes.PAYLOAD).s()))
+            .toList();
+    }
+
     public void clearTable() {
         var table = properties.tablePrefix() + LeaderboardTables.LEADERBOARD_ENTRIES;
-        var scan = dynamoDbClient.scan(ScanRequest.builder().tableName(table).build());
-        for (var item : scan.items()) {
-            dynamoDbClient.deleteItem(DeleteItemRequest.builder()
-                .tableName(table)
-                .key(Map.of(
-                    DynamoDbAttributes.PK, item.get(DynamoDbAttributes.PK),
-                    DynamoDbAttributes.SK, item.get(DynamoDbAttributes.SK)
-                ))
-                .build());
+        Map<String, AttributeValue> lastKey = null;
+        do {
+            var request = ScanRequest.builder().tableName(table);
+            if (lastKey != null && !lastKey.isEmpty()) {
+                request = request.exclusiveStartKey(lastKey);
+            }
+            var response = dynamoDbClient.scan(request.build());
+            for (var item : response.items()) {
+                dynamoDbClient.deleteItem(DeleteItemRequest.builder()
+                    .tableName(table)
+                    .key(Map.of(
+                        DynamoDbAttributes.PK, item.get(DynamoDbAttributes.PK),
+                        DynamoDbAttributes.SK, item.get(DynamoDbAttributes.SK)
+                    ))
+                    .build());
+            }
+            lastKey = response.lastEvaluatedKey();
+        } while (lastKey != null && !lastKey.isEmpty());
+    }
+
+    private LeaderboardEntry readJson(String value) {
+        try {
+            return objectMapper.readValue(value, LeaderboardEntry.class);
+        } catch (JsonProcessingException error) {
+            throw new IllegalStateException("Failed to deserialize leaderboard entry", error);
         }
     }
 

@@ -111,6 +111,10 @@ public class DynamoDbJsonRepository {
         return Optional.of(readJson(response.item().get(DynamoDbAttributes.PAYLOAD).s(), type));
     }
 
+    public <T> List<T> queryByPartitionKey(String tableSuffix, String pk, Class<T> type) {
+        return queryByPartitionKey(tableSuffix, pk, type, 1000);
+    }
+
     public <T> List<T> queryByPartitionKey(String tableSuffix, String pk, Class<T> type, int limit) {
         var response = dynamoDbClient.query(QueryRequest.builder()
             .tableName(tableName(tableSuffix))

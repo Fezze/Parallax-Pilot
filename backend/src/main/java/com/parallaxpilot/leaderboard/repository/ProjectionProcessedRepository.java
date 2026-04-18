@@ -12,7 +12,10 @@ import com.parallaxpilot.leaderboard.domain.LeaderboardKeys;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
+import software.amazon.awssdk.services.dynamodb.model.DeleteItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
 
 @Component
 public class ProjectionProcessedRepository {
@@ -26,10 +29,25 @@ public class ProjectionProcessedRepository {
     }
 
     /**
-     * Attempt to record that a projection for submissionId is being/has been processed.
-     * Returns true when the record was created (first time), false when it already existed.
+     * Backward-compatible alias for callers that still pass a fully scoped projection key.
      */
     public boolean acquire(String submissionId, Instant processedAt) {
+        return markProcessed(submissionId, processedAt);
+    }
+
+    public boolean hasProcessed(String projectionKey) {
+        var response = dynamoDbClient.getItem(GetItemRequest.builder()
+            .tableName(properties.tablePrefix() + LeaderboardTables.PROJECTION_PROCESSED)
+            .key(Map.of(
+                DynamoDbAttributes.PK, AttributeValue.fromS(LeaderboardKeys.SUBMISSION_PARTITION),
+                DynamoDbAttributes.SK, AttributeValue.fromS(projectionKey)
+            ))
+            .build());
+
+        return response.hasItem();
+    }
+
+    public boolean markProcessed(String projectionKey, Instant processedAt) {
         var expiresAt = processedAt.plus(properties.idempotencyTtlDays(), ChronoUnit.DAYS).getEpochSecond();
 
         try {
@@ -37,7 +55,7 @@ public class ProjectionProcessedRepository {
                 .tableName(properties.tablePrefix() + LeaderboardTables.PROJECTION_PROCESSED)
                 .item(Map.of(
                     DynamoDbAttributes.PK, AttributeValue.fromS(LeaderboardKeys.SUBMISSION_PARTITION),
-                    DynamoDbAttributes.SK, AttributeValue.fromS(submissionId),
+                    DynamoDbAttributes.SK, AttributeValue.fromS(projectionKey),
                     DynamoDbAttributes.CREATED_AT, AttributeValue.fromS(processedAt.toString()),
                     DynamoDbAttributes.EXPIRES_AT, AttributeValue.fromN(Long.toString(expiresAt))
                 ))
@@ -47,5 +65,28 @@ public class ProjectionProcessedRepository {
         } catch (ConditionalCheckFailedException error) {
             return false;
         }
+    }
+
+    public void clearTable() {
+        var table = properties.tablePrefix() + LeaderboardTables.PROJECTION_PROCESSED;
+        Map<String, AttributeValue> lastKey = null;
+        do {
+            var request = ScanRequest.builder().tableName(table);
+            if (lastKey != null && !lastKey.isEmpty()) {
+                request = request.exclusiveStartKey(lastKey);
+            }
+
+            var response = dynamoDbClient.scan(request.build());
+            for (var item : response.items()) {
+                dynamoDbClient.deleteItem(DeleteItemRequest.builder()
+                    .tableName(table)
+                    .key(Map.of(
+                        DynamoDbAttributes.PK, item.get(DynamoDbAttributes.PK),
+                        DynamoDbAttributes.SK, item.get(DynamoDbAttributes.SK)
+                    ))
+                    .build());
+            }
+            lastKey = response.lastEvaluatedKey();
+        } while (lastKey != null && !lastKey.isEmpty());
     }
 }

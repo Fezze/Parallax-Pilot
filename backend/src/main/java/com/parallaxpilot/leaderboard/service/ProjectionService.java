@@ -7,13 +7,13 @@ import com.parallaxpilot.leaderboard.domain.BestScoreRecord;
 import com.parallaxpilot.leaderboard.domain.LeaderboardKeys;
 import com.parallaxpilot.leaderboard.domain.LeaderboardEntry;
 import com.parallaxpilot.leaderboard.repository.BestScoreRepository;
+import com.parallaxpilot.leaderboard.repository.LeaderboardEntryRepository;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import com.parallaxpilot.leaderboard.repository.LeaderboardTables;
-import com.parallaxpilot.leaderboard.repository.ProjectionIndexRepository;      
-import com.parallaxpilot.leaderboard.repository.ProjectionQueueRepository;      
+import com.parallaxpilot.leaderboard.repository.ProjectionIndexRepository;
 import com.parallaxpilot.leaderboard.repository.ProjectionProcessedRepository;
+import com.parallaxpilot.leaderboard.repository.ProjectionQueueRepository;
 import com.parallaxpilot.leaderboard.repository.RebuildLockRepository;
 
 @Service
@@ -59,63 +59,84 @@ public class ProjectionService {
         var processed = new ArrayList<ProjectionQueueRepository.QueuedProjectionTask>();
         for (var task : tasks) {
             var payload = task.payload();
+            var projectionKey = projectionKey(payload);
 
-            // dedupe projection processing by submissionId
-            if (!projectionProcessedRepository.acquire(payload.submissionId(), Instant.now())) {
-                // already processed - delete message and continue
+            if (projectionProcessedRepository.hasProcessed(projectionKey)) {
                 processed.add(task);
                 continue;
             }
+
             var currentBest = bestScoreRepository.get(payload.playerId(), payload.scopeKind(), payload.scopeKey());
 
-            if (currentBest.isPresent() && matches(payload, currentBest.get())) {
-                var newSortKey = leaderboardSortKey(payload.score(), payload.playedAt().toEpochMilli(), payload.playerId());
-                var currentIndex = projectionIndexRepository.get(payload.playerId(), payload.scopeKind(), payload.scopeKey());
+            if (currentBest.isEmpty() || !matches(payload, currentBest.get())) {
+                projectionProcessedRepository.markProcessed(projectionKey, Instant.now());
+                processed.add(task);
+                continue;
+            }
 
-                if (currentIndex.isPresent() && !currentIndex.get().leaderboardSortKey().equals(newSortKey)) {
+            var newSortKey = leaderboardSortKey(payload.score(), payload.playedAt().toEpochMilli(), payload.playerId());
+            var currentIndex = projectionIndexRepository.get(payload.playerId(), payload.scopeKind(), payload.scopeKey());
+
+            if (currentIndex.isPresent() && currentIndex.get().leaderboardSortKey().equals(newSortKey)) {
+                projectionProcessedRepository.markProcessed(projectionKey, Instant.now());
+                processed.add(task);
+                continue;
+            }
+
+            if (currentIndex.isPresent()) {
+                leaderboardEntryRepository.delete(
+                    LeaderboardKeys.scopePartitionKey(payload.scopeKind(), payload.scopeKey()),
+                    currentIndex.get().leaderboardSortKey()
+                );
+            }
+
+            var entry = new LeaderboardEntry(
+                payload.playerId(),
+                payload.nickname(),
+                payload.scopeKind(),
+                payload.scopeKey(),
+                payload.score(),
+                payload.survivedMs(),
+                payload.playedAt()
+            );
+
+            var entryInserted = leaderboardEntryRepository.putIfNotExists(
+                LeaderboardKeys.scopePartitionKey(payload.scopeKind(), payload.scopeKey()),
+                newSortKey,
+                entry
+            );
+
+            if (!entryInserted) {
+                if (isAlreadyIndexed(payload, newSortKey)) {
+                    projectionProcessedRepository.markProcessed(projectionKey, Instant.now());
+                    processed.add(task);
+                }
+                continue;
+            }
+
+            var expected = currentIndex.isPresent() ? currentIndex.get() : null;
+            var indexSet = projectionIndexRepository.putIfMatches(
+                payload.playerId(),
+                payload.scopeKind(),
+                payload.scopeKey(),
+                newSortKey,
+                expected
+            );
+
+            if (!indexSet) {
+                if (isAlreadyIndexed(payload, newSortKey)) {
+                    projectionProcessedRepository.markProcessed(projectionKey, Instant.now());
+                    processed.add(task);
+                } else {
                     leaderboardEntryRepository.delete(
                         LeaderboardKeys.scopePartitionKey(payload.scopeKind(), payload.scopeKey()),
-                        currentIndex.get().leaderboardSortKey()
+                        newSortKey
                     );
                 }
-
-                if (currentIndex.isEmpty() || !currentIndex.get().leaderboardSortKey().equals(newSortKey)) {
-                    var entry = new LeaderboardEntry(
-                        payload.playerId(),
-                        payload.nickname(),
-                        payload.scopeKind(),
-                        payload.scopeKey(),
-                        payload.score(),
-                        payload.survivedMs(),
-                        payload.playedAt()
-                    );
-
-                    boolean entryInserted = leaderboardEntryRepository.putIfNotExists(
-                        LeaderboardKeys.scopePartitionKey(payload.scopeKind(), payload.scopeKey()),
-                        newSortKey,
-                        entry
-                    );
-
-                    if (entryInserted) {
-                        var expected = currentIndex.isPresent() ? currentIndex.get() : null;
-                        boolean indexSet = projectionIndexRepository.putIfMatches(
-                            payload.playerId(),
-                            payload.scopeKind(),
-                            payload.scopeKey(),
-                            newSortKey,
-                            expected
-                        );
-
-                        if (!indexSet) {
-                            // rollback leaderboard entry to keep state consistent
-                            leaderboardEntryRepository.delete(
-                                LeaderboardKeys.scopePartitionKey(payload.scopeKind(), payload.scopeKey()),
-                                newSortKey
-                            );
-                        }
-                    }
-                }
+                continue;
             }
+
+            projectionProcessedRepository.markProcessed(projectionKey, Instant.now());
             processed.add(task);
         }
 
@@ -142,5 +163,16 @@ public class ProjectionService {
         return payload.score() == best.score()
             && payload.survivedMs() == best.survivedMs()
             && payload.playedAt().equals(best.playedAt());
+    }
+
+    private boolean isAlreadyIndexed(com.parallaxpilot.leaderboard.domain.ProjectionTask payload, String sortKey) {
+        return projectionIndexRepository
+            .get(payload.playerId(), payload.scopeKind(), payload.scopeKey())
+            .map(index -> index.leaderboardSortKey().equals(sortKey))
+            .orElse(false);
+    }
+
+    private String projectionKey(com.parallaxpilot.leaderboard.domain.ProjectionTask payload) {
+        return "%s#%s#%s".formatted(payload.submissionId(), payload.scopeKind().apiValue(), payload.scopeKey());
     }
 }
