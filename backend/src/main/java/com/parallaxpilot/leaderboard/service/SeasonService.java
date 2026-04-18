@@ -1,20 +1,22 @@
 package com.parallaxpilot.leaderboard.service;
 
 import java.time.Instant;
+import java.time.Month;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.Comparator;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import com.parallaxpilot.leaderboard.domain.LeaderboardKeys;
 import com.parallaxpilot.leaderboard.domain.SeasonMetadataRecord;
 import com.parallaxpilot.leaderboard.repository.SeasonMetadataRepository;
-import com.parallaxpilot.leaderboard.repository.LeaderboardTables;
 
 @Service
 public class SeasonService {
+    private static final Pattern QUARTER_SEASON_KEY = Pattern.compile("\\d{4}-Q[1-4]");
 
     private final SeasonMetadataRepository seasonRepository;
 
@@ -47,6 +49,32 @@ public class SeasonService {
         return next;
     }
 
+    @Scheduled(cron = "${app.leaderboard.season-rollover-cron:0 5 0 * * *}", zone = "UTC")
+    void scheduledSeasonRollover() {
+        rolloverIfNeeded(Instant.now());
+    }
+
+    public Optional<SeasonMetadataRecord> rolloverIfNeeded(Instant now) {
+        var nextSeasonKey = fallbackQuarter(now);
+        var nextSeasonStart = quarterStart(now);
+        var active = getActiveSeason();
+
+        if (active.isPresent()) {
+            var current = active.get();
+            if (current.seasonKey().equals(nextSeasonKey)) {
+                return Optional.empty();
+            }
+            if (!QUARTER_SEASON_KEY.matcher(current.seasonKey()).matches()) {
+                return Optional.empty();
+            }
+            if (now.isBefore(nextSeasonStart)) {
+                return Optional.empty();
+            }
+        }
+
+        return Optional.of(cutover(nextSeasonKey, nextSeasonStart));
+    }
+
     private Optional<SeasonMetadataRecord> findSeasonFor(Instant playedAt) {
         return seasonRepository.findAll().stream()
             .filter(season -> !playedAt.isBefore(season.startsAt()))
@@ -58,5 +86,13 @@ public class SeasonService {
         var utc = ZonedDateTime.ofInstant(playedAt, ZoneOffset.UTC);
         var quarter = ((utc.getMonthValue() - 1) / 3) + 1;
         return utc.getYear() + "-Q" + quarter;
+    }
+
+    private Instant quarterStart(Instant instant) {
+        var utc = ZonedDateTime.ofInstant(instant, ZoneOffset.UTC);
+        var firstMonth = (((utc.getMonthValue() - 1) / 3) * 3) + 1;
+        return ZonedDateTime
+            .of(utc.getYear(), Month.of(firstMonth).getValue(), 1, 0, 0, 0, 0, ZoneOffset.UTC)
+            .toInstant();
     }
 }
