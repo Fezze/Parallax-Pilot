@@ -28,6 +28,14 @@ import {
   writeJson,
   writeScores,
 } from '../zepp-app/shared/persistence.js'
+import {
+  buildScoreSubmission,
+  decodeLeaderboardMessage,
+  encodeLeaderboardMessage,
+  queueScoreSubmission,
+  readSubmitQueue,
+  removeSubmittedScore,
+} from '../zepp-app/shared/leaderboard-submit.js'
 import { parseRouteParams } from '../zepp-app/shared/params.js'
 import {
   buildScoreRow,
@@ -124,6 +132,37 @@ test('settings and scores sanitize invalid values before persistence', () => {
     survivedMs: 10,
   })
   assert.equal(scores.length, 1)
+})
+
+test('leaderboard submit queue dedupes, trims and serializes messages', () => {
+  const storage = createMemoryStorage()
+  const scoreEntry = {
+    id: 'run-1',
+    timestamp: Date.parse('2026-04-09T12:00:00Z'),
+    score: 1200,
+    survivedMs: 15000,
+  }
+  const submission = buildScoreSubmission({
+    scoreEntry,
+    playerId: 'player-1',
+    nickname: 'Pilot',
+    clientVersion: '2.4.5',
+    deviceModel: 'balance-2',
+  })
+
+  assert.equal(submission.submissionId, 'watch-player-1-run-1')
+  queueScoreSubmission(storage, submission)
+  queueScoreSubmission(storage, submission)
+  assert.equal(readSubmitQueue(storage).length, 1)
+
+  const decoded = decodeLeaderboardMessage(encodeLeaderboardMessage({
+    type: 'leaderboard.submit-score',
+    submission,
+  }))
+  assert.equal(decoded.submission.submissionId, submission.submissionId)
+
+  removeSubmittedScore(storage, submission.submissionId)
+  assert.deepEqual(readSubmitQueue(storage), [])
 })
 
 test('view models format and clamp pagination predictably', () => {

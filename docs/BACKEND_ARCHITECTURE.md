@@ -14,8 +14,9 @@ This design avoids a separate mobile app while still using a production-shaped b
 ### Runtime split
 - `Device App` on the watch: gameplay, local history, offline-first session data
 - `Settings App` in Zepp mobile app: leaderboard UI
-- `Side Service` in Zepp mobile app: fetches backend data, stores caches in settings storage
+- `Side Service` in Zepp mobile app: receives watch submissions over BLE messaging, keeps an offline submit queue, posts scores, fetches leaderboard data, and stores caches in settings storage
 - `Backend API`: accepts scores, exposes global/daily/seasonal leaderboards, returns best score and rank classification
+- `Projection Worker`: same backend package with `worker` profile; drains SQS projections outside the API runtime
 
 ### Trust model
 - The score originates on an untrusted client path.
@@ -55,6 +56,10 @@ This design avoids a separate mobile app while still using a production-shaped b
 - `GET /v1/leaderboards/seasonal`
 - `GET /v1/players/{playerId}/best`
 - `GET /v1/rankings/classify?playerId=...`
+- `POST /v1/admin/projections:drain`
+- `POST /v1/admin/projections:rebuild`
+- `POST /v1/admin/snapshots:export`
+- `GET /v1/admin/submissions/{submissionId}/debug`
 
 ## Ranking Model
 - Canonical best score is maintained independently for `global`, `daily`, and `seasonal`.
@@ -73,6 +78,8 @@ This design avoids a separate mobile app while still using a production-shaped b
 
 ### Side Service
 - Listens for settings storage commands
+- Listens for watch BLE/messaging submit events
+- Stores failed submits in settings storage until the phone can reach the backend
 - Fetches leaderboard data from backend
 - Stores read caches back into settings storage
 - Is the only online client in the Zepp ecosystem for this feature
@@ -81,12 +88,17 @@ This design avoids a separate mobile app while still using a production-shaped b
 - Every submission is idempotent by `submissionId`
 - Rebuild is possible from append-only submission log
 - Wrong-rank debugging starts from submission record, best-score record, and scope projection
-- Burst load is absorbed with queue-based projection flow in the target architecture; local implementation keeps a synchronous fallback path for simplicity
+- Wrong-rank debugging is exposed through `GET /v1/admin/submissions/{submissionId}/debug`
+- Recovery snapshots are exported through `POST /v1/admin/snapshots:export`
+- Burst load is absorbed with queue-based projection flow; the worker profile owns scheduled queue draining
 
 ## Implementation Status In Repo
 - `backend/`: Spring Boot service scaffold with DynamoDB-backed repositories
 - `backend/dev/localstack/`: local-only LocalStack runtime assets
 - `backend/src/test/`: LocalStack-based integration test coverage
 - `zepp-app/app-side/`: phone-side online sync service
+- `zepp-app/shared/leaderboard-submit.js`: watch/phone submit queue contract
 - `zepp-app/setting/`: phone leaderboard UI inside Zepp app
+- `.github/workflows/backend.yml`: backend verification workflow
+- `infra/terraform/`: AWS baseline for backend resources
 - `tests/playwright/`: screenshot coverage extended for the phone leaderboard screen

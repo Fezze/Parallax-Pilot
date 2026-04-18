@@ -19,6 +19,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.parallaxpilot.leaderboard.api.dto.AdminSnapshotResponse;
+import com.parallaxpilot.leaderboard.api.dto.AdminSubmissionDebugResponse;
 import com.parallaxpilot.leaderboard.api.dto.LeaderboardEntryResponse;
 import com.parallaxpilot.leaderboard.api.dto.LeaderboardResponse;
 import com.parallaxpilot.leaderboard.api.dto.PlayerBestScoresResponse;
@@ -27,7 +29,9 @@ import com.parallaxpilot.leaderboard.api.dto.SeasonCutoverRequest;
 import com.parallaxpilot.leaderboard.api.dto.SeasonMetadataResponse;
 import com.parallaxpilot.leaderboard.api.dto.SubmitScoreRequest;
 import com.parallaxpilot.leaderboard.api.dto.SubmitScoreResponse;
+import com.parallaxpilot.leaderboard.domain.ScoreSubmission;
 import com.parallaxpilot.leaderboard.service.LeaderboardService;
+import com.parallaxpilot.leaderboard.service.SnapshotService;
 
 @WebMvcTest(LeaderboardController.class)
 class LeaderboardControllerTest {
@@ -39,6 +43,9 @@ class LeaderboardControllerTest {
 
     @MockitoBean
     private LeaderboardService leaderboardService;
+
+    @MockitoBean
+    private SnapshotService snapshotService;
 
     @Test
     void submitsScore() throws Exception {
@@ -126,5 +133,44 @@ class LeaderboardControllerTest {
                 .content(OBJECT_MAPPER.writeValueAsBytes(request)))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.seasonKey").value("2026-S2"));
+    }
+
+    @Test
+    void exportsSnapshot() throws Exception {
+        when(snapshotService.exportSnapshot())
+            .thenReturn(new AdminSnapshotResponse("pp-leaderboard-snapshots", "leaderboard-snapshots/test.json", 1, 2, 3, 4));
+
+        mockMvc.perform(post("/v1/admin/snapshots:export"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.snapshotKey").value("leaderboard-snapshots/test.json"))
+            .andExpect(jsonPath("$.riskSignals").value(4));
+    }
+
+    @Test
+    void returnsSubmissionDebug() throws Exception {
+        var submission = new ScoreSubmission(
+            "sub-debug",
+            "player-debug",
+            "Debug",
+            1500,
+            12000,
+            Instant.parse("2026-04-09T12:00:00Z"),
+            "2.4.5",
+            "balance-2",
+            false,
+            false,
+            List.of()
+        );
+        when(leaderboardService.getSubmissionDebug("sub-debug"))
+            .thenReturn(new AdminSubmissionDebugResponse(
+                submission,
+                List.of(),
+                new PlayerBestScoresResponse("player-debug", Map.of()),
+                new RankClassificationResponse("player-debug", null, "unranked", "global", 0)
+            ));
+
+        mockMvc.perform(get("/v1/admin/submissions/sub-debug/debug"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.submission.submissionId").value("sub-debug"));
     }
 }

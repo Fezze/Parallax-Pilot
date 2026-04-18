@@ -1,6 +1,6 @@
 {
   "name": "parallax-pilot-workspace",
-  "version": "2.4.4",
+  "version": "2.4.5",
   "private": true,
   "type": "module",
   "scripts": {
@@ -15,7 +15,7 @@
     "test:playwright:headed": "playwright test --headed",
     "playwright:install": "playwright install chromium",
     "backend:package": "node scripts/backend-maven.mjs -DskipTests package",
-    "backend:test": "node scripts/backend-maven.mjs -Dtest=ScopeResolverTest,IdempotencyRepositoryTest,SeasonServiceTest test",
+    "backend:test": "node scripts/backend-maven.mjs -Dtest=ScopeResolverTest,IdempotencyRepositoryTest,SeasonServiceTest,LeaderboardControllerTest,SnapshotServiceTest test",
     "backend:verify": "node scripts/backend-maven.mjs -DskipTests=false verify",
     "build": "node scripts/zeus-proxy.mjs build",
     "build:backend": "node scripts/backend-maven.mjs -DskipTests package",

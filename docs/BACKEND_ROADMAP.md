@@ -19,16 +19,19 @@ Addressed:
 - basic `global/daily/seasonal` scope model
 - Zepp `Side Service` and `Settings App`
 - screenshot coverage for the phone leaderboard screen
+- watch -> `Side Service` score submit with offline queues
+- projection dedupe and dedicated worker runtime profile
+- automated seasonal rollover
+- S3 snapshot export endpoint
+- admin submission debug endpoint
+- basic structured logs and Micrometer counters
+- baseline GitHub Actions backend workflow
+- baseline Terraform for DynamoDB/SQS/S3/CloudWatch/ECR
 
 Missing or partial:
-- no projection dedupe beyond best-score conditional writes
-- no separate worker deployment for projection processing
-- no S3 snapshot/export layer for recovery
-- no automated seasonal reset job
 - anti-abuse is only a baseline and does not include richer anomaly heuristics
-- no production-grade observability
-- no real watch -> phone submit contract
-- no CI/CD or deployment setup
+- observability is basic counters/logs, not dashboards/alerts yet
+- CI/CD and Terraform are baseline only; no promotion/apply gates yet
 
 ## Roadmap
 ### Phase 1: Correctness baseline

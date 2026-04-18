@@ -21,6 +21,8 @@ app:
     max-leaderboard-scan: 2000
     consumer-fixed-delay-ms: 5000
     rebuild-lock-ttl-minutes: 15
+    projection-consumer-enabled: false
+    snapshot-bucket-name: pp-leaderboard-snapshots
 
 aws:
   region: eu-west-2
@@ -35,3 +37,13 @@ spring:
 aws:
   region: eu-west-2
   endpoint: http://localhost:4566
+
+---
+spring:
+  config:
+    activate:
+      on-profile: worker
+
+app:
+  leaderboard:
+    projection-consumer-enabled: true

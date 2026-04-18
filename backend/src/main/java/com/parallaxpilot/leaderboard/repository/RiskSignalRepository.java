@@ -1,6 +1,7 @@
 package com.parallaxpilot.leaderboard.repository;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -13,6 +14,7 @@ import com.parallaxpilot.leaderboard.domain.RiskSignalRecord;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.QueryRequest;
 
 @Component
 public class RiskSignalRepository {
@@ -40,11 +42,32 @@ public class RiskSignalRepository {
             .build());
     }
 
+    public List<RiskSignalRecord> findBySubmissionId(String submissionId) {
+        var response = dynamoDbClient.query(QueryRequest.builder()
+            .tableName(properties.tablePrefix() + LeaderboardTables.RISK_SIGNALS)
+            .keyConditionExpression(DynamoDbAttributes.PK + " = :pk")
+            .expressionAttributeValues(Map.of(":pk", AttributeValue.fromS(submissionId)))
+            .scanIndexForward(true)
+            .build());
+
+        return response.items().stream()
+            .map(item -> readJson(item.get(DynamoDbAttributes.PAYLOAD).s()))
+            .toList();
+    }
+
     private String writeJson(Object value) {
         try {
             return objectMapper.writeValueAsString(value);
         } catch (JsonProcessingException error) {
             throw new IllegalStateException("Failed to serialize risk signal", error);
+        }
+    }
+
+    private RiskSignalRecord readJson(String value) {
+        try {
+            return objectMapper.readValue(value, RiskSignalRecord.class);
+        } catch (JsonProcessingException error) {
+            throw new IllegalStateException("Failed to deserialize risk signal", error);
         }
     }
 }

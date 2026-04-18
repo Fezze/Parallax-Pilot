@@ -39,7 +39,14 @@ import {
 } from '../../shared/game-core.js'
 import { sanitizeControlMode } from '../../shared/device.js'
 import { normalizeTiltInput } from '../../shared/tilt-calibration.js'
-import { appendScore, loadSettings, loadTiltCalibration, saveLastSession, saveSettings } from '../../shared/storage.js'
+import {
+  appendScore,
+  loadSettings,
+  loadTiltCalibration,
+  queueLeaderboardScore,
+  saveLastSession,
+  saveSettings,
+} from '../../shared/storage.js'
 
 const FRAME_INTERVAL_MS = 16
 const SHIP_BOUNDARY = 20
@@ -91,6 +98,12 @@ function keepScreenAwake() {
     setPageBrightTime({
       brightTime: GAME_BRIGHT_TIME_MS,
     })
+  } catch (_error) {}
+}
+
+function flushLeaderboardQueue() {
+  try {
+    getApp()._options.globalData.leaderboardBridge?.flush()
   } catch (_error) {}
 }
 
@@ -497,6 +510,8 @@ Page({
     const scoreEntry = createScoreEntry(now - this.startedAt, this.settings, now)
     saveLastSession(scoreEntry)
     appendScore(scoreEntry)
+    queueLeaderboardScore(scoreEntry, this.deviceInfo)
+    flushLeaderboardQueue()
     replace({ url: ROUTES.RESULTS })
   },
 

@@ -11,6 +11,10 @@ export const LEADERBOARD_STORAGE_KEYS = {
   PLAYER_BEST: 'leaderboard_player_best_cache',
   PLAYER_CLASSIFICATION: 'leaderboard_player_classification_cache',
   COMMAND: 'leaderboard_command',
+  SUBMIT_QUEUE: 'leaderboard_submit_queue',
+  SUBMIT_QUEUE_SIZE: 'leaderboard_submit_queue_size',
+  LAST_SUBMIT_AT: 'leaderboard_last_submit_at',
+  LAST_SUBMIT_ERROR: 'leaderboard_last_submit_error',
 }
 
 export const LEADERBOARD_SCOPES = ['global', 'daily', 'seasonal']

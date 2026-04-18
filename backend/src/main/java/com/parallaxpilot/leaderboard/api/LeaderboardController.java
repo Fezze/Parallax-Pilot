@@ -14,6 +14,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.parallaxpilot.leaderboard.api.dto.AdminDrainResponse;
 import com.parallaxpilot.leaderboard.api.dto.AdminReplayResponse;
+import com.parallaxpilot.leaderboard.api.dto.AdminSnapshotResponse;
+import com.parallaxpilot.leaderboard.api.dto.AdminSubmissionDebugResponse;
 import com.parallaxpilot.leaderboard.api.dto.LeaderboardResponse;
 import com.parallaxpilot.leaderboard.api.dto.PlayerBestScoresResponse;
 import com.parallaxpilot.leaderboard.api.dto.RankClassificationResponse;
@@ -22,6 +24,7 @@ import com.parallaxpilot.leaderboard.api.dto.SeasonMetadataResponse;
 import com.parallaxpilot.leaderboard.api.dto.SubmitScoreRequest;
 import com.parallaxpilot.leaderboard.api.dto.SubmitScoreResponse;
 import com.parallaxpilot.leaderboard.service.LeaderboardService;
+import com.parallaxpilot.leaderboard.service.SnapshotService;
 import jakarta.validation.Valid;
 
 @RestController
@@ -30,9 +33,11 @@ import jakarta.validation.Valid;
 public class LeaderboardController {
 
     private final LeaderboardService leaderboardService;
+    private final SnapshotService snapshotService;
 
-    public LeaderboardController(LeaderboardService leaderboardService) {
+    public LeaderboardController(LeaderboardService leaderboardService, SnapshotService snapshotService) {
         this.leaderboardService = leaderboardService;
+        this.snapshotService = snapshotService;
     }
 
     @PostMapping("/scores:submit")
@@ -72,6 +77,16 @@ public class LeaderboardController {
     @PostMapping("/admin/projections:rebuild")
     AdminReplayResponse rebuildProjections() {
         return leaderboardService.rebuildProjections();
+    }
+
+    @PostMapping("/admin/snapshots:export")
+    AdminSnapshotResponse exportSnapshot() {
+        return snapshotService.exportSnapshot();
+    }
+
+    @GetMapping("/admin/submissions/{submissionId}/debug")
+    AdminSubmissionDebugResponse getSubmissionDebug(@PathVariable String submissionId) {
+        return leaderboardService.getSubmissionDebug(submissionId);
     }
 
     @GetMapping("/admin/seasons/active")

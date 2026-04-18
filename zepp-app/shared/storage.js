@@ -11,6 +11,13 @@ import {
   writeTiltCalibration,
   writeTiltCalibrationReport,
 } from './persistence.js'
+import {
+  buildScoreSubmission,
+  queueScoreSubmission,
+  readLeaderboardSubmitConfig,
+  readSubmitQueue,
+  removeSubmittedScore,
+} from './leaderboard-submit.js'
 
 let localStorageInstance
 let sessionStorageInstance
@@ -45,6 +52,28 @@ export function loadScores() {
 
 export function appendScore(entry) {
   return appendScoreToStorage(getLocalStorage(), entry)
+}
+
+export function queueLeaderboardScore(entry, deviceInfo = {}, clientVersion = 'watch') {
+  const storage = getLocalStorage()
+  const submitConfig = readLeaderboardSubmitConfig(storage)
+  const submission = buildScoreSubmission({
+    scoreEntry: entry,
+    playerId: submitConfig.playerId,
+    nickname: submitConfig.nickname,
+    clientVersion,
+    deviceModel: deviceInfo.deviceName || deviceInfo.model || deviceInfo.screenShape || 'zepp-watch',
+  })
+  queueScoreSubmission(storage, submission)
+  return submission
+}
+
+export function loadLeaderboardSubmitQueue() {
+  return readSubmitQueue(getLocalStorage())
+}
+
+export function removeLeaderboardSubmission(submissionId) {
+  return removeSubmittedScore(getLocalStorage(), submissionId)
 }
 
 export function loadLastSession() {

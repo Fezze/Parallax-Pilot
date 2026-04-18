@@ -2,6 +2,7 @@ package com.parallaxpilot.leaderboard.repository;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -16,6 +17,7 @@ import java.util.ArrayList;
 
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
+import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
 
 @Component
@@ -46,6 +48,22 @@ public class ScoreSubmissionRepository {
             .build());
     }
 
+    public Optional<ScoreSubmission> get(String submissionId) {
+        var response = dynamoDbClient.getItem(GetItemRequest.builder()
+            .tableName(properties.tablePrefix() + LeaderboardTables.SCORE_SUBMISSIONS)
+            .key(Map.of(
+                DynamoDbAttributes.PK, AttributeValue.fromS(LeaderboardKeys.SUBMISSION_PARTITION),
+                DynamoDbAttributes.SK, AttributeValue.fromS(submissionId)
+            ))
+            .build());
+
+        if (!response.hasItem()) {
+            return Optional.empty();
+        }
+
+        return Optional.of(readJson(response.item().get(DynamoDbAttributes.PAYLOAD).s(), ScoreSubmission.class));
+    }
+
     private String writeJson(Object value) {
         try {
             return objectMapper.writeValueAsString(value);
@@ -56,17 +74,24 @@ public class ScoreSubmissionRepository {
 
     public List<ScoreSubmission> scanAll() {
         var table = properties.tablePrefix() + LeaderboardTables.SCORE_SUBMISSIONS;
-        var response = dynamoDbClient.query(QueryRequest.builder()
-            .tableName(table)
-            .keyConditionExpression(DynamoDbAttributes.PK + " = :pk")
-            .expressionAttributeValues(Map.of(":pk", AttributeValue.fromS(LeaderboardKeys.SUBMISSION_PARTITION)))
-            .build());
-
         var result = new ArrayList<ScoreSubmission>();
-        for (var item : response.items()) {
-            var payload = item.get(DynamoDbAttributes.PAYLOAD).s();
-            result.add(readJson(payload, ScoreSubmission.class));
-        }
+        Map<String, AttributeValue> lastKey = null;
+        do {
+            var request = QueryRequest.builder()
+                .tableName(table)
+                .keyConditionExpression(DynamoDbAttributes.PK + " = :pk")
+                .expressionAttributeValues(Map.of(":pk", AttributeValue.fromS(LeaderboardKeys.SUBMISSION_PARTITION)));
+            if (lastKey != null && !lastKey.isEmpty()) {
+                request.exclusiveStartKey(lastKey);
+            }
+
+            var response = dynamoDbClient.query(request.build());
+            for (var item : response.items()) {
+                var payload = item.get(DynamoDbAttributes.PAYLOAD).s();
+                result.add(readJson(payload, ScoreSubmission.class));
+            }
+            lastKey = response.lastEvaluatedKey();
+        } while (lastKey != null && !lastKey.isEmpty());
         return result;
     }
 

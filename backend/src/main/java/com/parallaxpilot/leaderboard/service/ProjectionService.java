@@ -8,23 +8,25 @@ import com.parallaxpilot.leaderboard.domain.LeaderboardKeys;
 import com.parallaxpilot.leaderboard.domain.LeaderboardEntry;
 import com.parallaxpilot.leaderboard.repository.BestScoreRepository;
 import com.parallaxpilot.leaderboard.repository.LeaderboardEntryRepository;
-import org.springframework.scheduling.annotation.Scheduled;
+import io.micrometer.core.instrument.MeterRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import com.parallaxpilot.leaderboard.repository.ProjectionIndexRepository;
 import com.parallaxpilot.leaderboard.repository.ProjectionProcessedRepository;
 import com.parallaxpilot.leaderboard.repository.ProjectionQueueRepository;
-import com.parallaxpilot.leaderboard.repository.RebuildLockRepository;
 
 @Service
 public class ProjectionService {
+    private static final Logger LOG = LoggerFactory.getLogger(ProjectionService.class);
 
     private final ProjectionQueueRepository projectionQueueRepository;
     private final ProjectionIndexRepository projectionIndexRepository;
     private final ProjectionProcessedRepository projectionProcessedRepository;
     private final LeaderboardEntryRepository leaderboardEntryRepository;
     private final BestScoreRepository bestScoreRepository;
-    private final RebuildLockRepository rebuildLockRepository;
+    private final MeterRegistry meterRegistry;
 
     public ProjectionService(
         ProjectionQueueRepository projectionQueueRepository,
@@ -32,22 +34,14 @@ public class ProjectionService {
         ProjectionProcessedRepository projectionProcessedRepository,
         LeaderboardEntryRepository leaderboardEntryRepository,
         BestScoreRepository bestScoreRepository,
-        RebuildLockRepository rebuildLockRepository
+        MeterRegistry meterRegistry
     ) {
         this.projectionQueueRepository = projectionQueueRepository;
         this.projectionIndexRepository = projectionIndexRepository;
         this.projectionProcessedRepository = projectionProcessedRepository;
         this.leaderboardEntryRepository = leaderboardEntryRepository;
         this.bestScoreRepository = bestScoreRepository;
-        this.rebuildLockRepository = rebuildLockRepository;
-    }
-
-    @Scheduled(fixedDelayString = "${app.leaderboard.consumer-fixed-delay-ms:5000}")
-    void scheduledDrain() {
-        if (rebuildLockRepository.isActive()) {
-            return;
-        }
-        drainProjectionQueue();
+        this.meterRegistry = meterRegistry;
     }
 
     public int drainProjectionQueue() {
@@ -141,6 +135,8 @@ public class ProjectionService {
         }
 
         projectionQueueRepository.deleteBatch(processed);
+        meterRegistry.counter("leaderboard.projection.messages.processed").increment(processed.size());
+        LOG.info("projection_drain processedMessages={} receivedMessages={}", processed.size(), tasks.size());
         return processed.size();
     }
 

@@ -7,12 +7,16 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 
+import io.micrometer.core.instrument.MeterRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.parallaxpilot.leaderboard.api.dto.AdminDrainResponse;
 import com.parallaxpilot.leaderboard.api.dto.AdminReplayResponse;
+import com.parallaxpilot.leaderboard.api.dto.AdminSubmissionDebugResponse;
 import com.parallaxpilot.leaderboard.api.dto.LeaderboardEntryResponse;
 import com.parallaxpilot.leaderboard.api.dto.LeaderboardResponse;
 import com.parallaxpilot.leaderboard.api.dto.PlayerBestScoresResponse;
@@ -38,10 +42,12 @@ import com.parallaxpilot.leaderboard.repository.ProjectionIndexRepository;
 import com.parallaxpilot.leaderboard.repository.ProjectionProcessedRepository;
 import com.parallaxpilot.leaderboard.repository.ProjectionQueueRepository;
 import com.parallaxpilot.leaderboard.repository.RebuildLockRepository;
+import com.parallaxpilot.leaderboard.repository.RiskSignalRepository;
 import com.parallaxpilot.leaderboard.repository.ScoreSubmissionRepository;
 
 @Service
 public class LeaderboardService {
+    private static final Logger LOG = LoggerFactory.getLogger(LeaderboardService.class);
     private static final String REBUILD_IN_PROGRESS = "Leaderboard rebuild in progress";
     private static final String REBUILD_ALREADY_IN_PROGRESS = "Leaderboard rebuild already in progress";
 
@@ -62,7 +68,9 @@ public class LeaderboardService {
     private final LeaderboardEntryRepository leaderboardEntryRepository;
     private final ProjectionIndexRepository projectionIndexRepository;
     private final ProjectionProcessedRepository projectionProcessedRepository;
+    private final RiskSignalRepository riskSignalRepository;
     private final LeaderboardProperties properties;
+    private final MeterRegistry meterRegistry;
 
     public LeaderboardService(
         BestScoreRepository bestScoreRepository,
@@ -77,7 +85,9 @@ public class LeaderboardService {
         LeaderboardEntryRepository leaderboardEntryRepository,
         ProjectionIndexRepository projectionIndexRepository,
         ProjectionProcessedRepository projectionProcessedRepository,
-        LeaderboardProperties properties
+        RiskSignalRepository riskSignalRepository,
+        LeaderboardProperties properties,
+        MeterRegistry meterRegistry
     ) {
         this.bestScoreRepository = bestScoreRepository;
         this.idempotencyRepository = idempotencyRepository;
@@ -91,7 +101,9 @@ public class LeaderboardService {
         this.leaderboardEntryRepository = leaderboardEntryRepository;
         this.projectionIndexRepository = projectionIndexRepository;
         this.projectionProcessedRepository = projectionProcessedRepository;
+        this.riskSignalRepository = riskSignalRepository;
         this.properties = properties;
+        this.meterRegistry = meterRegistry;
     }
 
     public SubmitScoreResponse submitScore(SubmitScoreRequest request) {
@@ -99,6 +111,7 @@ public class LeaderboardService {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, REBUILD_IN_PROGRESS);
         }
         if (!idempotencyRepository.acquire(request.submissionId(), request.playedAt())) {
+            meterRegistry.counter("leaderboard.submissions", "outcome", "duplicate").increment();
             return new SubmitScoreResponse(
                 true,
                 true,
@@ -128,6 +141,13 @@ public class LeaderboardService {
 
         if (assessment.quarantined()) {
             idempotencyRepository.complete(request.submissionId());
+            meterRegistry.counter("leaderboard.submissions", "outcome", "quarantined").increment();
+            LOG.info(
+                "score_submit submissionId={} playerId={} outcome=quarantined reasons={}",
+                request.submissionId(),
+                request.playerId(),
+                assessment.reasons()
+            );
             return new SubmitScoreResponse(
                 true,
                 false,
@@ -168,6 +188,13 @@ public class LeaderboardService {
 
         // finalize idempotency after successful processing
         idempotencyRepository.complete(request.submissionId());
+        meterRegistry.counter("leaderboard.submissions", "outcome", "accepted").increment();
+        LOG.info(
+            "score_submit submissionId={} playerId={} outcome=accepted bestUpdated={}",
+            request.submissionId(),
+            request.playerId(),
+            bestUpdated
+        );
 
         return new SubmitScoreResponse(
             true,
@@ -304,10 +331,23 @@ public class LeaderboardService {
             }
 
             projectionService.drainProjectionQueueFully();
+            meterRegistry.counter("leaderboard.projections.rebuilt").increment();
             return new AdminReplayResponse(submissions.size(), bestUpdatesApplied, projectionMessages);
         } finally {
             rebuildLockRepository.release();
         }
+    }
+
+    public AdminSubmissionDebugResponse getSubmissionDebug(String submissionId) {
+        var submission = submissionRepository.get(submissionId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Submission not found"));
+
+        return new AdminSubmissionDebugResponse(
+            submission,
+            riskSignalRepository.findBySubmissionId(submissionId),
+            getPlayerBestScores(submission.playerId()),
+            classify(submission.playerId())
+        );
     }
 
     public SeasonMetadataResponse getActiveSeason() {

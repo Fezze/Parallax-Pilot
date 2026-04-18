@@ -20,7 +20,7 @@ class IdempotencyRepositoryTest {
     @Test
     void acquireAndCompleteInvokesDynamo() {
         DynamoDbClient dynamo = mock(DynamoDbClient.class);
-        LeaderboardProperties props = new LeaderboardProperties("test-", 10, 7, "queue", 10, 60, 1000, 10000L, 1000, 5000L, 15);
+        LeaderboardProperties props = new LeaderboardProperties("test-", 10, 7, "queue", 10, 60, 1000, 10000L, 1000, 5000L, 15, false, "snapshots");
         IdempotencyRepository repo = new IdempotencyRepository(dynamo, props);
 
         Instant now = Instant.parse("2026-04-16T12:00:00Z");

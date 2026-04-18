@@ -14,6 +14,8 @@ public record LeaderboardProperties(
     long quarantineSurvivedMs,
     int maxLeaderboardScan,
     long consumerFixedDelayMs,
-    int rebuildLockTtlMinutes
+    int rebuildLockTtlMinutes,
+    boolean projectionConsumerEnabled,
+    String snapshotBucketName
 ) {
 }
