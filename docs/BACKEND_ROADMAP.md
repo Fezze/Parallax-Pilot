@@ -1,5 +1,7 @@
 # Backend Roadmap
 
+Handoff for the next agent lives in `docs/BACKEND_HANDOFF.md`.
+
 ## Current status
 Addressed:
 - Spring Boot API scaffold
