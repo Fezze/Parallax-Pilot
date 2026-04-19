@@ -2,6 +2,8 @@
 
 Audience: AI agents only. Human-facing documentation belongs only in `README.md` files.
 
+For the human-facing system design overview, see `../README.md` and `SYSTEM_DESIGN_REVIEW.md`.
+
 Ten dokument opisuje architekturę repo tak, żeby agent mógł wejść w pracę bez reverse engineeringu.
 
 ## System Overview

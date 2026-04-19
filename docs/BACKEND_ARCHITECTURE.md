@@ -2,6 +2,8 @@
 
 Audience: AI agents only. Human-facing documentation belongs only in `README.md` files.
 
+For the human-facing backend/system design overview, see `../README.md` and `SYSTEM_DESIGN_REVIEW.md`.
+
 ## Summary
 Parallax Pilot keeps gameplay on the watch and moves networked leaderboard concerns into the Zepp phone companion stack. The watch remains the game runtime. The phone-side `Settings App` is the leaderboard UI, the Zepp `Side Service` is the online client, and a Spring Boot backend on AWS is the system of record for submissions, best scores, and leaderboard reads.
 
