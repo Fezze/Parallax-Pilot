@@ -33,16 +33,20 @@ Ten plik jest punktem startowym dla kolejnego agenta AI. Cel: przejąć pracę b
 - Backend testy bez Dockera: `cmd /c npm run backend:test`
 - Backend build bez testów: `cmd /c npm run build:backend`
 - Zepp build: `cmd /c npm run build`
+- Zepp release build z bumpem wersji: `cmd /c npm run build:app`
 - Pełny backend verify z LocalStack/Testcontainers: `cmd /c npm run backend:verify`
 
 ## Ważne Ostrzeżenie O Buildzie Zepp
-`cmd /c npm run build` podbija wersję aplikacji w `package.json`, `package-lock.json` i `zepp-app/app.json`.
+`cmd /c npm run build` nie podbija już wersji aplikacji. To jest bezpieczny build walidacyjny.
+
+`cmd /c npm run build:app` podbija wersję aplikacji w `package.json`, `package-lock.json` i `zepp-app/app.json`.
 
 Jeśli robisz tylko backend, preferuj:
 - `cmd /c npm run backend:test`
 - `cmd /c npm run build:backend`
 
-Backend-only versioning jest nadal zadaniem P1.
+Jeśli robisz release watch app albo przygotowujesz store submission, użyj:
+- `cmd /c npm run build:app`
 
 ## Główne Obszary Kodu
 - Backend API: `backend/src/main/java/com/parallaxpilot/leaderboard/api/LeaderboardController.java`

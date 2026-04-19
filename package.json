@@ -18,6 +18,7 @@
     "backend:test": "node scripts/backend-maven.mjs -Dtest=ScopeResolverTest,IdempotencyRepositoryTest,SeasonServiceTest,LeaderboardControllerTest,SnapshotServiceTest test",
     "backend:verify": "node scripts/backend-maven.mjs -DskipTests=false verify",
     "build": "node scripts/zeus-proxy.mjs build",
+    "build:app": "node scripts/zeus-proxy.mjs build --bump-version",
     "build:backend": "node scripts/backend-maven.mjs -DskipTests package",
     "build:raw": "cmd /c \"cd /d zepp-app && zeus build\"",
     "dev": "node scripts/zeus-proxy.mjs dev",

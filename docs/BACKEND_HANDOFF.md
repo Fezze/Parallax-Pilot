@@ -15,12 +15,13 @@ Start with `docs/TAKEOVER.md` for the full agent-oriented documentation set.
 - Projection worker runtime exists as `ProjectionWorkerApplication` plus `worker` profile; default API profile does not run scheduled projection draining.
 - Baseline Terraform exists in `infra/terraform/` for DynamoDB, SQS, S3 snapshots, CloudWatch log groups, and ECR repos.
 - Baseline CI exists in `.github/workflows/backend.yml`.
-- App build currently bumps watch app version; current version after validation is `2.4.5`, code `61`.
+- `npm run build` is now a neutral validation build; `npm run build:app` is the explicit watch release build with version bump.
+- Current watch version remains `2.4.5`, code `61` until the next explicit `build:app` run.
 
 ## Validation Already Run
 - `cmd /c npm test` passed: 52 tests.
-- `cmd /c npm run backend:test` passed: 12 tests.
-- `cmd /c npm run build` passed and bumped the Zepp app version to `2.4.5`/`61`.
+- `cmd /c npm run build` passed without bumping the Zepp app version.
+- `node scripts/zeus-proxy.mjs build --bump-version --dry-run` passed and reported `2.4.5 -> 2.4.6` without modifying files.
 - `cmd /c npm run build:backend` passed.
 - `cmd /c npm run backend:verify` still does not pass in this Codex environment because Testcontainers cannot access Docker.
 
@@ -33,7 +34,6 @@ Start with `docs/TAKEOVER.md` for the full agent-oriented documentation set.
 - Do not mark integration verification as complete until `cmd /c npm run backend:verify` passes with Docker/Testcontainers.
 
 ## Still Missing Or Partial
-- Backend-only versioning: backend-only builds still share workspace/package version behavior, and `npm run build` bumps the watch app.
 - Player identity onboarding: `Settings App` and `Side Service` still use demo defaults (`demo-player`, `Pilot`) unless configured manually.
 - Anti-abuse depth: current logic is player rate limit plus basic score/survival sanity; still missing device/IP throttling, version anomaly rules, replay-pattern heuristics, and richer admin workflows.
 - Rank stability: tie-break logic exists, but equal-score/equal-time behavior needs explicit tests and docs across global/daily/seasonal scopes.
@@ -47,37 +47,32 @@ Start with `docs/TAKEOVER.md` for the full agent-oriented documentation set.
 - LocalStack tests: full integration tests are still Docker-dependent and were skipped per user instruction for now.
 
 ## Recommended Next Plan
-1. Backend-only versioning.
-   - Split backend release/build metadata from watch app versioning.
-   - Ensure backend-only changes do not bump `zepp-app/app.json`.
-   - Add docs for when to run `npm run build` vs backend-only build scripts.
-
-2. Docker/Testcontainers verification, only when user wants it resumed.
+1. Docker/Testcontainers verification, only when user wants it resumed.
    - Fix Docker access for the active execution user or run Codex under a user in `docker-users`.
    - Start Docker Desktop/Engine.
    - Run `cmd /c npm run backend:verify`.
    - Fix any real integration failures; do not hide them by skipping tests.
 
-3. Deployment shape.
+2. Deployment shape.
    - Extend Terraform with IAM roles/policies, ECS/App Runner services, API and projection worker task definitions, Parameter Store/Secrets Manager config, and autoscaling.
    - Add GitHub Actions image build/push and environment promotion.
 
-4. Observability.
+3. Observability.
    - Add timers for submit/read/projection paths.
    - Add projection queue lag/depth metric.
    - Add health/readiness endpoints that check DynamoDB/SQS/S3.
    - Add CloudWatch dashboard and alarms in Terraform.
 
-5. Product identity.
+4. Product identity.
    - Replace demo player defaults with an install/player identity onboarding flow in Settings App.
    - Keep anonymous identity lightweight, but make it stable and explicit.
 
-6. Ranking and abuse hardening.
+5. Ranking and abuse hardening.
    - Add equal-score tie tests.
    - Add richer suspicious-signal rules.
    - Add admin endpoints for risk review and quarantine release if needed.
 
-7. Snapshot recovery and admin UI.
+6. Snapshot recovery and admin UI.
    - Add snapshot restore/diff tooling before relying on S3 export operationally.
    - If building admin UI, add Playwright screenshot scenarios for every new screen, matching existing locale/shape/resolution matrices.
 

@@ -11,6 +11,26 @@ Ten plik opisuje, co jest zrobione, gdzie leży kod i jaki jest poziom pewności
 - Backend Spring Boot jest w `backend/`.
 - AWS-emulacja lokalna jest opisana przez LocalStack/Testcontainers.
 - Terraform i GitHub Actions są baseline, nie pełny deployment.
+- Build walidacyjny Zepp jest oddzielony od release bumpa wersji.
+
+## Zrobione: Backend-only Versioning
+Status: zaimplementowane.
+
+Pliki:
+- `package.json`
+- `scripts/zeus-proxy.mjs`
+- `scripts/version-proxy.mjs`
+- `docs/TAKEOVER.md`
+- `docs/VALIDATION_RUNBOOK.md`
+- `docs/NEXT_WORK_PLAN.md`
+
+Zachowanie:
+- `cmd /c npm run build` wykonuje neutralny build Zepp bez zmiany wersji.
+- `cmd /c npm run build:app` wykonuje build Zepp z bumpem `package.json`, `package-lock.json` i `zepp-app/app.json`.
+- Backend-only walidacja nie wymusza już dotykania wersji watch app.
+
+Ryzyko:
+- Ścieżka `build:app` wymaga walidacji runtime/store przy następnym release aplikacji.
 
 ## Zrobione: Watch -> Side Service Submit
 Status: zaimplementowane, wymaga runtime testu na Zepp/symulatorze.
@@ -223,6 +243,7 @@ Ryzyko:
 ## Ostatnia Znana Walidacja
 - `cmd /c npm test`: pass, 52 tests.
 - `cmd /c npm run backend:test`: pass, 12 tests.
-- `cmd /c npm run build`: pass, bumped app to `2.4.5` / code `61`.
+- `cmd /c npm run build`: pass, bez bumpa wersji watch app.
 - `cmd /c npm run build:backend`: pass.
+- `node scripts/zeus-proxy.mjs build --bump-version --dry-run`: pass, ścieżka release deklaruje bump `2.4.5 -> 2.4.6` bez modyfikacji plików.
 - `cmd /c npm run backend:verify`: fail only at Docker/Testcontainers initialization in current Codex environment.

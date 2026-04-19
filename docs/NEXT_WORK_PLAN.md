@@ -5,6 +5,8 @@ Audience: AI agents only. Human-facing documentation belongs only in `README.md`
 Ten plik opisuje, co jeszcze warto zrobić, z priorytetami, plikami i kryteriami akceptacji.
 
 ## P1: Backend-only Versioning
+Status: zamknięte.
+
 Problem:
 - `cmd /c npm run build` podbija wersję aplikacji Zepp nawet przy pracach backendowych.
 - To powoduje churn w `package.json`, `package-lock.json` i `zepp-app/app.json`.
@@ -26,9 +28,14 @@ Proponowane kroki:
 4. Udokumentować, że backend-only PR nie powinien dotykać `zepp-app/app.json`.
 5. Dodać test lub guard, jeśli repo ma hooki/release scripts.
 
+Wdrożone:
+1. `cmd /c npm run build` jest neutralnym buildem walidacyjnym bez bumpa wersji.
+2. `cmd /c npm run build:app` jest jawną ścieżką release build dla Zepp app z bumpem wersji.
+3. Dokumentacja operacyjna wskazuje, kiedy używać `build` vs `build:app`.
+
 Akceptacja:
 - Backend-only validation nie zmienia wersji aplikacji Zepp.
-- Dokumentacja jasno mówi, kiedy wolno uruchomić Zepp build.
+- Dokumentacja jasno mówi, kiedy wolno uruchomić Zepp build z bumpem wersji.
 
 ## P1: Docker/Testcontainers Full Verify
 Problem:

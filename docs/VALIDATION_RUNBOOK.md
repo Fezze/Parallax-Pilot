@@ -35,9 +35,16 @@ cmd /c npm run build
 ```
 
 Uwaga:
-- Ten build podbija wersję watch app.
+- Ten build nie podbija wersji watch app.
 - Po sukcesie zgodnie z regułami repo trzeba zrobić commit.
-- Nie używaj tego jako rutynowej walidacji backend-only, dopóki backend-only versioning nie jest rozwiązane.
+
+Jeśli potrzebny jest release build z bumpem wersji aplikacji:
+
+```powershell
+cmd /c npm run build:app
+```
+
+Ten wariant podbija wersję w `package.json`, `package-lock.json` i `zepp-app/app.json`.
 
 ## Pełna Backend Walidacja Z Dockerem
 ```powershell
@@ -98,6 +105,8 @@ git add -A
 git commit -m "<message>"
 ```
 
+Jeśli przygotowujesz store/release build, zamień `npm run build` na `npm run build:app`.
+
 Jeśli zmieniłeś UI:
 
 ```powershell
@@ -108,7 +117,8 @@ cmd /c npm run test:playwright:screens
 Z ostatniej sesji:
 - `cmd /c npm test`: pass, 52 tests.
 - `cmd /c npm run backend:test`: pass, 12 tests.
-- `cmd /c npm run build`: pass, app version `2.4.5`, code `61`.
+- `cmd /c npm run build`: pass, bez bumpa wersji watch app.
+- `node scripts/zeus-proxy.mjs build --bump-version --dry-run`: pass, ścieżka release deklaruje bump `2.4.5 -> 2.4.6` bez modyfikacji plików.
 - `cmd /c npm run build:backend`: pass.
 - `cmd /c npm run backend:verify`: fail na Docker/Testcontainers, nie na asercjach backendu.
 

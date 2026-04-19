@@ -6,10 +6,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, '..')
 const command = process.argv[2]
 const dryRun = process.argv.includes('--dry-run')
-const shouldBumpVersion = command !== 'preview'
+const shouldBumpVersion = process.argv.includes('--bump-version')
 
 if (!['dev', 'preview', 'build'].includes(command)) {
-  console.error('Usage: node scripts/zeus-proxy.mjs <dev|preview|build> [--dry-run]')
+  console.error('Usage: node scripts/zeus-proxy.mjs <dev|preview|build> [--dry-run] [--bump-version]')
   process.exit(1)
 }
 
@@ -29,7 +29,7 @@ if (shouldBumpVersion) {
 }
 
 if (dryRun) {
-  console.log(`Dry run: zeus ${command}`)
+  console.log(`Dry run: zeus ${command}${shouldBumpVersion ? ' with version bump' : ''}`)
   process.exit(0)
 }
 
