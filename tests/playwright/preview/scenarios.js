@@ -228,10 +228,11 @@ function createPhoneLeaderboardScenario({
     settingsStorage: {
       leaderboard_active_scope: scope,
       leaderboard_api_base_url: 'http://localhost:8080',
-      leaderboard_player_id: 'demo-player',
+      leaderboard_player_id: 'pilot-4fa21b7c',
+      leaderboard_player_nickname: 'Pilot 1B7C',
       leaderboard_last_sync_at: '2026-04-09T12:00:00Z',
       leaderboard_player_best_cache: JSON.stringify({
-        playerId: 'demo-player',
+        playerId: 'pilot-4fa21b7c',
         bestScores: {
           [scope]: {
             score: 1420,
@@ -241,7 +242,7 @@ function createPhoneLeaderboardScenario({
         },
       }),
       leaderboard_player_classification_cache: JSON.stringify({
-        playerId: 'demo-player',
+        playerId: 'pilot-4fa21b7c',
         exactRank: scope === 'global' ? 4 : null,
         approximateBand: scope === 'global' ? null : 'top-10%',
         scope,
@@ -252,7 +253,7 @@ function createPhoneLeaderboardScenario({
         entries: [
           { playerId: 'pilot-1', nickname: 'Nova', score: 1820, survivedMs: 21000, rank: 1 },
           { playerId: 'pilot-2', nickname: 'Comet', score: 1710, survivedMs: 19600, rank: 2 },
-          { playerId: 'demo-player', nickname: 'Pilot', score: 1420, survivedMs: 18000, rank: 4 },
+          { playerId: 'pilot-4fa21b7c', nickname: 'Pilot 1B7C', score: 1420, survivedMs: 18000, rank: 4 },
         ],
       }),
     },
@@ -695,7 +696,7 @@ export const previewScenarios = Object.fromEntries(
         locale: 'en-US',
         variant: 'global',
         scope: 'global',
-        expectedTexts: ['Leaderboard', 'Refresh leaderboard', 'Player: demo-player', 'Rank: 4 (Exact)', '01  Nova  1820'],
+        expectedTexts: ['Leaderboard', 'Refresh leaderboard', 'Alias: Pilot 1B7C', 'ID: pilot-4fa21b7c', 'New alias', 'Rank: 4 (Exact)', '01  Nova  1820'],
       }),
     ],
     [
@@ -704,7 +705,7 @@ export const previewScenarios = Object.fromEntries(
         locale: 'pl-PL',
         variant: 'daily',
         scope: 'daily',
-        expectedTexts: ['Leaderboard', 'Odswiez leaderboard', 'Gracz: demo-player', 'Pozycja: top-10% (Przyblizona)', '01  Nova  1820'],
+        expectedTexts: ['Leaderboard', 'Odswiez leaderboard', 'Alias: Pilot 1B7C', 'ID: pilot-4fa21b7c', 'Nowy alias', 'Pozycja: top-10% (Przyblizona)', '01  Nova  1820'],
       }),
     ],
   ]

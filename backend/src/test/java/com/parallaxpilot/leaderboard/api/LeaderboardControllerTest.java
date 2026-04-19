@@ -1,5 +1,7 @@
 package com.parallaxpilot.leaderboard.api;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -172,5 +174,43 @@ class LeaderboardControllerTest {
         mockMvc.perform(get("/v1/admin/submissions/sub-debug/debug"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.submission.submissionId").value("sub-debug"));
+    }
+
+    @Test
+    void returnsValidationErrorPayloadForInvalidSubmit() throws Exception {
+        mockMvc.perform(post("/v1/scores:submit")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "submissionId": "",
+                      "playerId": "",
+                      "score": 0,
+                      "survivedMs": 0,
+                      "playedAt": null,
+                      "clientVersion": ""
+                    }
+                    """))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Validation Failed"))
+            .andExpect(jsonPath("$.path").value("/v1/scores:submit"))
+            .andExpect(jsonPath("$.fieldErrors.submissionId").exists())
+            .andExpect(jsonPath("$.fieldErrors.playerId").exists())
+            .andExpect(jsonPath("$.fieldErrors.score").exists())
+            .andExpect(jsonPath("$.fieldErrors.survivedMs").exists())
+            .andExpect(jsonPath("$.fieldErrors.playedAt").exists())
+            .andExpect(jsonPath("$.fieldErrors.clientVersion").exists());
+    }
+
+    @Test
+    void returnsInternalErrorPayloadForUnexpectedException() throws Exception {
+        doThrow(new IllegalStateException("boom"))
+            .when(leaderboardService)
+            .getLeaderboard(any(), any(Integer.class));
+
+        mockMvc.perform(get("/v1/leaderboards/global"))
+            .andExpect(status().isInternalServerError())
+            .andExpect(jsonPath("$.error").value("Internal Error"))
+            .andExpect(jsonPath("$.message").value("boom"))
+            .andExpect(jsonPath("$.path").value("/v1/leaderboards/global"));
     }
 }

@@ -115,21 +115,17 @@ cmd /c npm run test:playwright:screens
 
 ## Ostatnie Znane Wyniki
 Z ostatniej sesji:
-- `cmd /c npm test`: pass, 52 tests.
-- `cmd /c npm run backend:test`: pass, 12 tests.
+- `cmd /c npm test`: pass, 54 tests.
+- `cmd /c npm run test:playwright:screens`: pass, 140 tests.
+- Screenshoty phone leaderboard dla `en-US` i `pl-PL` po zmianie onboardingu zostały obejrzane.
 - `cmd /c npm run build`: pass, bez bumpa wersji watch app.
-- `node scripts/zeus-proxy.mjs build --bump-version --dry-run`: pass, ścieżka release deklaruje bump `2.4.5 -> 2.4.6` bez modyfikacji plików.
 - `cmd /c npm run build:backend`: pass.
-- `cmd /c npm run backend:verify`: fail na Docker/Testcontainers, nie na asercjach backendu.
+- `cmd /c npm run backend:verify`: pass, 25 backend tests, Docker/Testcontainers aktywne.
 
 ## Docker Status Z Ostatniej Sesji
-- Docker Desktop został zainstalowany przez `winget`.
-- Docker CLI nie był w PATH w bieżącej sesji, ale istniał pod `C:\Program Files\Docker\Docker\resources\bin\docker.exe`.
-- `docker version` przez pełną ścieżkę pokazał client, ale brak dostępu do Docker API pipe.
-- `com.docker.service` był stopped.
-- Aktywny user procesu to `PC\codexsandboxonline`.
-- `docker-users` zawierał `PC\krzys`.
-- Dodanie `PC\codexsandboxonline` do `docker-users` zostało odrzucone przez użytkownika.
+- `docker version` przechodzi w aktywnym środowisku.
+- Testcontainers potrafi uruchomić LocalStack `4.1` podczas `cmd /c npm run backend:verify`.
+- Pełny verify ujawnił i potwierdził naprawę dwóch realnych problemów testowych: deadlock w `ProjectionConcurrencyIntegrationTest` i reuse Spring context ze starym endpointem LocalStack.
 
 ## Kiedy Commitować
 Commituj po:

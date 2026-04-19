@@ -18,6 +18,11 @@ import {
   readSubmitQueue,
   removeSubmittedScore,
 } from './leaderboard-submit.js'
+import {
+  ensureLeaderboardIdentity,
+  readLeaderboardIdentity,
+  writeLeaderboardIdentity,
+} from './leaderboard-identity.js'
 
 let localStorageInstance
 let sessionStorageInstance
@@ -70,6 +75,18 @@ export function queueLeaderboardScore(entry, deviceInfo = {}, clientVersion = 'w
 
 export function loadLeaderboardSubmitQueue() {
   return readSubmitQueue(getLocalStorage())
+}
+
+export function loadLeaderboardIdentity() {
+  return readLeaderboardIdentity(getLocalStorage())
+}
+
+export function ensureDeviceLeaderboardIdentity(options) {
+  return ensureLeaderboardIdentity(getLocalStorage(), options)
+}
+
+export function saveLeaderboardIdentity(identity) {
+  return writeLeaderboardIdentity(getLocalStorage(), identity)
 }
 
 export function removeLeaderboardSubmission(submissionId) {

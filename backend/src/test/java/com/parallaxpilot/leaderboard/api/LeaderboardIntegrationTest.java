@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -37,6 +38,13 @@ import com.parallaxpilot.leaderboard.support.LocalStackIntegrationSupport;
 @ActiveProfiles("test")
 class LeaderboardIntegrationTest extends LocalStackIntegrationSupport {
 
+    private static Instant currentTestInstant(int minuteOffset) {
+        return Instant.now()
+            .truncatedTo(ChronoUnit.DAYS)
+            .plus(12, ChronoUnit.HOURS)
+            .plus(minuteOffset, ChronoUnit.MINUTES);
+    }
+
     @Autowired
     private MockMvc mockMvc;
 
@@ -61,13 +69,14 @@ class LeaderboardIntegrationTest extends LocalStackIntegrationSupport {
 
     @Test
     void submitThenReadLeaderboardAndBestScore() throws Exception {
+        var playedAt = currentTestInstant(0);
         var request = new SubmitScoreRequest(
             "sub-int-1",
             "player-int-1",
             "Pilot",
             2200,
             18000,
-            Instant.parse("2026-04-09T12:00:00Z"),
+            playedAt,
             "2.4.2",
             "balance-2"
         );
@@ -98,13 +107,14 @@ class LeaderboardIntegrationTest extends LocalStackIntegrationSupport {
 
     @Test
     void duplicateSubmissionIsIdempotentAtApiLevel() throws Exception {
+        var playedAt = currentTestInstant(10);
         var request = new SubmitScoreRequest(
             "sub-int-dup",
             "player-int-dup",
             "Comet",
             1700,
             14000,
-            Instant.parse("2026-04-09T13:00:00Z"),
+            playedAt,
             "2.4.2",
             "balance-2"
         );
@@ -125,13 +135,15 @@ class LeaderboardIntegrationTest extends LocalStackIntegrationSupport {
 
     @Test
     void lowerScoreDoesNotReplaceExistingBestScore() throws Exception {
+        var betterPlayedAt = currentTestInstant(20);
+        var worsePlayedAt = currentTestInstant(25);
         var betterRequest = new SubmitScoreRequest(
             "sub-int-best-1",
             "player-int-best",
             "Nova",
             2600,
             21000,
-            Instant.parse("2026-04-09T14:00:00Z"),
+            betterPlayedAt,
             "2.4.3",
             "balance-2"
         );
@@ -141,7 +153,7 @@ class LeaderboardIntegrationTest extends LocalStackIntegrationSupport {
             "Nova",
             1200,
             10000,
-            Instant.parse("2026-04-09T14:05:00Z"),
+            worsePlayedAt,
             "2.4.3",
             "balance-2"
         );
@@ -167,13 +179,15 @@ class LeaderboardIntegrationTest extends LocalStackIntegrationSupport {
 
     @Test
     void staleProjectionTaskDoesNotReintroduceOldLeaderboardEntry() throws Exception {
+        var firstPlayedAt = currentTestInstant(30);
+        var betterPlayedAt = currentTestInstant(35);
         var first = new SubmitScoreRequest(
             "sub-stale-1",
             "player-stale",
             "Stale",
             1800,
             12000,
-            Instant.parse("2026-04-09T14:00:00Z"),
+            firstPlayedAt,
             "2.4.3",
             "balance-2"
         );
@@ -183,7 +197,7 @@ class LeaderboardIntegrationTest extends LocalStackIntegrationSupport {
             "Stale",
             2600,
             18000,
-            Instant.parse("2026-04-09T14:05:00Z"),
+            betterPlayedAt,
             "2.4.3",
             "balance-2"
         );
@@ -203,7 +217,7 @@ class LeaderboardIntegrationTest extends LocalStackIntegrationSupport {
             "global",
             1800,
             12000,
-            Instant.parse("2026-04-09T14:00:00Z")
+            firstPlayedAt
         ));
 
         mockMvc.perform(post("/v1/admin/projections:drain"))
@@ -220,13 +234,14 @@ class LeaderboardIntegrationTest extends LocalStackIntegrationSupport {
     @Test
     void aroundMeAndClassificationUseProjectedRankings() throws Exception {
         for (int index = 0; index < 6; index += 1) {
+            var playedAt = currentTestInstant(60 + index);
             var request = new SubmitScoreRequest(
                 "sub-around-" + index,
                 "player-around-" + index,
                 "Pilot-" + index,
                 3000 - (index * 100),
                 20000 - (index * 500L),
-                Instant.parse("2026-04-09T15:0" + index + ":00Z"),
+                playedAt,
                 "2.4.3",
                 "balance-2"
             );
@@ -251,13 +266,14 @@ class LeaderboardIntegrationTest extends LocalStackIntegrationSupport {
 
     @Test
     void quarantinedSubmissionDoesNotReachProjectionFlow() throws Exception {
+        var playedAt = currentTestInstant(90);
         var request = new SubmitScoreRequest(
             "sub-risk-1",
             "player-risk-1",
             "Risky",
             250000,
             18000,
-            Instant.parse("2026-04-09T16:00:00Z"),
+            playedAt,
             "2.4.3",
             "balance-2"
         );
@@ -276,22 +292,24 @@ class LeaderboardIntegrationTest extends LocalStackIntegrationSupport {
 
     @Test
     void seasonCutoverAndReplayRebuildProjections() throws Exception {
+        var seasonStart = currentTestInstant(-720);
         mockMvc.perform(patch("/v1/admin/seasons:cutover")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsBytes(new SeasonCutoverRequest(
-                    "2026-S2",
-                    Instant.parse("2026-04-01T00:00:00Z")
+                    "current-test-season",
+                    seasonStart
                 ))))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.seasonKey").value("2026-S2"));
+            .andExpect(jsonPath("$.seasonKey").value("current-test-season"));
 
+        var playedAt = currentTestInstant(120);
         var request = new SubmitScoreRequest(
             "sub-rebuild-1",
             "player-rebuild-1",
             "Replay",
             4100,
             22000,
-            Instant.parse("2026-04-09T18:00:00Z"),
+            playedAt,
             "2.4.3",
             "balance-2"
         );
@@ -325,7 +343,7 @@ class LeaderboardIntegrationTest extends LocalStackIntegrationSupport {
                         "Concurrent",
                         score,
                         10000 + taskIndex,
-                        Instant.parse("2026-04-09T17:00:0" + taskIndex + "Z"),
+                        currentTestInstant(180 + taskIndex),
                         "2.4.3",
                         "balance-2"
                     ));
@@ -351,13 +369,14 @@ class LeaderboardIntegrationTest extends LocalStackIntegrationSupport {
     @Test
     void rateLimitUsesServerTimeNotClientPlayedAtBuckets() throws Exception {
         for (int index = 0; index < 24; index += 1) {
+            var playedAt = currentTestInstant(240 + index);
             var request = new SubmitScoreRequest(
                 "sub-rate-" + index,
                 "player-rate",
                 "Rate",
                 1000 + index,
                 10000,
-                Instant.parse("2026-04-09T10:" + String.format("%02d", index % 60) + ":00Z"),
+                playedAt,
                 "2.4.3",
                 "balance-2"
             );
@@ -389,13 +408,15 @@ class LeaderboardIntegrationTest extends LocalStackIntegrationSupport {
 
     @Test
     void rebuildPurgesQueueBeforeRepublishing() throws Exception {
+        var currentPlayedAt = currentTestInstant(300);
+        var stalePlayedAt = currentTestInstant(240);
         var current = new SubmitScoreRequest(
             "sub-replay-current",
             "player-replay",
             "Replay",
             5000,
             25000,
-            Instant.parse("2026-04-09T19:00:00Z"),
+            currentPlayedAt,
             "2.4.3",
             "balance-2"
         );
@@ -413,7 +434,7 @@ class LeaderboardIntegrationTest extends LocalStackIntegrationSupport {
             "global",
             1500,
             9000,
-            Instant.parse("2026-04-09T18:00:00Z")
+            stalePlayedAt
         ));
 
         mockMvc.perform(post("/v1/admin/projections:rebuild"))

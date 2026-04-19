@@ -38,6 +38,8 @@ Akceptacja:
 - Dokumentacja jasno mówi, kiedy wolno uruchomić Zepp build z bumpem wersji.
 
 ## P1: Docker/Testcontainers Full Verify
+Status: zamknięte.
+
 Problem:
 - `cmd /c npm run backend:verify` nie przechodzi w obecnym Codex środowisku, bo Docker nie jest dostępny dla aktywnego użytkownika.
 
@@ -50,19 +52,12 @@ Pliki startowe:
 - `package.json`
 - `scripts/backend-maven.mjs`
 
-Znany stan:
-- Docker Desktop został zainstalowany.
-- `com.docker.service` nie startował z aktualnego procesu.
-- Aktywny user Codex: `PC\codexsandboxonline`.
-- `docker-users` zawierał `PC\krzys`, nie Codex user.
-- Użytkownik kazał na razie pominąć Docker.
-
-Proponowane kroki, gdy użytkownik wróci do tematu:
-1. Uruchomić Docker Desktop jako właściwy user.
-2. Zapewnić dostęp aktywnego procesu do Docker pipe.
-3. Sprawdzić `docker version`.
-4. Uruchomić `cmd /c npm run backend:verify`.
-5. Naprawić realne błędy integracyjne, jeśli się pojawią.
+Wdrożone:
+1. `docker version` potwierdził działające środowisko Docker/Testcontainers.
+2. `LeaderboardIntegrationTest` został utwardzony na bieżącą datę/scopes.
+3. `ProjectionConcurrencyIntegrationTest` został naprawiony z deadlocka startowego.
+4. `LocalStackIntegrationSupport` czyści context po każdej klasie, żeby nie reuse'ować klientów AWS ze starym endpointem kontenera.
+5. `cmd /c npm run backend:verify` przechodzi.
 
 Akceptacja:
 - `backend:verify` przechodzi.
@@ -96,6 +91,8 @@ Akceptacja:
 - Refresh leaderboardu po submit pokazuje nowy best/rank.
 
 ## P2: Production Deployment Shape
+Status: częściowo zrobione.
+
 Problem:
 - Terraform tworzy baseline resources, ale nie wdraża API/worker runtime.
 
@@ -109,14 +106,19 @@ Pliki startowe:
 - `.github/workflows/backend.yml`
 - `backend/pom.xml`
 
-Proponowane kroki:
-1. Dodać IAM roles/policies dla API i worker.
-2. Dodać ECS Fargate albo App Runner service dla API.
-3. Dodać osobny worker service/task z profilem `worker`.
-4. Dodać Parameter Store/Secrets Manager config.
-5. Dodać image build/push w GitHub Actions.
-6. Dodać Terraform plan/apply z approval gates.
-7. Dodać env split: local/staging/prod.
+Wdrożone:
+1. Dodane IAM roles/policies dla API i worker.
+2. Dodany ECS Fargate runtime shape dla API.
+3. Dodany osobny worker service/task z profilem `worker`.
+4. Dodany `backend/Dockerfile` jako image target.
+5. Dodane outputy i README dla runtime planu.
+
+Pozostało:
+1. Dodać Parameter Store/Secrets Manager config.
+2. Dodać image build/push w GitHub Actions.
+3. Dodać Terraform plan/apply z approval gates.
+4. Dodać env split: local/staging/prod.
+5. Zweryfikować Terraform CLI i plan po zainstalowaniu `terraform` lokalnie.
 
 Akceptacja:
 - CI publikuje obrazy.
@@ -224,6 +226,8 @@ Akceptacja:
 - Restore nie jest destrukcyjne bez jawnego trybu.
 
 ## P3: Player Identity Onboarding
+Status: zamknięte dla anonymous onboarding MVP.
+
 Problem:
 - App używa `demo-player` i `Pilot`.
 
@@ -236,12 +240,12 @@ Pliki startowe:
 - `zepp-app/shared/leaderboard-config.js`
 - `zepp-app/shared/leaderboard-submit.js`
 
-Proponowane kroki:
-1. Dodać install/player id generation.
-2. Dodać nickname setup.
-3. Zdecydować, gdzie identity jest zapisywana: watch local storage, settingsStorage, albo oba.
-4. Dodać migration z demo defaults.
-5. Dodać UI w Settings App.
+Wdrożone:
+1. Dodane install/player id generation w shared helperze.
+2. Identity jest utrzymywana po stronie phone i synchronizowana na watch.
+3. Dodana migration z demo defaults.
+4. Dodany UI w Settings App: alias, player ID, hint i `New alias`.
+5. Dodane testy helperów i screenshot coverage dla phone leaderboard.
 
 Akceptacja:
 - Nowy user nie submituje jako `demo-player`.

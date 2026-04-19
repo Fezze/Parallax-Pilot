@@ -92,8 +92,8 @@ class ProjectionConcurrencyIntegrationTest extends LocalStackIntegrationSupport 
             });
         }
 
-        List<Future<Integer>> futures = executor.invokeAll(jobs);
         start.countDown();
+        List<Future<Integer>> futures = executor.invokeAll(jobs);
 
         // wait for completion
         executor.shutdown();

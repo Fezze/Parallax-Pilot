@@ -10,8 +10,10 @@ Ten plik opisuje, co jest zrobione, gdzie leży kod i jaki jest poziom pewności
 - Phone `Side Service` robi online sync z backendem.
 - Backend Spring Boot jest w `backend/`.
 - AWS-emulacja lokalna jest opisana przez LocalStack/Testcontainers.
-- Terraform i GitHub Actions są baseline, nie pełny deployment.
+- Terraform ma baseline resources plus wstępny runtime shape ECS/ALB/IAM dla API i projection worker.
 - Build walidacyjny Zepp jest oddzielony od release bumpa wersji.
+- Anonymous identity onboarding zastąpił `demo-player` / `Pilot`.
+- Pełne `cmd /c npm run backend:verify` przechodzi lokalnie.
 
 ## Zrobione: Backend-only Versioning
 Status: zaimplementowane.
@@ -59,6 +61,33 @@ Ryzyko:
 - Brak fizycznej walidacji BLE/messaging.
 - Brak retry backoff, TTL i widocznego statusu submitu dla użytkownika.
 
+## Zrobione: Player Identity Onboarding
+Status: zaimplementowane.
+
+Pliki:
+- `zepp-app/shared/leaderboard-identity.js`
+- `zepp-app/shared/leaderboard-submit.js`
+- `zepp-app/shared/storage.js`
+- `zepp-app/shared/leaderboard-device-bridge.js`
+- `zepp-app/app-side/index.js`
+- `zepp-app/setting/index.js`
+- `tests/shared-helpers.test.js`
+- `tests/playwright/preview/scenarios.js`
+
+Zachowanie:
+- Phone side generuje i utrzymuje stabilną anonymous identity `pilot-xxxxxxxx` / `Pilot XXXX`.
+- Demo defaults są migrowane do nowej identity.
+- Watch może poprosić phone o identity i dostać sync przez messaging.
+- Settings App pokazuje alias, player ID i akcję `New alias` zamiast stałego `demo-player`.
+
+Testy:
+- `cmd /c npm test` przechodzi.
+- `cmd /c npm run test:playwright:screens` przechodzi, a zaktualizowane screenshoty leaderboard phone zostały obejrzane.
+
+Ryzyko:
+- Nadal brak fizycznej walidacji na zegarku/symulatorze.
+- Rotacja aliasu czyści cache gracza i wymusza odświeżenie, ale nie ma jeszcze pełnego onboarding flow z wyjaśnieniem reinstall/device-replacement.
+
 ## Zrobione: Backend API
 Status: zaimplementowane.
 
@@ -82,7 +111,7 @@ Endpointy:
 
 Testy:
 - `LeaderboardControllerTest` pokrywa podstawowe kontrakty kontrolera.
-- `LeaderboardIntegrationTest` istnieje, ale wymaga Docker/Testcontainers.
+- `LeaderboardIntegrationTest` przechodzi w `cmd /c npm run backend:verify` po utwardzeniu dat testowych.
 
 ## Zrobione: Idempotency I Best Scores
 Status: zaimplementowane.
@@ -99,7 +128,7 @@ Zachowanie:
 - Idempotency jest finalizowane po udanym flow lub quarantine path.
 
 Ryzyko:
-- Wymaga pełnego `backend:verify` z Dockerem dla integracyjnego potwierdzenia po ostatnich zmianach.
+- Dalsze zmiany w testach integracyjnych powinny uważać na bieżącą datę/scope oraz na Spring context cache przy LocalStack-backed klasach.
 
 ## Zrobione: Projection Pipeline
 Status: zaimplementowane.
@@ -120,7 +149,11 @@ Zachowanie:
 - Worker profile ma `projection-consumer-enabled: true`.
 
 Testy:
-- `ProjectionDedupeIntegrationTest` i `ProjectionConcurrencyIntegrationTest` istnieją, ale wymagają Docker/Testcontainers.
+- `ProjectionDedupeIntegrationTest` i `ProjectionConcurrencyIntegrationTest` przechodzą w `cmd /c npm run backend:verify`.
+
+Uwagi implementacyjne:
+- `ProjectionConcurrencyIntegrationTest` miał deadlock przez `invokeAll()` wywołane przed zwolnieniem latcha startowego; test został naprawiony.
+- `LocalStackIntegrationSupport` czyści Spring context po każdej klasie, żeby uniknąć reuse klientów AWS ze starym endpointem kontenera.
 
 ## Zrobione: Seasons
 Status: zaimplementowane.
@@ -192,8 +225,8 @@ Braki:
 - CloudWatch dashboard/alarms.
 - Readiness checks dla DynamoDB/SQS/S3.
 
-## Zrobione: Terraform Baseline
-Status: baseline resources, nie pełny deployment.
+## Zrobione: Terraform Deployment Shape
+Status: baseline resources plus wstępny runtime shape, nadal niepełny deployment produkcyjny.
 
 Pliki:
 - `infra/terraform/versions.tf`
@@ -208,16 +241,22 @@ Zasoby:
 - S3 snapshot bucket z versioning/lifecycle.
 - CloudWatch log groups.
 - ECR repos dla API i worker.
+- ECS cluster.
+- IAM execution/task roles dla API i worker.
+- ALB, target group i listener dla API.
+- ECS task definitions/services dla API i projection worker.
+- `backend/Dockerfile` jako runtime image target.
 
 Braki:
 - Remote state i locking.
-- IAM roles/policies.
-- ECS/App Runner services.
-- Task definitions.
 - Secrets/Parameter Store.
 - Autoscaling.
 - Alarms/dashboard.
 - Environment modules.
+
+Walidacja:
+- `cmd /c npm run build:backend` przechodzi.
+- `terraform fmt -check` nie został uruchomiony lokalnie, bo CLI `terraform` nie jest zainstalowany.
 
 ## Zrobione: CI Baseline
 Status: verify workflow, brak deployment.

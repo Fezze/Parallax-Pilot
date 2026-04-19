@@ -7,12 +7,19 @@ import {
 } from '../shared/leaderboard-config.js'
 import {
   LEADERBOARD_MESSAGE_TYPES,
+  buildIdentitySyncMessage,
   decodeLeaderboardMessage,
   encodeLeaderboardMessage,
   queueScoreSubmission,
   readSubmitQueue,
   writeSubmitQueue,
 } from '../shared/leaderboard-submit.js'
+import {
+  ensureLeaderboardIdentity,
+  isLegacyLeaderboardIdentity,
+  readLeaderboardIdentity,
+  writeLeaderboardIdentity,
+} from '../shared/leaderboard-identity.js'
 
 const REFRESH_COMMAND = 'refresh'
 const SUBMIT_COMMAND = 'submit'
@@ -26,11 +33,13 @@ function writeJson(storage, key, value) {
 }
 
 function readLeaderboardState(storage) {
+  const identity = ensureLeaderboardIdentity(storage)
   return {
     apiBaseUrl:
       readValue(storage, LEADERBOARD_STORAGE_KEYS.API_BASE_URL, DEFAULT_LEADERBOARD_API_BASE_URL) ||
       DEFAULT_LEADERBOARD_API_BASE_URL,
-    playerId: readValue(storage, LEADERBOARD_STORAGE_KEYS.PLAYER_ID, 'demo-player'),
+    playerId: identity.playerId,
+    nickname: identity.nickname,
   }
 }
 
@@ -59,6 +68,15 @@ function sendDeviceAck(submissionId, accepted) {
       submissionId,
       accepted,
     })
+    globalThis.messaging?.peerSocket?.send(payload)
+  } catch (_error) {}
+}
+
+function sendDeviceIdentity(storage) {
+  try {
+    const payload = encodeLeaderboardMessage(
+      buildIdentitySyncMessage(ensureLeaderboardIdentity(storage))
+    )
     globalThis.messaging?.peerSocket?.send(payload)
   } catch (_error) {}
 }
@@ -160,14 +178,31 @@ function installDeviceMessageListener(storage) {
 
   peerSocket.addListener('message', async (payload) => {
     const message = decodeLeaderboardMessage(payload)
+    if (message?.type === LEADERBOARD_MESSAGE_TYPES.REQUEST_IDENTITY) {
+      sendDeviceIdentity(storage)
+      return
+    }
+
     if (message?.type === LEADERBOARD_MESSAGE_TYPES.SUBMIT_SCORE && message.submission) {
+      const currentIdentity = readLeaderboardIdentity(storage)
+      if (
+        !currentIdentity ||
+        isLegacyLeaderboardIdentity(currentIdentity.playerId, currentIdentity.nickname)
+      ) {
+        writeLeaderboardIdentity(storage, {
+          playerId: message.submission.playerId,
+          nickname: message.submission.nickname,
+        })
+      }
       queueScoreSubmission(storage, message.submission)
       sendDeviceAck(message.submission.submissionId, true)
+      sendDeviceIdentity(storage)
       await flushSubmitQueue(storage)
       return
     }
 
     if (message?.type === LEADERBOARD_MESSAGE_TYPES.FLUSH_QUEUE) {
+      sendDeviceIdentity(storage)
       await flushSubmitQueue(storage)
     }
   })
@@ -183,11 +218,9 @@ AppSideService({
       )
     }
 
-    for (const [key, value] of [
-      [LEADERBOARD_STORAGE_KEYS.PLAYER_ID, 'demo-player'],
-      [LEADERBOARD_STORAGE_KEYS.PLAYER_NICKNAME, 'Pilot'],
-      [LEADERBOARD_STORAGE_KEYS.ACTIVE_SCOPE, LEADERBOARD_SCOPES[0]],
-    ]) {
+    ensureLeaderboardIdentity(storage, { seed: `phone-${Date.now()}` })
+
+    for (const [key, value] of [[LEADERBOARD_STORAGE_KEYS.ACTIVE_SCOPE, LEADERBOARD_SCOPES[0]]]) {
       if (!readValue(storage, key)) {
         storage.setItem(key, value)
       }
@@ -195,5 +228,6 @@ AppSideService({
 
     installCommandListener(storage)
     installDeviceMessageListener(storage)
+    sendDeviceIdentity(storage)
   },
 })

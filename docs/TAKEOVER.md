@@ -14,11 +14,11 @@ Ten plik jest punktem startowym dla kolejnego agenta AI. Cel: przejąć pracę b
 
 ## Aktualny Stan Repo
 - Ostatni commit dokumentacyjny przed reorganizacją: `9dff60d Add AI backend takeover docs`.
-- Ostatni commit funkcjonalny: `5e9e03a Add backend ops and score submit flow`.
+- Ostatni commit funkcjonalny przed bieżącą sesją: `a3f32d7 Split validation and release app builds`.
 - Repo było czyste po commicie `9dff60d` przed tą reorganizacją dokumentacji.
 - Backend ma Maven Wrapper w `backend/`.
 - Backendowe skrypty npm używają `scripts/backend-maven.mjs`.
-- Pełne `backend:verify` wymaga Docker/Testcontainers; Docker został pominięty na życzenie użytkownika.
+- Pełne `backend:verify` przechodzi lokalnie z Docker/Testcontainers.
 
 ## Najważniejsze Zasady Projektu
 - Po zmianie kodu uruchom build jako walidację zamykającą.
@@ -26,7 +26,7 @@ Ten plik jest punktem startowym dla kolejnego agenta AI. Cel: przejąć pracę b
 - Nowy ekran lub nowa strona musi dostać scenariusz screenshotowy Playwright.
 - Walidacja UI oznacza obejrzenie wygenerowanych screenshotów, nie tylko zielone testy.
 - Nie cofaj cudzych zmian w working tree.
-- Backend-only prace powinny docelowo nie podbijać wersji aplikacji Zepp, ale to nadal jest brak do zrobienia.
+- Backend-only build nie podbija już wersji aplikacji Zepp.
 
 ## Szybkie Komendy
 - Testy JS bez screenshotów: `cmd /c npm test`
@@ -54,14 +54,15 @@ Jeśli robisz release watch app albo przygotowujesz store submission, użyj:
 - Projection worker entrypoint: `backend/src/main/java/com/parallaxpilot/leaderboard/ProjectionWorkerApplication.java`
 - Projection scheduler gate: `backend/src/main/java/com/parallaxpilot/leaderboard/service/ProjectionQueueConsumer.java`
 - Snapshot export: `backend/src/main/java/com/parallaxpilot/leaderboard/service/SnapshotService.java`
+- Shared anonymous identity helper: `zepp-app/shared/leaderboard-identity.js`
 - Zepp watch submit bridge: `zepp-app/shared/leaderboard-device-bridge.js`
 - Zepp submit contract/queue helpers: `zepp-app/shared/leaderboard-submit.js`
 - Zepp Side Service: `zepp-app/app-side/index.js`
+- Zepp Settings App onboarding UI: `zepp-app/setting/index.js`
 - Terraform baseline: `infra/terraform/`
 - Backend CI: `.github/workflows/backend.yml`
 
 ## Czego Nie Zakładać
-- Nie zakładaj, że pełne testy integracyjne przeszły lokalnie. Nie przeszły, bo Docker nie był dostępny.
 - Nie zakładaj, że BLE submit został potwierdzony na fizycznym zegarku. Build przeszedł, ale wymaga testu runtime.
-- Nie zakładaj, że Terraform wdraża działające API/worker services. Obecnie tworzy tylko baseline resources.
+- Nie zakładaj, że Terraform wdraża pełny production-ready stack. Jest już runtime shape ECS/ALB/IAM dla API i worker, ale bez pełnego CI/CD, secrets i env split.
 - Nie zakładaj, że admin/debug ma UI. Jest tylko backend API.

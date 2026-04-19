@@ -1,9 +1,12 @@
 import { DEFAULT_LEADERBOARD_API_BASE_URL, LEADERBOARD_STORAGE_KEYS } from './leaderboard-config.js'
+import { ensureLeaderboardIdentity } from './leaderboard-identity.js'
 
 export const LEADERBOARD_MESSAGE_TYPES = {
   SUBMIT_SCORE: 'leaderboard.submit-score',
   SUBMIT_ACK: 'leaderboard.submit-ack',
   FLUSH_QUEUE: 'leaderboard.flush-queue',
+  REQUEST_IDENTITY: 'leaderboard.request-identity',
+  SYNC_IDENTITY: 'leaderboard.sync-identity',
 }
 
 export const LEADERBOARD_SUBMIT_QUEUE_LIMIT = 25
@@ -71,12 +74,13 @@ export function queueScoreSubmission(storage, submission) {
 }
 
 export function readLeaderboardSubmitConfig(storage) {
+  const identity = ensureLeaderboardIdentity(storage)
   return {
     apiBaseUrl:
       storage.getItem(LEADERBOARD_STORAGE_KEYS.API_BASE_URL) ||
       DEFAULT_LEADERBOARD_API_BASE_URL,
-    playerId: storage.getItem(LEADERBOARD_STORAGE_KEYS.PLAYER_ID) || 'demo-player',
-    nickname: storage.getItem(LEADERBOARD_STORAGE_KEYS.PLAYER_NICKNAME) || 'Pilot',
+    playerId: identity.playerId,
+    nickname: identity.nickname,
   }
 }
 
@@ -116,5 +120,18 @@ export function buildSubmitMessage(submission) {
 export function buildFlushMessage() {
   return {
     type: LEADERBOARD_MESSAGE_TYPES.FLUSH_QUEUE,
+  }
+}
+
+export function buildIdentityRequestMessage() {
+  return {
+    type: LEADERBOARD_MESSAGE_TYPES.REQUEST_IDENTITY,
+  }
+}
+
+export function buildIdentitySyncMessage(identity) {
+  return {
+    type: LEADERBOARD_MESSAGE_TYPES.SYNC_IDENTITY,
+    identity,
   }
 }

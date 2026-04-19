@@ -1,13 +1,16 @@
 import {
   buildFlushMessage,
+  buildIdentityRequestMessage,
   buildSubmitMessage,
   decodeLeaderboardMessage,
   encodeLeaderboardMessage,
   LEADERBOARD_MESSAGE_TYPES,
 } from './leaderboard-submit.js'
 import {
+  loadLeaderboardIdentity,
   loadLeaderboardSubmitQueue,
   removeLeaderboardSubmission,
+  saveLeaderboardIdentity,
 } from './storage.js'
 
 function sendJson(ble, message) {
@@ -29,6 +32,10 @@ export function createLeaderboardDeviceBridge(ble) {
       return false
     }
 
+    if (!loadLeaderboardIdentity()) {
+      sendJson(ble, buildIdentityRequestMessage())
+    }
+
     const queue = loadLeaderboardSubmitQueue()
     for (let index = 0; index < queue.length; index += 1) {
       sendJson(ble, buildSubmitMessage(queue[index]))
@@ -39,6 +46,11 @@ export function createLeaderboardDeviceBridge(ble) {
 
   const onMessage = (_index, data) => {
     const message = decodeLeaderboardMessage(data)
+    if (message?.type === LEADERBOARD_MESSAGE_TYPES.SYNC_IDENTITY && message.identity) {
+      saveLeaderboardIdentity(message.identity)
+      return
+    }
+
     if (message?.type !== LEADERBOARD_MESSAGE_TYPES.SUBMIT_ACK) {
       return
     }
@@ -54,9 +66,11 @@ export function createLeaderboardDeviceBridge(ble) {
         ble.createConnect(onMessage)
         ble.addListener?.((status) => {
           if (status) {
+            sendJson(ble, buildIdentityRequestMessage())
             flush()
           }
         })
+        sendJson(ble, buildIdentityRequestMessage())
         flush()
       } catch (_error) {}
     },
