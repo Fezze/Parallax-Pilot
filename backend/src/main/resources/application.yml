@@ -9,6 +9,10 @@ management:
         include: health,info,metrics
 
 app:
+  admin:
+    token: ${PARALLAX_ADMIN_TOKEN:}
+  api:
+    max-public-leaderboard-limit: 100
   leaderboard:
     table-prefix: pp_
     exact-rank-threshold: 100
@@ -47,3 +51,13 @@ spring:
 app:
   leaderboard:
     projection-consumer-enabled: true
+
+---
+spring:
+  config:
+    activate:
+      on-profile: test
+
+app:
+  admin:
+    token: test-admin-token

@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import com.parallaxpilot.leaderboard.domain.BestScoreRecord;
 import com.parallaxpilot.leaderboard.domain.LeaderboardKeys;
 import com.parallaxpilot.leaderboard.domain.LeaderboardEntry;
+import com.parallaxpilot.leaderboard.domain.LeaderboardRanking;
 import com.parallaxpilot.leaderboard.repository.BestScoreRepository;
 import com.parallaxpilot.leaderboard.repository.LeaderboardEntryRepository;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -68,7 +69,7 @@ public class ProjectionService {
                 continue;
             }
 
-            var newSortKey = leaderboardSortKey(payload.score(), payload.playedAt().toEpochMilli(), payload.playerId());
+            var newSortKey = leaderboardSortKey(payload.score(), payload.survivedMs(), payload.playedAt(), payload.playerId());
             var currentIndex = projectionIndexRepository.get(payload.playerId(), payload.scopeKind(), payload.scopeKey());
 
             if (currentIndex.isPresent() && currentIndex.get().leaderboardSortKey().equals(newSortKey)) {
@@ -150,9 +151,8 @@ public class ProjectionService {
         return total;
     }
 
-    private String leaderboardSortKey(int score, long epochMillis, String playerId) {
-        long inverseScore = Integer.MAX_VALUE - score;
-        return "%010d#%013d#%s".formatted(inverseScore, epochMillis, playerId);
+    private String leaderboardSortKey(int score, long survivedMs, Instant playedAt, String playerId) {
+        return LeaderboardRanking.sortKey(score, survivedMs, playedAt, playerId);
     }
 
     private boolean matches(com.parallaxpilot.leaderboard.domain.ProjectionTask payload, BestScoreRecord best) {

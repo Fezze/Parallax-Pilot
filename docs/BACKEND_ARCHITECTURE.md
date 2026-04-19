@@ -58,6 +58,7 @@ This design avoids a separate mobile app while still using a production-shaped b
 - `GET /v1/leaderboards/seasonal`
 - `GET /v1/players/{playerId}/best`
 - `GET /v1/rankings/classify?playerId=...`
+- `POST /v1/scores:submit` also returns a submitted-round classification snapshot that is distinct from player-best classification
 - `POST /v1/admin/projections:drain`
 - `POST /v1/admin/projections:rebuild`
 - `POST /v1/admin/snapshots:export`
@@ -65,11 +66,18 @@ This design avoids a separate mobile app while still using a production-shaped b
 
 ## Ranking Model
 - Canonical best score is maintained independently for `global`, `daily`, and `seasonal`.
-- Tie-break is higher score first, then earlier submission timestamp, then player id.
+- Tie-break is higher score first, then higher `survivedMs`, then earlier submission timestamp, then player id.
 - Top-N reads are exact.
 - Classification is exact when rank is known in projection range; otherwise approximate band is returned.
+- Submit responses explicitly separate the hypothetical rank of the submitted round from the current player-best rank view.
 - Daily scope uses UTC day key.
 - Seasonal scope uses quarter key: `YYYY-QN`.
+
+## MVP versus global-scale ranking
+- The current repo implements an MVP read path: bounded projection scans plus top-N materialized leaderboard entries.
+- That is intentionally honest about scale. Exact answers are cheap near the top of the leaderboard window, while deeper ranks degrade to approximate bands.
+- The design target still assumes eventual global-scale traffic, but the current code is not pretending to already be a globally exact ranking system.
+- The write path is already shaped so the read path can evolve later into sharded projections, bucketed rank estimation, or a dedicated ranking store without redesigning score ingestion.
 
 ## Zepp Companion Design
 ### Settings App
@@ -93,6 +101,7 @@ This design avoids a separate mobile app while still using a production-shaped b
 - Wrong-rank debugging is exposed through `GET /v1/admin/submissions/{submissionId}/debug`
 - Recovery snapshots are exported through `POST /v1/admin/snapshots:export`
 - Burst load is absorbed with queue-based projection flow; the worker profile owns scheduled queue draining
+- `/v1/admin/**` is protected with a shared admin token header and is intentionally outside the public API surface
 
 ## Implementation Status In Repo
 - `backend/`: Spring Boot service scaffold with DynamoDB-backed repositories

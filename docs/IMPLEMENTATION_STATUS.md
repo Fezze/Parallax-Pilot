@@ -125,6 +125,13 @@ Testy:
 - `LeaderboardControllerTest` pokrywa podstawowe kontrakty kontrolera.
 - `LeaderboardIntegrationTest` przechodzi w `cmd /c npm run backend:verify` po utwardzeniu dat testowych.
 
+Ostatnie utwardzenie:
+- `POST /v1/scores:submit` zwraca już osobno classification dla aktualnego player-best view i osobno classification dla konkretnej submitowanej rundy.
+- `/v1/admin/**` wymaga tokena w nagłówku `X-Admin-Token`.
+- Publiczny `limit` leaderboardu jest clampowany do konfiguracji backendu.
+- Submit waliduje teraz długości identyfikatorów, niedozwolone znaki i `playedAt` zbyt daleko w przyszłości.
+- Obecny read path pozostaje MVP-grade: exact top-N plus approximate deeper classification, a nie pełny global-scale exact rank.
+
 ## Zrobione: Idempotency I Best Scores
 Status: zaimplementowane.
 

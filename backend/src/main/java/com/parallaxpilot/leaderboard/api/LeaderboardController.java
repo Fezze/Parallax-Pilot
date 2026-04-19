@@ -1,5 +1,6 @@
 package com.parallaxpilot.leaderboard.api;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -34,10 +35,16 @@ public class LeaderboardController {
 
     private final LeaderboardService leaderboardService;
     private final SnapshotService snapshotService;
+    private final int maxPublicLeaderboardLimit;
 
-    public LeaderboardController(LeaderboardService leaderboardService, SnapshotService snapshotService) {
+    public LeaderboardController(
+        LeaderboardService leaderboardService,
+        SnapshotService snapshotService,
+        @Value("${app.api.max-public-leaderboard-limit:100}") int maxPublicLeaderboardLimit
+    ) {
         this.leaderboardService = leaderboardService;
         this.snapshotService = snapshotService;
+        this.maxPublicLeaderboardLimit = maxPublicLeaderboardLimit;
     }
 
     @PostMapping("/scores:submit")
@@ -48,7 +55,8 @@ public class LeaderboardController {
 
     @GetMapping("/leaderboards/{scope}")
     LeaderboardResponse getLeaderboard(@PathVariable String scope, @RequestParam(defaultValue = "10") int limit) {
-        return leaderboardService.getLeaderboard(scope, limit);
+        int normalizedLimit = Math.max(1, Math.min(limit, maxPublicLeaderboardLimit));
+        return leaderboardService.getLeaderboard(scope, normalizedLimit);
     }
 
     @GetMapping("/leaderboards/{scope}/around-me")

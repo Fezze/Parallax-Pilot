@@ -166,6 +166,11 @@ Akceptacja:
 - Terraform tworzy dashboard i alarmy.
 - Logi mają pola wystarczające do debugowania `submissionId` i `playerId`.
 
+Najbliższy sensowny krok po obecnym utwardzeniu backendu:
+1. Dodać correlation/request ID na każdej odpowiedzi i w logach.
+2. Dodać per-endpoint latency timers dla submit/read/admin.
+3. Dodać metryki odrzuconych admin tokenów i projection lag/backlog.
+
 ## P2: Ranking Stability
 Problem:
 - Tie-break jest w kodzie, ale brak wystarczającej dokumentacji i testów dla edge cases.
@@ -189,6 +194,10 @@ Proponowane kroki:
 Akceptacja:
 - Testy potwierdzają deterministyczną kolejność.
 - Projection rebuild daje ten sam ranking co live path.
+
+Stan po ostatniej zmianie:
+1. Tie-break `score -> survivedMs -> earlier playedAt -> playerId` jest już wyrównany między service i projection path.
+2. Nadal brakuje ścieżki prawdziwie global-scale rank estimation poza bounded scan MVP.
 
 ## P2: Anti-abuse Hardening
 Problem:

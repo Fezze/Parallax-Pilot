@@ -38,10 +38,12 @@ import com.parallaxpilot.leaderboard.support.LocalStackIntegrationSupport;
 @ActiveProfiles("test")
 class LeaderboardIntegrationTest extends LocalStackIntegrationSupport {
 
+    private static final String ADMIN_TOKEN = "test-admin-token";
+
     private static Instant currentTestInstant(int minuteOffset) {
         return Instant.now()
-            .truncatedTo(ChronoUnit.DAYS)
-            .plus(12, ChronoUnit.HOURS)
+            .minus(12, ChronoUnit.HOURS)
+            .truncatedTo(ChronoUnit.MINUTES)
             .plus(minuteOffset, ChronoUnit.MINUTES);
     }
 
@@ -90,6 +92,10 @@ class LeaderboardIntegrationTest extends LocalStackIntegrationSupport {
             .andExpect(jsonPath("$.bestUpdated").value(true));
 
         mockMvc.perform(post("/v1/admin/projections:drain"))
+            .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(post("/v1/admin/projections:drain")
+                .header("X-Admin-Token", ADMIN_TOKEN))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.processedMessages").value(3));
 
@@ -130,7 +136,8 @@ class LeaderboardIntegrationTest extends LocalStackIntegrationSupport {
                 .content(objectMapper.writeValueAsBytes(request)))
             .andExpect(status().isAccepted())
             .andExpect(jsonPath("$.duplicate").value(true))
-            .andExpect(jsonPath("$.bestUpdated").value(false));
+            .andExpect(jsonPath("$.bestUpdated").value(false))
+            .andExpect(jsonPath("$.submittedRoundClassifications[0].availability").value("duplicate_submission"));
     }
 
     @Test
@@ -168,7 +175,9 @@ class LeaderboardIntegrationTest extends LocalStackIntegrationSupport {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsBytes(worseRequest)))
             .andExpect(status().isAccepted())
-            .andExpect(jsonPath("$.bestUpdated").value(false));
+            .andExpect(jsonPath("$.bestUpdated").value(false))
+            .andExpect(jsonPath("$.submittedRoundClassifications[0].classificationBasis").value("submitted_round"))
+            .andExpect(jsonPath("$.submittedRoundClassifications[0].availability").value("estimated"));
 
         mockMvc.perform(get("/v1/players/player-int-best/best"))
             .andExpect(status().isOk())
@@ -206,7 +215,8 @@ class LeaderboardIntegrationTest extends LocalStackIntegrationSupport {
             .andExpect(status().isAccepted());
         mockMvc.perform(post("/v1/scores:submit").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsBytes(better)))
             .andExpect(status().isAccepted());
-        mockMvc.perform(post("/v1/admin/projections:drain"))
+        mockMvc.perform(post("/v1/admin/projections:drain")
+            .header("X-Admin-Token", ADMIN_TOKEN))
             .andExpect(status().isOk());
 
         projectionQueueRepository.publish(new ProjectionTask(
@@ -220,7 +230,8 @@ class LeaderboardIntegrationTest extends LocalStackIntegrationSupport {
             firstPlayedAt
         ));
 
-        mockMvc.perform(post("/v1/admin/projections:drain"))
+        mockMvc.perform(post("/v1/admin/projections:drain")
+            .header("X-Admin-Token", ADMIN_TOKEN))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.processedMessages").value(1));
 
@@ -251,7 +262,8 @@ class LeaderboardIntegrationTest extends LocalStackIntegrationSupport {
                 .andExpect(status().isAccepted());
         }
 
-        mockMvc.perform(post("/v1/admin/projections:drain"))
+        mockMvc.perform(post("/v1/admin/projections:drain")
+            .header("X-Admin-Token", ADMIN_TOKEN))
             .andExpect(status().isOk());
 
         mockMvc.perform(get("/v1/leaderboards/global/around-me").param("playerId", "player-around-3"))
@@ -283,9 +295,11 @@ class LeaderboardIntegrationTest extends LocalStackIntegrationSupport {
                 .content(objectMapper.writeValueAsBytes(request)))
             .andExpect(status().isAccepted())
             .andExpect(jsonPath("$.suspicious").value(true))
-            .andExpect(jsonPath("$.quarantined").value(true));
+            .andExpect(jsonPath("$.quarantined").value(true))
+            .andExpect(jsonPath("$.submittedRoundClassifications[0].availability").value("quarantined_submission"));
 
-        mockMvc.perform(post("/v1/admin/projections:drain"))
+        mockMvc.perform(post("/v1/admin/projections:drain")
+                .header("X-Admin-Token", ADMIN_TOKEN))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.processedMessages").value(0));
     }
@@ -294,6 +308,7 @@ class LeaderboardIntegrationTest extends LocalStackIntegrationSupport {
     void seasonCutoverAndReplayRebuildProjections() throws Exception {
         var seasonStart = currentTestInstant(-720);
         mockMvc.perform(patch("/v1/admin/seasons:cutover")
+            .header("X-Admin-Token", ADMIN_TOKEN)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsBytes(new SeasonCutoverRequest(
                     "current-test-season",
@@ -318,7 +333,8 @@ class LeaderboardIntegrationTest extends LocalStackIntegrationSupport {
                 .content(objectMapper.writeValueAsBytes(request)))
             .andExpect(status().isAccepted());
 
-        mockMvc.perform(post("/v1/admin/projections:rebuild"))
+        mockMvc.perform(post("/v1/admin/projections:rebuild")
+            .header("X-Admin-Token", ADMIN_TOKEN))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.submissionsScanned").value(1))
             .andExpect(jsonPath("$.projectionMessagesPublished").value(3));
@@ -355,7 +371,8 @@ class LeaderboardIntegrationTest extends LocalStackIntegrationSupport {
             executor.shutdown();
             executor.awaitTermination(30, TimeUnit.SECONDS);
 
-            mockMvc.perform(post("/v1/admin/projections:drain"))
+                mockMvc.perform(post("/v1/admin/projections:drain")
+                    .header("X-Admin-Token", ADMIN_TOKEN))
                 .andExpect(status().isOk());
 
             mockMvc.perform(get("/v1/players/player-concurrent/best"))
@@ -437,12 +454,78 @@ class LeaderboardIntegrationTest extends LocalStackIntegrationSupport {
             stalePlayedAt
         ));
 
-        mockMvc.perform(post("/v1/admin/projections:rebuild"))
+        mockMvc.perform(post("/v1/admin/projections:rebuild")
+            .header("X-Admin-Token", ADMIN_TOKEN))
             .andExpect(status().isOk());
 
         mockMvc.perform(get("/v1/leaderboards/global"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.entries[0].playerId").value("player-replay"))
             .andExpect(jsonPath("$.entries[0].score").value(5000));
+    }
+
+    @Test
+    void leaderboardLimitIsClampedAndRankingUsesSurvivedMsTieBreak() throws Exception {
+        var baseTime = currentTestInstant(360);
+        var lowerSurvival = new SubmitScoreRequest(
+            "sub-tie-01",
+            "player-tie-1",
+            "Pilot-1",
+            2000,
+            12000,
+            baseTime,
+            "2.4.3",
+            "balance-2"
+        );
+        var higherSurvival = new SubmitScoreRequest(
+            "sub-tie-02",
+            "player-tie-2",
+            "Pilot-2",
+            2000,
+            18000,
+            baseTime.plus(1, ChronoUnit.MINUTES),
+            "2.4.3",
+            "balance-2"
+        );
+
+        mockMvc.perform(post("/v1/scores:submit")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsBytes(lowerSurvival)))
+            .andExpect(status().isAccepted())
+            .andExpect(jsonPath("$.submittedRoundClassifications[0].exactRank").value(1));
+
+        mockMvc.perform(post("/v1/scores:submit")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsBytes(higherSurvival)))
+            .andExpect(status().isAccepted())
+            .andExpect(jsonPath("$.submittedRoundClassifications[0].exactRank").value(1));
+
+        mockMvc.perform(post("/v1/admin/projections:drain")
+                .header("X-Admin-Token", ADMIN_TOKEN))
+            .andExpect(status().isOk());
+
+        mockMvc.perform(get("/v1/leaderboards/global").param("limit", "9999"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.entries[0].playerId").value("player-tie-2"));
+    }
+
+    @Test
+    void rejectsFuturePlayedAtAtApiBoundary() throws Exception {
+        var request = new SubmitScoreRequest(
+            "sub-future-1",
+            "player-future",
+            "Future",
+            1200,
+            10000,
+            Instant.now().plus(10, ChronoUnit.MINUTES),
+            "2.4.3",
+            "balance-2"
+        );
+
+        mockMvc.perform(post("/v1/scores:submit")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsBytes(request)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.fieldErrors.playedAt").exists());
     }
 }

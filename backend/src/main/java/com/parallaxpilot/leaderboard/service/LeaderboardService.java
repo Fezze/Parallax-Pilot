@@ -23,12 +23,14 @@ import com.parallaxpilot.leaderboard.api.dto.PlayerBestScoresResponse;
 import com.parallaxpilot.leaderboard.api.dto.RankClassificationResponse;
 import com.parallaxpilot.leaderboard.api.dto.SeasonCutoverRequest;
 import com.parallaxpilot.leaderboard.api.dto.SeasonMetadataResponse;
+import com.parallaxpilot.leaderboard.api.dto.SubmittedRoundClassificationResponse;
 import com.parallaxpilot.leaderboard.api.dto.SubmitScoreRequest;
 import com.parallaxpilot.leaderboard.api.dto.SubmitScoreResponse;
 import com.parallaxpilot.leaderboard.config.LeaderboardProperties;
 import com.parallaxpilot.leaderboard.domain.BestScoreRecord;
 import com.parallaxpilot.leaderboard.domain.LeaderboardKeys;
 import com.parallaxpilot.leaderboard.domain.LeaderboardEntry;
+import com.parallaxpilot.leaderboard.domain.LeaderboardRanking;
 import com.parallaxpilot.leaderboard.domain.ProjectionTask;
 import com.parallaxpilot.leaderboard.domain.RankingBands;
 import com.parallaxpilot.leaderboard.domain.ScopeKind;
@@ -51,10 +53,10 @@ public class LeaderboardService {
     private static final String REBUILD_IN_PROGRESS = "Leaderboard rebuild in progress";
     private static final String REBUILD_ALREADY_IN_PROGRESS = "Leaderboard rebuild already in progress";
 
-    private static final Comparator<LeaderboardEntry> LEADERBOARD_ORDER = Comparator
-        .comparingInt(LeaderboardEntry::score).reversed()
-        .thenComparing(LeaderboardEntry::playedAt)
-        .thenComparing(LeaderboardEntry::playerId);
+    private static final String CLASSIFICATION_BASIS_SUBMITTED_ROUND = "submitted_round";
+    private static final String CLASSIFICATION_AVAILABILITY_ESTIMATED = "estimated";
+    private static final String CLASSIFICATION_AVAILABILITY_DUPLICATE = "duplicate_submission";
+    private static final String CLASSIFICATION_AVAILABILITY_QUARANTINED = "quarantined_submission";
 
     private final BestScoreRepository bestScoreRepository;
     private final IdempotencyRepository idempotencyRepository;
@@ -119,7 +121,8 @@ public class LeaderboardService {
                 false,
                 false,
                 List.of(),
-                classify(request.playerId())
+                classify(request.playerId()),
+                unavailableSubmittedRoundClassifications(request, CLASSIFICATION_AVAILABILITY_DUPLICATE)
             );
         }
 
@@ -155,7 +158,8 @@ public class LeaderboardService {
                 true,
                 true,
                 assessment.reasons(),
-                classify(request.playerId())
+                classify(request.playerId()),
+                unavailableSubmittedRoundClassifications(request, CLASSIFICATION_AVAILABILITY_QUARANTINED)
             );
         }
 
@@ -203,7 +207,8 @@ public class LeaderboardService {
             false,
             false,
             List.of(),
-            classify(request.playerId())
+            classify(request.playerId()),
+            classifySubmittedRound(request)
         );
     }
 
@@ -371,21 +376,7 @@ public class LeaderboardService {
     }
 
     private List<LeaderboardEntryResponse> rankEntries(ScopeKind scopeKind, String scopeKey) {
-        var entries = leaderboardEntryRepository
-            .queryByPartitionKey(
-                LeaderboardKeys.scopePartitionKey(scopeKind, scopeKey),
-                properties.maxLeaderboardScan()
-            )
-            .stream()
-            .sorted(LEADERBOARD_ORDER)
-            .collect(
-                LinkedHashMap<String, LeaderboardEntry>::new,
-                (map, entry) -> map.putIfAbsent(entry.playerId(), entry),
-                LinkedHashMap::putAll
-            )
-            .values()
-            .stream()
-            .toList();
+        var entries = rankedEntries(scopeKind, scopeKey);
 
         var ranked = new ArrayList<LeaderboardEntryResponse>();
         for (int index = 0; index < entries.size(); index += 1) {
@@ -400,6 +391,85 @@ public class LeaderboardService {
         }
 
         return ranked;
+    }
+
+    private List<SubmittedRoundClassificationResponse> classifySubmittedRound(SubmitScoreRequest request) {
+        return scopeResolver.resolve(request.playedAt()).stream()
+            .map(scope -> classifySubmittedRound(scope, request))
+            .toList();
+    }
+
+    private SubmittedRoundClassificationResponse classifySubmittedRound(ScopeKey scope, SubmitScoreRequest request) {
+        var rankedEntries = rankedEntries(scope.scopeKind(), scope.scopeKey());
+        int candidateRank = 1;
+        for (var rankedEntry : rankedEntries) {
+            if (LeaderboardRanking.compare(
+                request.score(),
+                request.survivedMs(),
+                request.playedAt(),
+                request.playerId(),
+                rankedEntry.score(),
+                rankedEntry.survivedMs(),
+                rankedEntry.playedAt(),
+                rankedEntry.playerId()
+            ) > 0) {
+                candidateRank += 1;
+            } else {
+                break;
+            }
+        }
+
+        int totalPlayers = rankedEntries.size() + 1;
+        Integer exactRank = candidateRank <= properties.exactRankThreshold() ? candidateRank : null;
+        String approximateBand = exactRank != null ? null : approximateBand(candidateRank, totalPlayers);
+        return new SubmittedRoundClassificationResponse(
+            scope.scopeKind().apiValue(),
+            scope.scopeKey(),
+            request.score(),
+            request.survivedMs(),
+            exactRank,
+            approximateBand,
+            totalPlayers,
+            CLASSIFICATION_BASIS_SUBMITTED_ROUND,
+            CLASSIFICATION_AVAILABILITY_ESTIMATED
+        );
+    }
+
+    private List<SubmittedRoundClassificationResponse> unavailableSubmittedRoundClassifications(
+        SubmitScoreRequest request,
+        String availability
+    ) {
+        return scopeResolver.resolve(request.playedAt()).stream()
+            .map(scope -> new SubmittedRoundClassificationResponse(
+                scope.scopeKind().apiValue(),
+                scope.scopeKey(),
+                request.score(),
+                request.survivedMs(),
+                null,
+                null,
+                0,
+                CLASSIFICATION_BASIS_SUBMITTED_ROUND,
+                availability
+            ))
+            .toList();
+    }
+
+    private List<LeaderboardEntry> rankedEntries(ScopeKind scopeKind, String scopeKey) {
+        return leaderboardEntryRepository
+            .queryByPartitionKey(
+                LeaderboardKeys.scopePartitionKey(scopeKind, scopeKey),
+                properties.maxLeaderboardScan()
+            )
+            .stream()
+            .sorted(LeaderboardRanking.ENTRY_ORDER)
+            .collect(
+                LinkedHashMap<String, LeaderboardEntry>::new,
+                (map, entry) -> map.putIfAbsent(entry.playerId(), entry),
+                LinkedHashMap::putAll
+            )
+            .values()
+            .stream()
+            .toList();
     }
 
     private int indexOfPlayer(List<LeaderboardEntryResponse> ranked, String playerId) {

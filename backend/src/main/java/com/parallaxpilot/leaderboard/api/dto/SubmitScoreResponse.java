@@ -9,6 +9,7 @@ public record SubmitScoreResponse(
     boolean suspicious,
     boolean quarantined,
     List<String> riskReasons,
-    RankClassificationResponse classification
+    RankClassificationResponse classification,
+    List<SubmittedRoundClassificationResponse> submittedRoundClassifications
 ) {
 }
