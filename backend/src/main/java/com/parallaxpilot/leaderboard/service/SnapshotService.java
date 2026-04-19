@@ -7,6 +7,7 @@ import java.util.List;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -49,44 +50,51 @@ public class SnapshotService {
     }
 
     public AdminSnapshotResponse exportSnapshot() {
-        if (!StringUtils.hasText(properties.snapshotBucketName())) {
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Snapshot bucket is not configured");
+        var sample = Timer.start(meterRegistry);
+        try {
+            if (!StringUtils.hasText(properties.snapshotBucketName())) {
+                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Snapshot bucket is not configured");
+            }
+
+            var submissions = repository.scanAll(LeaderboardTables.SCORE_SUBMISSIONS, ScoreSubmission.class);
+            var bestScores = repository.scanAll(LeaderboardTables.BEST_SCORES, BestScoreRecord.class);
+            var leaderboardEntries = repository.scanAll(LeaderboardTables.LEADERBOARD_ENTRIES, LeaderboardEntry.class);
+            var riskSignals = repository.scanAll(LeaderboardTables.RISK_SIGNALS, RiskSignalRecord.class);
+            var exportedAt = Instant.now();
+            var snapshot = new LeaderboardSnapshot(
+                exportedAt,
+                submissions,
+                bestScores,
+                leaderboardEntries,
+                riskSignals
+            );
+            var key = "leaderboard-snapshots/%s.json".formatted(
+                DateTimeFormatter.ISO_INSTANT.format(exportedAt).replace(':', '-')
+            );
+
+            s3Client.putObject(
+                PutObjectRequest.builder()
+                    .bucket(properties.snapshotBucketName())
+                    .key(key)
+                    .contentType("application/json")
+                    .build(),
+                RequestBody.fromBytes(writeJson(snapshot))
+            );
+            meterRegistry.counter("leaderboard.snapshots.exported").increment();
+
+            return new AdminSnapshotResponse(
+                properties.snapshotBucketName(),
+                key,
+                submissions.size(),
+                bestScores.size(),
+                leaderboardEntries.size(),
+                riskSignals.size()
+            );
+        } finally {
+            sample.stop(Timer.builder("leaderboard.snapshot.export.latency")
+                .tag("operation", "snapshot_export")
+                .register(meterRegistry));
         }
-
-        var submissions = repository.scanAll(LeaderboardTables.SCORE_SUBMISSIONS, ScoreSubmission.class);
-        var bestScores = repository.scanAll(LeaderboardTables.BEST_SCORES, BestScoreRecord.class);
-        var leaderboardEntries = repository.scanAll(LeaderboardTables.LEADERBOARD_ENTRIES, LeaderboardEntry.class);
-        var riskSignals = repository.scanAll(LeaderboardTables.RISK_SIGNALS, RiskSignalRecord.class);
-        var exportedAt = Instant.now();
-        var snapshot = new LeaderboardSnapshot(
-            exportedAt,
-            submissions,
-            bestScores,
-            leaderboardEntries,
-            riskSignals
-        );
-        var key = "leaderboard-snapshots/%s.json".formatted(
-            DateTimeFormatter.ISO_INSTANT.format(exportedAt).replace(':', '-')
-        );
-
-        s3Client.putObject(
-            PutObjectRequest.builder()
-                .bucket(properties.snapshotBucketName())
-                .key(key)
-                .contentType("application/json")
-                .build(),
-            RequestBody.fromBytes(writeJson(snapshot))
-        );
-        meterRegistry.counter("leaderboard.snapshots.exported").increment();
-
-        return new AdminSnapshotResponse(
-            properties.snapshotBucketName(),
-            key,
-            submissions.size(),
-            bestScores.size(),
-            leaderboardEntries.size(),
-            riskSignals.size()
-        );
     }
 
     private byte[] writeJson(Object value) {

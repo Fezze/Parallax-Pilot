@@ -1,12 +1,15 @@
 package com.parallaxpilot.leaderboard.api;
 
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -14,6 +17,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -37,6 +41,8 @@ import com.parallaxpilot.leaderboard.api.dto.SubmitScoreResponse;
 import com.parallaxpilot.leaderboard.domain.ScoreSubmission;
 import com.parallaxpilot.leaderboard.service.LeaderboardService;
 import com.parallaxpilot.leaderboard.service.SnapshotService;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 
 @WebMvcTest(LeaderboardController.class)
 @TestPropertySource(properties = {
@@ -56,6 +62,15 @@ class LeaderboardControllerTest {
 
     @MockitoBean
     private SnapshotService snapshotService;
+
+    @MockitoBean
+    private MeterRegistry meterRegistry;
+
+    @BeforeEach
+    void stubMetrics() {
+        when(meterRegistry.counter("leaderboard.admin.auth.failures", "reason", "missing_or_invalid_token"))
+            .thenReturn(mock(Counter.class));
+    }
 
     @Test
     void submitsScore() throws Exception {
@@ -88,17 +103,20 @@ class LeaderboardControllerTest {
                     null,
                     20,
                     "submitted_round",
-                    "estimated"
+                    "estimated_from_bounded_projection"
                 ))
             ));
 
         mockMvc.perform(post("/v1/scores:submit")
+                .header("X-Request-Id", "req-submit-1")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(OBJECT_MAPPER.writeValueAsBytes(request)))
             .andExpect(status().isAccepted())
+            .andExpect(header().string("X-Request-Id", "req-submit-1"))
             .andExpect(jsonPath("$.bestUpdated").value(true))
-                .andExpect(jsonPath("$.classification.exactRank").value(4))
-                .andExpect(jsonPath("$.submittedRoundClassifications[0].exactRank").value(4));
+            .andExpect(jsonPath("$.classification.exactRank").value(4))
+                .andExpect(jsonPath("$.submittedRoundClassifications[0].exactRank").value(4))
+                .andExpect(jsonPath("$.submittedRoundClassifications[0].availability").value("estimated_from_bounded_projection"));
     }
 
     @Test
@@ -113,7 +131,30 @@ class LeaderboardControllerTest {
 
         mockMvc.perform(get("/v1/leaderboards/global"))
             .andExpect(status().isOk())
+            .andExpect(header().exists("X-Request-Id"))
             .andExpect(jsonPath("$.entries[0].playerId").value("player-1"));
+    }
+
+    @Test
+    void echoesValidRequestId() throws Exception {
+        when(leaderboardService.getLeaderboard("global", 10))
+            .thenReturn(new LeaderboardResponse("global", "global", List.of(), 0));
+
+        mockMvc.perform(get("/v1/leaderboards/global").header("X-Request-Id", "req-abc-123"))
+            .andExpect(status().isOk())
+            .andExpect(header().string("X-Request-Id", "req-abc-123"));
+    }
+
+    @Test
+    void replacesInvalidRequestId() throws Exception {
+        when(leaderboardService.getLeaderboard("global", 10))
+            .thenReturn(new LeaderboardResponse("global", "global", List.of(), 0));
+
+        String invalidRequestId = "x".repeat(81);
+        mockMvc.perform(get("/v1/leaderboards/global").header("X-Request-Id", invalidRequestId))
+            .andExpect(status().isOk())
+            .andExpect(header().exists("X-Request-Id"))
+            .andExpect(result -> assertNotEquals(invalidRequestId, result.getResponse().getHeader("X-Request-Id")));
     }
 
     @Test
@@ -125,6 +166,28 @@ class LeaderboardControllerTest {
             .andExpect(status().isOk());
 
         verify(leaderboardService).getLeaderboard("global", 100);
+    }
+
+    @Test
+    void normalizesNegativeLeaderboardLimitToOne() throws Exception {
+        when(leaderboardService.getLeaderboard("global", 1))
+            .thenReturn(new LeaderboardResponse("global", "global", List.of(), 0));
+
+        mockMvc.perform(get("/v1/leaderboards/global").param("limit", "-5"))
+            .andExpect(status().isOk());
+
+        verify(leaderboardService).getLeaderboard("global", 1);
+    }
+
+    @Test
+    void normalizesZeroLeaderboardLimitToOne() throws Exception {
+        when(leaderboardService.getLeaderboard("global", 1))
+            .thenReturn(new LeaderboardResponse("global", "global", List.of(), 0));
+
+        mockMvc.perform(get("/v1/leaderboards/global").param("limit", "0"))
+            .andExpect(status().isOk());
+
+        verify(leaderboardService).getLeaderboard("global", 1);
     }
 
     @Test
@@ -214,8 +277,17 @@ class LeaderboardControllerTest {
     void rejectsAdminCallsWithoutToken() throws Exception {
         mockMvc.perform(post("/v1/admin/snapshots:export"))
             .andExpect(status().isUnauthorized())
+            .andExpect(header().exists("X-Request-Id"))
             .andExpect(jsonPath("$.error").value("Unauthorized"))
             .andExpect(jsonPath("$.message").value("Missing or invalid admin token"));
+    }
+
+    @Test
+    void rejectsAdminCallsWithWrongToken() throws Exception {
+        mockMvc.perform(post("/v1/admin/snapshots:export")
+                .header("X-Admin-Token", "wrong-token"))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.error").value("Unauthorized"));
     }
 
     @Test
@@ -243,9 +315,9 @@ class LeaderboardControllerTest {
             .andExpect(jsonPath("$.fieldErrors.clientVersion").exists());
     }
 
-            @Test
-            void rejectsFuturePlayedAtAndInvalidCharacters() throws Exception {
-            mockMvc.perform(post("/v1/scores:submit")
+    @Test
+    void rejectsFuturePlayedAtAndInvalidCharacters() throws Exception {
+        mockMvc.perform(post("/v1/scores:submit")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {
@@ -259,10 +331,38 @@ class LeaderboardControllerTest {
                       "deviceModel": "watch"
                     }
                     """))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.fieldErrors.submissionId").exists())
-                    .andExpect(jsonPath("$.fieldErrors.playedAt").exists());
-            }
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.fieldErrors.submissionId").exists())
+            .andExpect(jsonPath("$.fieldErrors.playedAt").exists());
+    }
+
+    @Test
+    void rejectsInvalidScope() throws Exception {
+        mockMvc.perform(get("/v1/leaderboards/monthly"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Validation Failed"));
+    }
+
+    @Test
+    void rejectsInvalidPlayerIdInBestScoresPath() throws Exception {
+        mockMvc.perform(get("/v1/players/bad!/best"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Validation Failed"));
+    }
+
+    @Test
+    void rejectsInvalidPlayerIdInAroundMeQuery() throws Exception {
+        mockMvc.perform(get("/v1/leaderboards/global/around-me").param("playerId", "bad!"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Validation Failed"));
+    }
+
+    @Test
+    void rejectsInvalidPlayerIdInClassifyQuery() throws Exception {
+        mockMvc.perform(get("/v1/rankings/classify").param("playerId", "bad!"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Validation Failed"));
+    }
 
     @Test
     void returnsInternalErrorPayloadForUnexpectedException() throws Exception {
@@ -272,8 +372,9 @@ class LeaderboardControllerTest {
 
         mockMvc.perform(get("/v1/leaderboards/global"))
             .andExpect(status().isInternalServerError())
+            .andExpect(header().exists("X-Request-Id"))
             .andExpect(jsonPath("$.error").value("Internal Error"))
-            .andExpect(jsonPath("$.message").value("boom"))
+            .andExpect(jsonPath("$.message").value("Unexpected server error"))
             .andExpect(jsonPath("$.path").value("/v1/leaderboards/global"));
     }
 }

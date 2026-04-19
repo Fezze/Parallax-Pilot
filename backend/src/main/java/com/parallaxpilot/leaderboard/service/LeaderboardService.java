@@ -6,8 +6,10 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.function.Supplier;
 
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -54,7 +56,7 @@ public class LeaderboardService {
     private static final String REBUILD_ALREADY_IN_PROGRESS = "Leaderboard rebuild already in progress";
 
     private static final String CLASSIFICATION_BASIS_SUBMITTED_ROUND = "submitted_round";
-    private static final String CLASSIFICATION_AVAILABILITY_ESTIMATED = "estimated";
+    private static final String CLASSIFICATION_AVAILABILITY_ESTIMATED = "estimated_from_bounded_projection";
     private static final String CLASSIFICATION_AVAILABILITY_DUPLICATE = "duplicate_submission";
     private static final String CLASSIFICATION_AVAILABILITY_QUARANTINED = "quarantined_submission";
 
@@ -109,75 +111,68 @@ public class LeaderboardService {
     }
 
     public SubmitScoreResponse submitScore(SubmitScoreRequest request) {
-        if (rebuildLockRepository.isActive()) {
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, REBUILD_IN_PROGRESS);
-        }
-        if (!idempotencyRepository.acquire(request.submissionId(), request.playedAt())) {
-            meterRegistry.counter("leaderboard.submissions", "outcome", "duplicate").increment();
-            return new SubmitScoreResponse(
-                true,
-                true,
-                false,
-                false,
-                false,
-                List.of(),
-                classify(request.playerId()),
-                unavailableSubmittedRoundClassifications(request, CLASSIFICATION_AVAILABILITY_DUPLICATE)
-            );
-        }
+        var sample = Timer.start(meterRegistry);
+        var outcome = "error";
+        try {
+            if (rebuildLockRepository.isActive()) {
+                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, REBUILD_IN_PROGRESS);
+            }
+            if (!idempotencyRepository.acquire(request.submissionId(), request.playedAt())) {
+                outcome = "duplicate";
+                meterRegistry.counter("leaderboard.submissions", "outcome", outcome).increment();
+                return new SubmitScoreResponse(
+                    true,
+                    true,
+                    false,
+                    false,
+                    false,
+                    List.of(),
+                    classify(request.playerId()),
+                    unavailableSubmittedRoundClassifications(request, CLASSIFICATION_AVAILABILITY_DUPLICATE)
+                );
+            }
 
-        var assessment = antiAbuseService.assess(request);
-        var submission = new ScoreSubmission(
-            request.submissionId(),
-            request.playerId(),
-            request.nickname(),
-            request.score(),
-            request.survivedMs(),
-            request.playedAt(),
-            request.clientVersion(),
-            request.deviceModel(),
-            !assessment.reasons().isEmpty(),
-            assessment.quarantined(),
-            assessment.reasons()
-        );
-        submissionRepository.put(submission);
-
-        if (assessment.quarantined()) {
-            idempotencyRepository.complete(request.submissionId());
-            meterRegistry.counter("leaderboard.submissions", "outcome", "quarantined").increment();
-            LOG.info(
-                "score_submit submissionId={} playerId={} outcome=quarantined reasons={}",
+            var assessment = antiAbuseService.assess(request);
+            var submission = new ScoreSubmission(
                 request.submissionId(),
                 request.playerId(),
-                assessment.reasons()
-            );
-            return new SubmitScoreResponse(
-                true,
-                false,
-                false,
-                true,
-                true,
-                assessment.reasons(),
-                classify(request.playerId()),
-                unavailableSubmittedRoundClassifications(request, CLASSIFICATION_AVAILABILITY_QUARANTINED)
-            );
-        }
-
-        boolean bestUpdated = false;
-        for (var scope : scopeResolver.resolve(request.playedAt())) {
-            var best = new BestScoreRecord(
-                request.playerId(),
                 request.nickname(),
-                scope.scopeKind(),
-                scope.scopeKey(),
                 request.score(),
                 request.survivedMs(),
-                request.playedAt()
+                request.playedAt(),
+                request.clientVersion(),
+                request.deviceModel(),
+                !assessment.reasons().isEmpty(),
+                assessment.quarantined(),
+                assessment.reasons()
             );
+            submissionRepository.put(submission);
 
-            if (bestScoreRepository.putIfBetter(best)) {
-                projectionQueueRepository.publish(new ProjectionTask(
+            if (assessment.quarantined()) {
+                idempotencyRepository.complete(request.submissionId());
+                outcome = "quarantined";
+                meterRegistry.counter("leaderboard.submissions", "outcome", outcome).increment();
+                LOG.info(
+                    "score_submit submissionId={} playerId={} outcome=quarantined reasons={}",
                     request.submissionId(),
+                    request.playerId(),
+                    assessment.reasons()
+                );
+                return new SubmitScoreResponse(
+                    true,
+                    false,
+                    false,
+                    true,
+                    true,
+                    assessment.reasons(),
+                    classify(request.playerId()),
+                    unavailableSubmittedRoundClassifications(request, CLASSIFICATION_AVAILABILITY_QUARANTINED)
+                );
+            }
+
+            boolean bestUpdated = false;
+            for (var scope : scopeResolver.resolve(request.playedAt())) {
+                var best = new BestScoreRecord(
                     request.playerId(),
                     request.nickname(),
                     scope.scopeKind(),
@@ -185,102 +180,131 @@ public class LeaderboardService {
                     request.score(),
                     request.survivedMs(),
                     request.playedAt()
-                ));
-                bestUpdated = true;
+                );
+
+                if (bestScoreRepository.putIfBetter(best)) {
+                    projectionQueueRepository.publish(new ProjectionTask(
+                        request.submissionId(),
+                        request.playerId(),
+                        request.nickname(),
+                        scope.scopeKind(),
+                        scope.scopeKey(),
+                        request.score(),
+                        request.survivedMs(),
+                        request.playedAt()
+                    ));
+                    bestUpdated = true;
+                }
             }
+
+            idempotencyRepository.complete(request.submissionId());
+            outcome = "accepted";
+            meterRegistry.counter("leaderboard.submissions", "outcome", outcome).increment();
+            LOG.info(
+                "score_submit submissionId={} playerId={} outcome=accepted bestUpdated={}",
+                request.submissionId(),
+                request.playerId(),
+                bestUpdated
+            );
+
+            return new SubmitScoreResponse(
+                true,
+                false,
+                bestUpdated,
+                false,
+                false,
+                List.of(),
+                classify(request.playerId()),
+                classifySubmittedRound(request)
+            );
+        } catch (RuntimeException error) {
+            meterRegistry.counter("leaderboard.submissions", "outcome", "error").increment();
+            throw error;
+        } finally {
+            sample.stop(Timer.builder("leaderboard.submit.latency")
+                .tag("operation", "submit")
+                .tag("outcome", outcome)
+                .register(meterRegistry));
         }
-
-        // finalize idempotency after successful processing
-        idempotencyRepository.complete(request.submissionId());
-        meterRegistry.counter("leaderboard.submissions", "outcome", "accepted").increment();
-        LOG.info(
-            "score_submit submissionId={} playerId={} outcome=accepted bestUpdated={}",
-            request.submissionId(),
-            request.playerId(),
-            bestUpdated
-        );
-
-        return new SubmitScoreResponse(
-            true,
-            false,
-            bestUpdated,
-            false,
-            false,
-            List.of(),
-            classify(request.playerId()),
-            classifySubmittedRound(request)
-        );
     }
 
     public LeaderboardResponse getLeaderboard(String scope, int limit) {
-        var scopeKind = scopeKind(scope);
-        var scopeKey = activeScopeKey(scopeKind);
-        var ranked = rankEntries(scopeKind, scopeKey);
+        return recordReadLatency("get_leaderboard", scope, () -> {
+            var scopeKind = scopeKind(scope);
+            var scopeKey = activeScopeKey(scopeKind);
+            var ranked = rankEntries(scopeKind, scopeKey);
 
-        return new LeaderboardResponse(
-            scope,
-            scopeKey,
-            ranked.stream().limit(limit).toList(),
-            ranked.size()
-        );
+            return new LeaderboardResponse(
+                scope,
+                scopeKey,
+                ranked.stream().limit(limit).toList(),
+                ranked.size()
+            );
+        });
     }
 
     public LeaderboardResponse getAroundMe(String scope, String playerId) {
-        var scopeKind = scopeKind(scope);
-        var scopeKey = activeScopeKey(scopeKind);
-        var ranked = rankEntries(scopeKind, scopeKey);
-        var playerIndex = indexOfPlayer(ranked, playerId);
-
-        if (playerIndex < 0) {
-            return new LeaderboardResponse(scope, scopeKey, List.of(), ranked.size());
-        }
-
-        var from = Math.max(0, playerIndex - properties.aroundMeWindow());
-        var to = Math.min(ranked.size(), playerIndex + properties.aroundMeWindow() + 1);
-        return new LeaderboardResponse(scope, scopeKey, ranked.subList(from, to), ranked.size());
-    }
-
-    public PlayerBestScoresResponse getPlayerBestScores(String playerId) {
-        var bestScores = new LinkedHashMap<String, PlayerBestScoresResponse.ScoreView>();
-        for (var scopeKind : ScopeKind.values()) {
-            var scopeKey = activeScopeKey(scopeKind);
-            bestScoreRepository
-                .get(playerId, scopeKind, scopeKey)
-                .ifPresent(best -> bestScores.put(
-                    scopeKind.apiValue(),
-                    new PlayerBestScoresResponse.ScoreView(
-                        best.score(),
-                        best.survivedMs(),
-                        DateTimeFormatter.ISO_INSTANT.format(best.playedAt())
-                    )
-                ));
-        }
-
-        return new PlayerBestScoresResponse(playerId, bestScores);
-    }
-
-    public RankClassificationResponse classify(String playerId) {
-        for (var scopeKind : ScopeKind.values()) {
+        return recordReadLatency("around_me", scope, () -> {
+            var scopeKind = scopeKind(scope);
             var scopeKey = activeScopeKey(scopeKind);
             var ranked = rankEntries(scopeKind, scopeKey);
             var playerIndex = indexOfPlayer(ranked, playerId);
 
-            if (playerIndex >= 0) {
-                var rank = playerIndex + 1;
-                if (rank <= properties.exactRankThreshold()) {
-                    return new RankClassificationResponse(playerId, rank, null, scopeKind.apiValue(), ranked.size());
-                }
-                return new RankClassificationResponse(
-                    playerId,
-                    null,
-                    approximateBand(rank, ranked.size()),
-                    scopeKind.apiValue(),
-                    ranked.size()
-                );
+            if (playerIndex < 0) {
+                return new LeaderboardResponse(scope, scopeKey, List.of(), ranked.size());
             }
-        }
 
-        return new RankClassificationResponse(playerId, null, RankingBands.UNRANKED, ScopeKind.GLOBAL.apiValue(), 0);
+            var from = Math.max(0, playerIndex - properties.aroundMeWindow());
+            var to = Math.min(ranked.size(), playerIndex + properties.aroundMeWindow() + 1);
+            return new LeaderboardResponse(scope, scopeKey, ranked.subList(from, to), ranked.size());
+        });
+    }
+
+    public PlayerBestScoresResponse getPlayerBestScores(String playerId) {
+        return recordReadLatency("get_best", null, () -> {
+            var bestScores = new LinkedHashMap<String, PlayerBestScoresResponse.ScoreView>();
+            for (var scopeKind : ScopeKind.values()) {
+                var scopeKey = activeScopeKey(scopeKind);
+                bestScoreRepository
+                    .get(playerId, scopeKind, scopeKey)
+                    .ifPresent(best -> bestScores.put(
+                        scopeKind.apiValue(),
+                        new PlayerBestScoresResponse.ScoreView(
+                            best.score(),
+                            best.survivedMs(),
+                            DateTimeFormatter.ISO_INSTANT.format(best.playedAt())
+                        )
+                    ));
+            }
+
+            return new PlayerBestScoresResponse(playerId, bestScores);
+        });
+    }
+
+    public RankClassificationResponse classify(String playerId) {
+        return recordReadLatency("classify", null, () -> {
+            for (var scopeKind : ScopeKind.values()) {
+                var scopeKey = activeScopeKey(scopeKind);
+                var ranked = rankEntries(scopeKind, scopeKey);
+                var playerIndex = indexOfPlayer(ranked, playerId);
+
+                if (playerIndex >= 0) {
+                    var rank = playerIndex + 1;
+                    if (rank <= properties.exactRankThreshold()) {
+                        return new RankClassificationResponse(playerId, rank, null, scopeKind.apiValue(), ranked.size());
+                    }
+                    return new RankClassificationResponse(
+                        playerId,
+                        null,
+                        approximateBand(rank, ranked.size()),
+                        scopeKind.apiValue(),
+                        ranked.size()
+                    );
+                }
+            }
+
+            return new RankClassificationResponse(playerId, null, RankingBands.UNRANKED, ScopeKind.GLOBAL.apiValue(), 0);
+        });
     }
 
     public AdminDrainResponse drainProjectionQueue() {
@@ -401,8 +425,13 @@ public class LeaderboardService {
 
     private SubmittedRoundClassificationResponse classifySubmittedRound(ScopeKey scope, SubmitScoreRequest request) {
         var rankedEntries = rankedEntries(scope.scopeKind(), scope.scopeKey());
+        boolean playerAlreadyPresent = rankedEntries.stream()
+            .anyMatch(entry -> entry.playerId().equals(request.playerId()));
+        var entriesForRanking = rankedEntries.stream()
+            .filter(entry -> !entry.playerId().equals(request.playerId()))
+            .toList();
         int candidateRank = 1;
-        for (var rankedEntry : rankedEntries) {
+        for (var rankedEntry : entriesForRanking) {
             if (LeaderboardRanking.compare(
                 request.score(),
                 request.survivedMs(),
@@ -419,7 +448,7 @@ public class LeaderboardService {
             }
         }
 
-        int totalPlayers = rankedEntries.size() + 1;
+        int totalPlayers = playerAlreadyPresent ? rankedEntries.size() : rankedEntries.size() + 1;
         Integer exactRank = candidateRank <= properties.exactRankThreshold() ? candidateRank : null;
         String approximateBand = exactRank != null ? null : approximateBand(candidateRank, totalPlayers);
         return new SubmittedRoundClassificationResponse(
@@ -470,6 +499,20 @@ public class LeaderboardService {
             .values()
             .stream()
             .toList();
+    }
+
+    private <T> T recordReadLatency(String operation, String scope, Supplier<T> supplier) {
+        var sample = Timer.start(meterRegistry);
+        try {
+            return supplier.get();
+        } finally {
+            var builder = Timer.builder("leaderboard.read.latency")
+                .tag("operation", operation);
+            if (scope != null) {
+                builder.tag("scope", scope.toLowerCase());
+            }
+            sample.stop(builder.register(meterRegistry));
+        }
     }
 
     private int indexOfPlayer(List<LeaderboardEntryResponse> ranked, String playerId) {

@@ -132,6 +132,14 @@ Ostatnie utwardzenie:
 - Submit waliduje teraz długości identyfikatorów, niedozwolone znaki i `playedAt` zbyt daleko w przyszłości.
 - Obecny read path pozostaje MVP-grade: exact top-N plus approximate deeper classification, a nie pełny global-scale exact rank.
 
+Follow-up hardening:
+- Submitted-round classification nie liczy już istniejącego gracza drugi raz; ranking kandydata zastępuje koncepcyjnie poprzedni best-score tego samego `playerId`.
+- Availability dla submitted-round classification jest jawnie oznaczane jako `estimated_from_bounded_projection`.
+- Public path/query params (`scope`, `playerId`) mają teraz bean validation i czyste `400` dla złych wartości.
+- Generic `500` nie zwraca już treści wewnętrznego wyjątku klientowi.
+- Każda odpowiedź dostaje `X-Request-Id`, a backend ma bazowe latency metrics dla submit/read/projection drain/snapshot export oraz licznik admin auth failures.
+- Terraform examples i runbook jawnie pokazują secret wiring dla `PARALLAX_ADMIN_TOKEN` bez commitowania realnej wartości.
+
 ## Zrobione: Idempotency I Best Scores
 Status: zaimplementowane.
 

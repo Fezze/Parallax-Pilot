@@ -27,11 +27,16 @@ import com.parallaxpilot.leaderboard.api.dto.SubmitScoreResponse;
 import com.parallaxpilot.leaderboard.service.LeaderboardService;
 import com.parallaxpilot.leaderboard.service.SnapshotService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 
 @RestController
 @Validated
 @RequestMapping("/v1")
 public class LeaderboardController {
+
+    private static final String PLAYER_ID_PATTERN = "^[A-Za-z0-9-]+$";
+    private static final String SCOPE_PATTERN = "^(global|daily|seasonal)$";
 
     private final LeaderboardService leaderboardService;
     private final SnapshotService snapshotService;
@@ -54,26 +59,33 @@ public class LeaderboardController {
     }
 
     @GetMapping("/leaderboards/{scope}")
-    LeaderboardResponse getLeaderboard(@PathVariable String scope, @RequestParam(defaultValue = "10") int limit) {
+    LeaderboardResponse getLeaderboard(
+        @PathVariable @Pattern(regexp = SCOPE_PATTERN, flags = Pattern.Flag.CASE_INSENSITIVE) String scope,
+        @RequestParam(defaultValue = "10") int limit
+    ) {
         int normalizedLimit = Math.max(1, Math.min(limit, maxPublicLeaderboardLimit));
         return leaderboardService.getLeaderboard(scope, normalizedLimit);
     }
 
     @GetMapping("/leaderboards/{scope}/around-me")
     LeaderboardResponse getLeaderboardAroundMe(
-        @PathVariable String scope,
-        @RequestParam String playerId
+        @PathVariable @Pattern(regexp = SCOPE_PATTERN, flags = Pattern.Flag.CASE_INSENSITIVE) String scope,
+        @RequestParam @Size(min = 6, max = 64) @Pattern(regexp = PLAYER_ID_PATTERN) String playerId
     ) {
         return leaderboardService.getAroundMe(scope, playerId);
     }
 
     @GetMapping("/players/{playerId}/best")
-    PlayerBestScoresResponse getBestScores(@PathVariable String playerId) {
+    PlayerBestScoresResponse getBestScores(
+        @PathVariable @Size(min = 6, max = 64) @Pattern(regexp = PLAYER_ID_PATTERN) String playerId
+    ) {
         return leaderboardService.getPlayerBestScores(playerId);
     }
 
     @GetMapping("/rankings/classify")
-    RankClassificationResponse classify(@RequestParam String playerId) {
+    RankClassificationResponse classify(
+        @RequestParam @Size(min = 6, max = 64) @Pattern(regexp = PLAYER_ID_PATTERN) String playerId
+    ) {
         return leaderboardService.classify(playerId);
     }
 

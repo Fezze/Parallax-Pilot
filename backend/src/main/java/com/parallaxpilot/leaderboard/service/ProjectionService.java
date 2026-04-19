@@ -10,6 +10,7 @@ import com.parallaxpilot.leaderboard.domain.LeaderboardRanking;
 import com.parallaxpilot.leaderboard.repository.BestScoreRepository;
 import com.parallaxpilot.leaderboard.repository.LeaderboardEntryRepository;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -142,13 +143,25 @@ public class ProjectionService {
     }
 
     public int drainProjectionQueueFully() {
-        int total = 0;
-        int processed;
-        do {
-            processed = drainProjectionQueue();
-            total += processed;
-        } while (processed > 0);
-        return total;
+        var sample = Timer.start(meterRegistry);
+        var outcome = "success";
+        try {
+            int total = 0;
+            int processed;
+            do {
+                processed = drainProjectionQueue();
+                total += processed;
+            } while (processed > 0);
+            return total;
+        } catch (RuntimeException error) {
+            outcome = "error";
+            throw error;
+        } finally {
+            sample.stop(Timer.builder("leaderboard.projection.drain.latency")
+                .tag("operation", "projection_drain")
+                .tag("outcome", outcome)
+                .register(meterRegistry));
+        }
     }
 
     private String leaderboardSortKey(int score, long survivedMs, Instant playedAt, String playerId) {

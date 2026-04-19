@@ -41,8 +41,10 @@ terraform plan \
 	-var environment=dev \
 	-var api_image=123456789012.dkr.ecr.eu-west-2.amazonaws.com/parallax-pilot-dev-api:sha-abcdef0 \
 	-var 'api_environment_variables={SPRING_PROFILES_ACTIVE="default"}' \
-	-var 'api_secret_environment={APP_LEADERBOARD_DYNAMODB_ENDPOINT="arn:aws:ssm:eu-west-2:123456789012:parameter/parallax-pilot/dev/api/dynamodb-endpoint"}'
+	-var 'api_secret_environment={APP_LEADERBOARD_DYNAMODB_ENDPOINT="arn:aws:ssm:eu-west-2:123456789012:parameter/parallax-pilot/dev/api/dynamodb-endpoint",PARALLAX_ADMIN_TOKEN="arn:aws:ssm:eu-west-2:123456789012:parameter/parallax-pilot/dev/api/admin-token"}'
 ```
+
+Admin endpoints stay disabled for callers without `X-Admin-Token`, so runtime environments should explicitly wire `PARALLAX_ADMIN_TOKEN` through `api_secret_environment` or a managed secret resource. Do not commit real token values into `*.tfvars`.
 
 Example per-environment files live under `infra/terraform/environments/` and are intended as templates, not committed secret values.
 

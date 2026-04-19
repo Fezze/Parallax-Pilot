@@ -19,6 +19,7 @@ api_environment_variables = {
 
 api_secret_environment = {
   # APP_LEADERBOARD_DYNAMODB_ENDPOINT = "arn:aws:ssm:eu-west-2:123456789012:parameter/parallax-pilot/dev/api/dynamodb-endpoint"
+  # PARALLAX_ADMIN_TOKEN = "arn:aws:ssm:eu-west-2:123456789012:parameter/parallax-pilot/dev/api/admin-token"
 }
 
 projection_worker_secret_environment = {

@@ -4,9 +4,11 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Instant;
-import java.util.Map;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -19,14 +21,17 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 @Component
+@Order(Ordered.HIGHEST_PRECEDENCE + 1)
 public class AdminTokenFilter extends OncePerRequestFilter {
 
     public static final String HEADER_NAME = "X-Admin-Token";
 
     private final String expectedToken;
+    private final MeterRegistry meterRegistry;
 
-    public AdminTokenFilter(@Value("${app.admin.token:}") String expectedToken) {
+    public AdminTokenFilter(@Value("${app.admin.token:}") String expectedToken, MeterRegistry meterRegistry) {
         this.expectedToken = expectedToken;
+        this.meterRegistry = meterRegistry;
     }
 
     @Override
@@ -38,6 +43,7 @@ public class AdminTokenFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
         throws ServletException, IOException {
         if (!isAuthorized(request.getHeader(HEADER_NAME))) {
+            meterRegistry.counter("leaderboard.admin.auth.failures", "reason", "missing_or_invalid_token").increment();
             writeUnauthorized(response, request.getRequestURI());
             return;
         }

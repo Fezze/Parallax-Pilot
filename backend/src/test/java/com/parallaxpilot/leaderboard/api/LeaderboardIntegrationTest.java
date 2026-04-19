@@ -141,6 +141,45 @@ class LeaderboardIntegrationTest extends LocalStackIntegrationSupport {
     }
 
     @Test
+    void newPlayerSubmittedRoundClassificationAddsOneToTotalPlayers() throws Exception {
+        var existing = new SubmitScoreRequest(
+            "sub-new-player-seed",
+            "player-seed-1",
+            "Seed",
+            2400,
+            18000,
+            currentTestInstant(12),
+            "2.4.3",
+            "balance-2"
+        );
+        var newcomer = new SubmitScoreRequest(
+            "sub-new-player-candidate",
+            "player-new-1",
+            "New",
+            2200,
+            17000,
+            currentTestInstant(13),
+            "2.4.3",
+            "balance-2"
+        );
+
+        mockMvc.perform(post("/v1/scores:submit")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsBytes(existing)))
+            .andExpect(status().isAccepted());
+
+        mockMvc.perform(post("/v1/admin/projections:drain")
+                .header("X-Admin-Token", ADMIN_TOKEN))
+            .andExpect(status().isOk());
+
+        mockMvc.perform(post("/v1/scores:submit")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsBytes(newcomer)))
+            .andExpect(status().isAccepted())
+            .andExpect(jsonPath("$.submittedRoundClassifications[0].totalPlayers").value(2));
+    }
+
+    @Test
     void lowerScoreDoesNotReplaceExistingBestScore() throws Exception {
         var betterPlayedAt = currentTestInstant(20);
         var worsePlayedAt = currentTestInstant(25);
@@ -177,13 +216,113 @@ class LeaderboardIntegrationTest extends LocalStackIntegrationSupport {
             .andExpect(status().isAccepted())
             .andExpect(jsonPath("$.bestUpdated").value(false))
             .andExpect(jsonPath("$.submittedRoundClassifications[0].classificationBasis").value("submitted_round"))
-            .andExpect(jsonPath("$.submittedRoundClassifications[0].availability").value("estimated"));
+            .andExpect(jsonPath("$.submittedRoundClassifications[0].availability").value("estimated_from_bounded_projection"));
 
         mockMvc.perform(get("/v1/players/player-int-best/best"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.bestScores.global.score").value(2600))
             .andExpect(jsonPath("$.bestScores.daily.score").value(2600))
             .andExpect(jsonPath("$.bestScores.seasonal.score").value(2600));
+    }
+
+    @Test
+    void existingPlayerWorseScoreDoesNotIncreaseSubmittedRoundTotalPlayers() throws Exception {
+        var otherPlayer = new SubmitScoreRequest(
+            "sub-existing-worse-other",
+            "player-existing-other",
+            "Other",
+            2200,
+            17000,
+            currentTestInstant(21),
+            "2.4.3",
+            "balance-2"
+        );
+        var currentBest = new SubmitScoreRequest(
+            "sub-existing-worse-best",
+            "player-existing-self",
+            "Self",
+            2600,
+            21000,
+            currentTestInstant(22),
+            "2.4.3",
+            "balance-2"
+        );
+        var worseRound = new SubmitScoreRequest(
+            "sub-existing-worse-round",
+            "player-existing-self",
+            "Self",
+            1500,
+            12000,
+            currentTestInstant(23),
+            "2.4.3",
+            "balance-2"
+        );
+
+        mockMvc.perform(post("/v1/scores:submit").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsBytes(otherPlayer)))
+            .andExpect(status().isAccepted());
+        mockMvc.perform(post("/v1/scores:submit").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsBytes(currentBest)))
+            .andExpect(status().isAccepted());
+        mockMvc.perform(post("/v1/admin/projections:drain")
+                .header("X-Admin-Token", ADMIN_TOKEN))
+            .andExpect(status().isOk());
+
+        mockMvc.perform(post("/v1/scores:submit")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsBytes(worseRound)))
+            .andExpect(status().isAccepted())
+            .andExpect(jsonPath("$.bestUpdated").value(false))
+            .andExpect(jsonPath("$.submittedRoundClassifications[0].totalPlayers").value(2))
+            .andExpect(jsonPath("$.submittedRoundClassifications[0].exactRank").value(2));
+    }
+
+    @Test
+    void existingPlayerBetterScoreDoesNotDoubleCountWhileProjectionIsStale() throws Exception {
+        var otherPlayer = new SubmitScoreRequest(
+            "sub-existing-better-other",
+            "player-better-other",
+            "Other",
+            2200,
+            17000,
+            currentTestInstant(24),
+            "2.4.3",
+            "balance-2"
+        );
+        var oldBest = new SubmitScoreRequest(
+            "sub-existing-better-old",
+            "player-better-self",
+            "Self",
+            1800,
+            12000,
+            currentTestInstant(25),
+            "2.4.3",
+            "balance-2"
+        );
+        var betterRound = new SubmitScoreRequest(
+            "sub-existing-better-new",
+            "player-better-self",
+            "Self",
+            2600,
+            21000,
+            currentTestInstant(26),
+            "2.4.3",
+            "balance-2"
+        );
+
+        mockMvc.perform(post("/v1/scores:submit").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsBytes(otherPlayer)))
+            .andExpect(status().isAccepted());
+        mockMvc.perform(post("/v1/scores:submit").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsBytes(oldBest)))
+            .andExpect(status().isAccepted());
+        mockMvc.perform(post("/v1/admin/projections:drain")
+                .header("X-Admin-Token", ADMIN_TOKEN))
+            .andExpect(status().isOk());
+
+        mockMvc.perform(post("/v1/scores:submit")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsBytes(betterRound)))
+            .andExpect(status().isAccepted())
+            .andExpect(jsonPath("$.bestUpdated").value(true))
+            .andExpect(jsonPath("$.submittedRoundClassifications[0].totalPlayers").value(2))
+            .andExpect(jsonPath("$.submittedRoundClassifications[0].exactRank").value(1));
     }
 
     @Test
@@ -510,6 +649,70 @@ class LeaderboardIntegrationTest extends LocalStackIntegrationSupport {
     }
 
     @Test
+    void rankingUsesEarlierPlayedAtAndPlayerIdAsDeterministicTieBreakers() throws Exception {
+        var earlier = new SubmitScoreRequest(
+            "sub-tie-time-1",
+            "player-tie-a",
+            "A",
+            2000,
+            15000,
+            currentTestInstant(370),
+            "2.4.3",
+            "balance-2"
+        );
+        var later = new SubmitScoreRequest(
+            "sub-tie-time-2",
+            "player-tie-b",
+            "B",
+            2000,
+            15000,
+            currentTestInstant(371),
+            "2.4.3",
+            "balance-2"
+        );
+        var sameMomentHigherId = new SubmitScoreRequest(
+            "sub-tie-time-3",
+            "player-tie-c",
+            "C",
+            2000,
+            15000,
+            currentTestInstant(372),
+            "2.4.3",
+            "balance-2"
+        );
+        var sameMomentLowerId = new SubmitScoreRequest(
+            "sub-tie-time-4",
+            "player-tie-bb",
+            "BB",
+            2000,
+            15000,
+            currentTestInstant(372),
+            "2.4.3",
+            "balance-2"
+        );
+
+        mockMvc.perform(post("/v1/scores:submit").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsBytes(later)))
+            .andExpect(status().isAccepted());
+        mockMvc.perform(post("/v1/scores:submit").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsBytes(earlier)))
+            .andExpect(status().isAccepted());
+        mockMvc.perform(post("/v1/scores:submit").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsBytes(sameMomentHigherId)))
+            .andExpect(status().isAccepted());
+        mockMvc.perform(post("/v1/scores:submit").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsBytes(sameMomentLowerId)))
+            .andExpect(status().isAccepted());
+
+        mockMvc.perform(post("/v1/admin/projections:drain")
+                .header("X-Admin-Token", ADMIN_TOKEN))
+            .andExpect(status().isOk());
+
+        mockMvc.perform(get("/v1/leaderboards/global"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.entries[0].playerId").value("player-tie-a"))
+            .andExpect(jsonPath("$.entries[1].playerId").value("player-tie-b"))
+            .andExpect(jsonPath("$.entries[2].playerId").value("player-tie-bb"))
+            .andExpect(jsonPath("$.entries[3].playerId").value("player-tie-c"));
+    }
+
+    @Test
     void rejectsFuturePlayedAtAtApiBoundary() throws Exception {
         var request = new SubmitScoreRequest(
             "sub-future-1",
@@ -527,5 +730,20 @@ class LeaderboardIntegrationTest extends LocalStackIntegrationSupport {
                 .content(objectMapper.writeValueAsBytes(request)))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.fieldErrors.playedAt").exists());
+    }
+
+    @Test
+    void rejectsInvalidScopeAndPlayerIdParameters() throws Exception {
+        mockMvc.perform(get("/v1/leaderboards/monthly"))
+            .andExpect(status().isBadRequest());
+
+        mockMvc.perform(get("/v1/leaderboards/global/around-me").param("playerId", "bad!"))
+            .andExpect(status().isBadRequest());
+
+        mockMvc.perform(get("/v1/players/bad!/best"))
+            .andExpect(status().isBadRequest());
+
+        mockMvc.perform(get("/v1/rankings/classify").param("playerId", "bad!"))
+            .andExpect(status().isBadRequest());
     }
 }

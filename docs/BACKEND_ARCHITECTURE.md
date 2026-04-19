@@ -70,6 +70,7 @@ This design avoids a separate mobile app while still using a production-shaped b
 - Top-N reads are exact.
 - Classification is exact when rank is known in projection range; otherwise approximate band is returned.
 - Submit responses explicitly separate the hypothetical rank of the submitted round from the current player-best rank view.
+- Submitted-round classification is estimated from the bounded projection and replaces the same player's existing projected best conceptually instead of double-counting that player.
 - Daily scope uses UTC day key.
 - Seasonal scope uses quarter key: `YYYY-QN`.
 
@@ -102,6 +103,7 @@ This design avoids a separate mobile app while still using a production-shaped b
 - Recovery snapshots are exported through `POST /v1/admin/snapshots:export`
 - Burst load is absorbed with queue-based projection flow; the worker profile owns scheduled queue draining
 - `/v1/admin/**` is protected with a shared admin token header and is intentionally outside the public API surface
+- Every response carries `X-Request-Id` for correlation across logs and API clients.
 
 ## Implementation Status In Repo
 - `backend/`: Spring Boot service scaffold with DynamoDB-backed repositories

@@ -59,6 +59,8 @@ Oczekiwane:
 - Unit/controller/service tests.
 - Integration tests z DynamoDB/SQS/S3.
 - Coverage report przez Jacoco.
+- Public responses mają `X-Request-Id`.
+- `/v1/admin/**` wymaga `X-Admin-Token` powiązanego z `PARALLAX_ADMIN_TOKEN` po stronie runtime.
 
 Jeśli fail jest na Docker init:
 - To nie jest błąd backendu.
@@ -135,6 +137,7 @@ Z ostatniej sesji:
 - Terraform ma nowe zmienne dla env maps, secret refs, managed SSM/Secrets Manager i autoscaling.
 - Main stack używa backendu `s3`, a bootstrap dla state bucket/lock table jest wydzielony do `infra/terraform/bootstrap-state/`.
 - Lokalne `terraform` CLI nadal nie jest dostępne w tym środowisku.
+- Dla runtime admin endpoints trzeba jawnie ustawić `PARALLAX_ADMIN_TOKEN`, najlepiej przez `api_secret_environment` wskazujące ARN z SSM/Secrets Manager.
 
 ## Docker Status Z Ostatniej Sesji
 - `docker version` przechodzi w aktywnym środowisku.

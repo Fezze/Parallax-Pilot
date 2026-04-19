@@ -171,6 +171,11 @@ Najbliższy sensowny krok po obecnym utwardzeniu backendu:
 2. Dodać per-endpoint latency timers dla submit/read/admin.
 3. Dodać metryki odrzuconych admin tokenów i projection lag/backlog.
 
+Status po follow-up hardening:
+1. `X-Request-Id` i bazowe latency metrics są już dodane.
+2. Jest licznik `leaderboard.admin.auth.failures`.
+3. Queue depth / oldest message age nadal są odłożone, bo wymagają osobnego, czystego metrics bindera dla SQS.
+
 ## P2: Ranking Stability
 Problem:
 - Tie-break jest w kodzie, ale brak wystarczającej dokumentacji i testów dla edge cases.
@@ -197,7 +202,8 @@ Akceptacja:
 
 Stan po ostatniej zmianie:
 1. Tie-break `score -> survivedMs -> earlier playedAt -> playerId` jest już wyrównany między service i projection path.
-2. Nadal brakuje ścieżki prawdziwie global-scale rank estimation poza bounded scan MVP.
+2. Submitted-round classification zastępuje koncepcyjnie istniejący best-score tego samego gracza zamiast liczyć go drugi raz.
+3. Nadal brakuje ścieżki prawdziwie global-scale rank estimation poza bounded scan MVP.
 
 ## P2: Anti-abuse Hardening
 Problem:
