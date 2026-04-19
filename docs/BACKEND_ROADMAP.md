@@ -1,6 +1,7 @@
 # Backend Roadmap
 
-Handoff for the next agent lives in `docs/BACKEND_HANDOFF.md`.
+AI takeover docs start in `docs/AI_TAKEOVER.md`.
+Short handoff for the next agent lives in `docs/BACKEND_HANDOFF.md`.
 
 ## Current status
 Addressed:

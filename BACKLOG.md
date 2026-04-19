@@ -1,6 +1,7 @@
 # Backlog
 
-Backend takeover details: `docs/BACKEND_HANDOFF.md`.
+AI takeover docs: `docs/AI_TAKEOVER.md`.
+Backend handoff summary: `docs/BACKEND_HANDOFF.md`.
 
 ## P1
 - Add backend-only versioning and release rules so backend-only work does not bump the watch app version.

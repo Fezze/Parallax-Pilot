@@ -2,6 +2,8 @@
 
 This note is for the next AI taking over backend work in this repo.
 
+Start with `docs/AI_TAKEOVER.md` for the full AI-oriented documentation set.
+
 ## Current Baseline
 - Latest backend-related commit: `5e9e03a Add backend ops and score submit flow`.
 - The repo has Maven Wrapper support under `backend/` and npm scripts for backend builds/tests.
