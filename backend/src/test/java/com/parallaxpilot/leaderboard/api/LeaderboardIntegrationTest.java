@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -29,6 +30,7 @@ import com.parallaxpilot.leaderboard.api.dto.SeasonCutoverRequest;
 import com.parallaxpilot.leaderboard.api.dto.SubmitScoreRequest;
 import com.parallaxpilot.leaderboard.domain.ProjectionTask;
 import com.parallaxpilot.leaderboard.domain.ScopeKind;
+import com.parallaxpilot.leaderboard.repository.IdempotencyRepository;
 import com.parallaxpilot.leaderboard.repository.ProjectionQueueRepository;
 import com.parallaxpilot.leaderboard.service.LeaderboardService;
 import com.parallaxpilot.leaderboard.support.LocalStackIntegrationSupport;
@@ -58,6 +60,12 @@ class LeaderboardIntegrationTest extends LocalStackIntegrationSupport {
 
     @Autowired
     private ProjectionQueueRepository projectionQueueRepository;
+
+    @Autowired
+    private IdempotencyRepository idempotencyRepository;
+
+    @Autowired
+    private Clock clock;
 
     @BeforeAll
     static void bootstrap() {
@@ -549,7 +557,7 @@ class LeaderboardIntegrationTest extends LocalStackIntegrationSupport {
             "Rate",
             2000,
             10000,
-            Instant.parse("2025-01-01T00:00:00Z"),
+            currentTestInstant(-60),
             "2.4.3",
             "balance-2"
         );
@@ -560,6 +568,47 @@ class LeaderboardIntegrationTest extends LocalStackIntegrationSupport {
             .andExpect(status().isAccepted())
             .andExpect(jsonPath("$.quarantined").value(true))
             .andExpect(jsonPath("$.riskReasons[0]").value("rate-limit"));
+    }
+
+    @Test
+    void submitRejectsStalePlayedAt() throws Exception {
+        var request = new SubmitScoreRequest(
+            "sub-old-int-1",
+            "player-old-int",
+            "Stale",
+            1200,
+            15000,
+            Instant.now().minus(30, ChronoUnit.DAYS),
+            "2.4.3",
+            "balance-2"
+        );
+
+        mockMvc.perform(post("/v1/scores:submit")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsBytes(request)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.fieldErrors.playedAt").exists());
+    }
+
+    @Test
+    void submissionAlreadyInProgressReturnsConflict() throws Exception {
+        var request = new SubmitScoreRequest(
+            "sub-int-progress",
+            "player-int-progress",
+            "Pilot",
+            1800,
+            12000,
+            currentTestInstant(30),
+            "2.4.3",
+            "balance-2"
+        );
+        idempotencyRepository.acquire(request.submissionId(), clock.instant());
+
+        mockMvc.perform(post("/v1/scores:submit")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsBytes(request)))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.message").value("Submission is already being processed"));
     }
 
     @Test

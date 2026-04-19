@@ -2,9 +2,13 @@ package com.parallaxpilot.leaderboard.repository;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.MeterRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import com.parallaxpilot.leaderboard.config.LeaderboardProperties;
@@ -19,38 +23,53 @@ import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
 
 @Component
 public class ProjectionQueueRepository {
+    private static final Logger LOG = LoggerFactory.getLogger(ProjectionQueueRepository.class);
 
     private final SqsClient sqsClient;
     private final ObjectMapper objectMapper;
     private final LeaderboardProperties properties;
+    private final MeterRegistry meterRegistry;
+    private final AtomicReference<String> queueUrlCache = new AtomicReference<>();
 
     public ProjectionQueueRepository(
         SqsClient sqsClient,
         ObjectMapper objectMapper,
-        LeaderboardProperties properties
+        LeaderboardProperties properties,
+        MeterRegistry meterRegistry
     ) {
         this.sqsClient = sqsClient;
         this.objectMapper = objectMapper;
         this.properties = properties;
+        this.meterRegistry = meterRegistry;
     }
 
     public void publish(ProjectionTask task) {
-        sqsClient.sendMessage(SendMessageRequest.builder()
-            .queueUrl(queueUrl())
-            .messageBody(writeJson(task))
-            .build());
+        try {
+            sqsClient.sendMessage(SendMessageRequest.builder()
+                .queueUrl(queueUrl())
+                .messageBody(writeJson(task))
+                .build());
+        } catch (RuntimeException error) {
+            queueUrlCache.set(null);
+            throw error;
+        }
     }
 
     public List<QueuedProjectionTask> receiveBatch(int maxMessages) {
-        var response = sqsClient.receiveMessage(ReceiveMessageRequest.builder()
-            .queueUrl(queueUrl())
-            .maxNumberOfMessages(Math.min(maxMessages, 10))
-            .waitTimeSeconds(1)
-            .build());
+        try {
+            var response = sqsClient.receiveMessage(ReceiveMessageRequest.builder()
+                .queueUrl(queueUrl())
+                .maxNumberOfMessages(Math.min(maxMessages, 10))
+                .waitTimeSeconds(1)
+                .build());
 
-        return response.messages().stream()
-            .map(message -> new QueuedProjectionTask(message, readJson(message)))
-            .toList();
+            return response.messages().stream()
+                .map(message -> new QueuedProjectionTask(message, readJson(message)))
+                .toList();
+        } catch (RuntimeException error) {
+            queueUrlCache.set(null);
+            throw error;
+        }
     }
 
     public void deleteBatch(List<QueuedProjectionTask> tasks) {
@@ -66,10 +85,20 @@ public class ProjectionQueueRepository {
                 .build());
         }
 
-        sqsClient.deleteMessageBatch(DeleteMessageBatchRequest.builder()
-            .queueUrl(queueUrl())
-            .entries(entries)
-            .build());
+        try {
+            var response = sqsClient.deleteMessageBatch(DeleteMessageBatchRequest.builder()
+                .queueUrl(queueUrl())
+                .entries(entries)
+                .build());
+
+            if (!response.failed().isEmpty()) {
+                meterRegistry.counter("leaderboard.projection.queue.delete.failures").increment(response.failed().size());
+                LOG.warn("projection_queue_delete_partial_failure failedEntries={}", response.failed().size());
+            }
+        } catch (RuntimeException error) {
+            queueUrlCache.set(null);
+            throw error;
+        }
     }
 
     public void purge() {
@@ -77,11 +106,21 @@ public class ProjectionQueueRepository {
             sqsClient.purgeQueue(builder -> builder.queueUrl(queueUrl()));
         } catch (PurgeQueueInProgressException ignored) {
             // SQS allows only one purge per short interval; existing queue state is already being reset.
+        } catch (RuntimeException error) {
+            queueUrlCache.set(null);
+            throw error;
         }
     }
 
     private String queueUrl() {
-        return sqsClient.getQueueUrl(builder -> builder.queueName(properties.projectionQueueName())).queueUrl();
+        var cached = queueUrlCache.get();
+        if (cached != null) {
+            return cached;
+        }
+
+        var resolved = sqsClient.getQueueUrl(builder -> builder.queueName(properties.projectionQueueName())).queueUrl();
+        queueUrlCache.compareAndSet(null, resolved);
+        return queueUrlCache.get();
     }
 
     private String writeJson(ProjectionTask value) {

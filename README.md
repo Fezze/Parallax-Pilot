@@ -76,8 +76,8 @@ flowchart LR
 ## Write path: score submission
 
 1. The watch/phone path submits a `SubmitScoreRequest`.
-2. The API validates request shape, bounds, timestamps, and identifier format.
-3. An idempotency guard checks `submissionId`.
+2. The API validates request shape, bounds, identifier format, future skew, and a max submission age window.
+3. An idempotency guard checks `submissionId` using server-time TTLs.
 4. Anti-abuse assessment runs and can mark the request suspicious or quarantined.
 5. The submission is stored in the append-only submission log.
 6. Quarantined submissions stop before canonical best-score update.
@@ -98,10 +98,12 @@ The current design is intentionally described as a growth-stage read path. Exact
 
 - score submission is idempotent by `submissionId`
 - duplicate retries return accepted duplicate responses instead of reapplying writes
+- retries against an in-flight `submissionId` return conflict instead of being misclassified as completed duplicates
 - concurrent submits from the same player resolve through conditional best-score updates
 - stale projection tasks are rejected by comparing against current canonical best score
 - projection task processing is deduped through `projection_processed`
 - projections can be rebuilt from the append-only submission log
+- rebuild locks respect expiry timestamps instead of waiting for DynamoDB TTL cleanup
 
 ## Ranking model
 
@@ -123,7 +125,7 @@ Those are not the same thing. A submitted round may not become the player’s be
 
 This system is designed for retry-heavy client behavior. The watch and phone path can retry because of BLE hops, phone connectivity, or API/network instability.
 
-`IdempotencyRepository` ensures retries do not double-apply canonical state updates. A duplicate submission is treated as a known outcome, not an exceptional failure. That makes the write API safe under at-least-once delivery behavior from the client path.
+`IdempotencyRepository` ensures retries do not double-apply canonical state updates. Completed duplicates are treated as a known outcome, while still-in-progress requests return an explicit conflict. That keeps retry behavior honest under at-least-once delivery and partial-failure scenarios.
 
 ## Async projection model
 
@@ -167,6 +169,7 @@ Implemented observability includes:
   - `leaderboard.projection.queue.inflight`
   - `leaderboard.projection.queue.delayed`
   - `leaderboard.projection.queue.oldest_age_seconds`
+  - `leaderboard.projection.queue.delete.failures`
   - `leaderboard.projection.queue.metrics.refresh.failures`
 
 ## Testing strategy

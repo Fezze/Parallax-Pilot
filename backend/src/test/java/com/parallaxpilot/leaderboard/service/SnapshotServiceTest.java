@@ -6,6 +6,9 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -35,6 +38,7 @@ class SnapshotServiceTest {
             "pp_",
             100,
             14,
+            7,
             "pp_score-submissions",
             true,
             30000,
@@ -58,7 +62,8 @@ class SnapshotServiceTest {
             new ObjectMapper().findAndRegisterModules(),
             repository,
             properties,
-            new SimpleMeterRegistry()
+            new SimpleMeterRegistry(),
+            Clock.fixed(Instant.parse("2026-04-19T12:00:00Z"), ZoneOffset.UTC)
         );
 
         var response = service.exportSnapshot();

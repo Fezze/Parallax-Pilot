@@ -1,5 +1,6 @@
 package com.parallaxpilot.leaderboard.service;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.time.Month;
 import java.time.ZoneOffset;
@@ -19,9 +20,11 @@ public class SeasonService {
     private static final Pattern QUARTER_SEASON_KEY = Pattern.compile("\\d{4}-Q[1-4]");
 
     private final SeasonMetadataRepository seasonRepository;
+    private final Clock clock;
 
-    public SeasonService(SeasonMetadataRepository seasonRepository) {
+    public SeasonService(SeasonMetadataRepository seasonRepository, Clock clock) {
         this.seasonRepository = seasonRepository;
+        this.clock = clock;
     }
 
     public String resolveSeasonKey(Instant playedAt) {
@@ -51,7 +54,7 @@ public class SeasonService {
 
     @Scheduled(cron = "${app.leaderboard.season-rollover-cron:0 5 0 * * *}", zone = "UTC")
     void scheduledSeasonRollover() {
-        rolloverIfNeeded(Instant.now());
+        rolloverIfNeeded(clock.instant());
     }
 
     public Optional<SeasonMetadataRecord> rolloverIfNeeded(Instant now) {

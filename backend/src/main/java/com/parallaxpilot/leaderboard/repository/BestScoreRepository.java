@@ -107,15 +107,23 @@ public class BestScoreRepository {
 
     public void clearTable() {
         var table = properties.tablePrefix() + LeaderboardTables.BEST_SCORES;
-        var scan = dynamoDbClient.scan(ScanRequest.builder().tableName(table).build());
-        for (var item : scan.items()) {
-            dynamoDbClient.deleteItem(DeleteItemRequest.builder()
-                .tableName(table)
-                .key(Map.of(
-                    DynamoDbAttributes.PK, item.get(DynamoDbAttributes.PK),
-                    DynamoDbAttributes.SK, item.get(DynamoDbAttributes.SK)
-                ))
-                .build());
-        }
+        Map<String, AttributeValue> lastKey = null;
+        do {
+            var request = ScanRequest.builder().tableName(table);
+            if (lastKey != null && !lastKey.isEmpty()) {
+                request = request.exclusiveStartKey(lastKey);
+            }
+            var response = dynamoDbClient.scan(request.build());
+            for (var item : response.items()) {
+                dynamoDbClient.deleteItem(DeleteItemRequest.builder()
+                    .tableName(table)
+                    .key(Map.of(
+                        DynamoDbAttributes.PK, item.get(DynamoDbAttributes.PK),
+                        DynamoDbAttributes.SK, item.get(DynamoDbAttributes.SK)
+                    ))
+                    .build());
+            }
+            lastKey = response.lastEvaluatedKey();
+        } while (lastKey != null && !lastKey.isEmpty());
     }
 }

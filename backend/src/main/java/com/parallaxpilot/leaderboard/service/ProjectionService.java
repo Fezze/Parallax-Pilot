@@ -1,5 +1,6 @@
 package com.parallaxpilot.leaderboard.service;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 
@@ -29,6 +30,7 @@ public class ProjectionService {
     private final LeaderboardEntryRepository leaderboardEntryRepository;
     private final BestScoreRepository bestScoreRepository;
     private final MeterRegistry meterRegistry;
+    private final Clock clock;
 
     public ProjectionService(
         ProjectionQueueRepository projectionQueueRepository,
@@ -36,7 +38,8 @@ public class ProjectionService {
         ProjectionProcessedRepository projectionProcessedRepository,
         LeaderboardEntryRepository leaderboardEntryRepository,
         BestScoreRepository bestScoreRepository,
-        MeterRegistry meterRegistry
+        MeterRegistry meterRegistry,
+        Clock clock
     ) {
         this.projectionQueueRepository = projectionQueueRepository;
         this.projectionIndexRepository = projectionIndexRepository;
@@ -44,6 +47,7 @@ public class ProjectionService {
         this.leaderboardEntryRepository = leaderboardEntryRepository;
         this.bestScoreRepository = bestScoreRepository;
         this.meterRegistry = meterRegistry;
+        this.clock = clock;
     }
 
     public int drainProjectionQueue() {
@@ -65,7 +69,7 @@ public class ProjectionService {
             var currentBest = bestScoreRepository.get(payload.playerId(), payload.scopeKind(), payload.scopeKey());
 
             if (currentBest.isEmpty() || !matches(payload, currentBest.get())) {
-                projectionProcessedRepository.markProcessed(projectionKey, Instant.now());
+                projectionProcessedRepository.markProcessed(projectionKey, clock.instant());
                 processed.add(task);
                 continue;
             }
@@ -74,7 +78,7 @@ public class ProjectionService {
             var currentIndex = projectionIndexRepository.get(payload.playerId(), payload.scopeKind(), payload.scopeKey());
 
             if (currentIndex.isPresent() && currentIndex.get().leaderboardSortKey().equals(newSortKey)) {
-                projectionProcessedRepository.markProcessed(projectionKey, Instant.now());
+                projectionProcessedRepository.markProcessed(projectionKey, clock.instant());
                 processed.add(task);
                 continue;
             }
@@ -104,7 +108,7 @@ public class ProjectionService {
 
             if (!entryInserted) {
                 if (isAlreadyIndexed(payload, newSortKey)) {
-                    projectionProcessedRepository.markProcessed(projectionKey, Instant.now());
+                    projectionProcessedRepository.markProcessed(projectionKey, clock.instant());
                     processed.add(task);
                 }
                 continue;
@@ -121,7 +125,7 @@ public class ProjectionService {
 
             if (!indexSet) {
                 if (isAlreadyIndexed(payload, newSortKey)) {
-                    projectionProcessedRepository.markProcessed(projectionKey, Instant.now());
+                    projectionProcessedRepository.markProcessed(projectionKey, clock.instant());
                     processed.add(task);
                 } else {
                     leaderboardEntryRepository.delete(
@@ -132,7 +136,7 @@ public class ProjectionService {
                 continue;
             }
 
-            projectionProcessedRepository.markProcessed(projectionKey, Instant.now());
+            projectionProcessedRepository.markProcessed(projectionKey, clock.instant());
             processed.add(task);
         }
 

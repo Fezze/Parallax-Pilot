@@ -13,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -20,7 +21,9 @@ import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -38,6 +41,8 @@ import com.parallaxpilot.leaderboard.api.dto.SeasonMetadataResponse;
 import com.parallaxpilot.leaderboard.api.dto.SubmittedRoundClassificationResponse;
 import com.parallaxpilot.leaderboard.api.dto.SubmitScoreRequest;
 import com.parallaxpilot.leaderboard.api.dto.SubmitScoreResponse;
+import com.parallaxpilot.leaderboard.config.LeaderboardProperties;
+import com.parallaxpilot.leaderboard.config.TimeConfig;
 import com.parallaxpilot.leaderboard.domain.ScoreSubmission;
 import com.parallaxpilot.leaderboard.service.LeaderboardService;
 import com.parallaxpilot.leaderboard.service.SnapshotService;
@@ -45,9 +50,12 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 
 @WebMvcTest(LeaderboardController.class)
+@Import(TimeConfig.class)
+@EnableConfigurationProperties(LeaderboardProperties.class)
 @TestPropertySource(properties = {
     "app.admin.token=test-admin-token",
-    "app.api.max-public-leaderboard-limit=100"
+    "app.api.max-public-leaderboard-limit=100",
+    "app.leaderboard.max-submission-age-days=7"
 })
 class LeaderboardControllerTest {
 
@@ -66,8 +74,13 @@ class LeaderboardControllerTest {
     @MockitoBean
     private MeterRegistry meterRegistry;
 
+    @MockitoBean
+    private Clock clock;
+
     @BeforeEach
     void stubMetrics() {
+        when(clock.instant()).thenReturn(Instant.parse("2026-04-19T12:00:00Z"));
+        when(clock.getZone()).thenReturn(java.time.ZoneOffset.UTC);
         when(meterRegistry.counter("leaderboard.admin.auth.failures", "reason", "missing_or_invalid_token"))
             .thenReturn(mock(Counter.class));
     }
@@ -80,7 +93,7 @@ class LeaderboardControllerTest {
             "Pilot",
             1200,
             15000,
-            Instant.parse("2026-04-09T12:00:00Z"),
+            Instant.parse("2026-04-19T11:55:00Z"),
             "2.4.1",
             "balance-2"
         );
@@ -335,6 +348,26 @@ class LeaderboardControllerTest {
             .andExpect(jsonPath("$.fieldErrors.submissionId").exists())
             .andExpect(jsonPath("$.fieldErrors.playedAt").exists());
     }
+
+            @Test
+            void rejectsTooOldPlayedAt() throws Exception {
+            mockMvc.perform(post("/v1/scores:submit")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "submissionId": "sub-old-01",
+                      "playerId": "player-1",
+                      "nickname": "Pilot",
+                      "score": 10,
+                      "survivedMs": 1000,
+                      "playedAt": "2020-01-01T00:00:00Z",
+                      "clientVersion": "2.4.1",
+                      "deviceModel": "watch"
+                    }
+                    """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fieldErrors.playedAt").exists());
+            }
 
     @Test
     void rejectsInvalidScope() throws Exception {

@@ -1,5 +1,6 @@
 package com.parallaxpilot.leaderboard.service;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -34,19 +35,22 @@ public class SnapshotService {
     private final DynamoDbJsonRepository repository;
     private final LeaderboardProperties properties;
     private final MeterRegistry meterRegistry;
+    private final Clock clock;
 
     public SnapshotService(
         S3Client s3Client,
         ObjectMapper objectMapper,
         DynamoDbJsonRepository repository,
         LeaderboardProperties properties,
-        MeterRegistry meterRegistry
+        MeterRegistry meterRegistry,
+        Clock clock
     ) {
         this.s3Client = s3Client;
         this.objectMapper = objectMapper;
         this.repository = repository;
         this.properties = properties;
         this.meterRegistry = meterRegistry;
+        this.clock = clock;
     }
 
     public AdminSnapshotResponse exportSnapshot() {
@@ -60,7 +64,7 @@ public class SnapshotService {
             var bestScores = repository.scanAll(LeaderboardTables.BEST_SCORES, BestScoreRecord.class);
             var leaderboardEntries = repository.scanAll(LeaderboardTables.LEADERBOARD_ENTRIES, LeaderboardEntry.class);
             var riskSignals = repository.scanAll(LeaderboardTables.RISK_SIGNALS, RiskSignalRecord.class);
-            var exportedAt = Instant.now();
+            var exportedAt = clock.instant();
             var snapshot = new LeaderboardSnapshot(
                 exportedAt,
                 submissions,

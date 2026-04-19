@@ -106,6 +106,9 @@ sequenceDiagram
     alt duplicate submission
         Idem-->>Service: already seen
         Service-->>Client: accepted duplicate response
+    else submission already in progress
+        Idem-->>Service: acquired but not completed yet
+        Service-->>Client: 409 conflict, safe to retry later
     else new submission
         Service->>Abuse: assess(request)
         Service->>Log: append submission
@@ -220,6 +223,8 @@ Retry sources include:
 
 `IdempotencyRepository` turns `submissionId` into a stable API contract. A duplicate request is returned as an accepted duplicate outcome. This is the correct behavior for unreliable networks and device hops.
 
+The newer distinction that matters in production is completed duplicate versus in-progress duplicate. A retry against work that is still in flight returns conflict instead of pretending the original submission already completed successfully.
+
 ## 14. Concurrency handling
 
 Concurrency matters when the same player submits multiple close-together rounds.
@@ -254,12 +259,14 @@ sequenceDiagram
 | Failure | Expected behavior | Implementation mechanism | Remaining limitation |
 | --- | --- | --- | --- |
 | duplicate client retry | accepted duplicate, no double update | `IdempotencyRepository` | assumes stable `submissionId` generation |
+| retry races with still-running first attempt | explicit conflict instead of false duplicate success | idempotency status state | client must retry after backoff |
 | API succeeds but projection is delayed | canonical state is correct, read model may lag | async SQS projection | client may temporarily see older leaderboard |
 | stale projection task arrives after newer best score | stale task ignored | compare task against current best score | extra worker churn still exists |
 | projection worker crashes mid-processing | task can be re-consumed and deduped | SQS + `projection_processed` | still eventual, not immediate |
 | suspicious or quarantined score | stored with risk context, blocked from canonical update when quarantined | anti-abuse assessment + `risk_signals` | not proof of cheating |
-| admin rebuild during active traffic | rebuild lock and replay path reduce chaos | rebuild lock + replay from log | still operationally sensitive |
+| admin rebuild during active traffic | rebuild lock and replay path reduce chaos | expiring rebuild lock + replay from log | still operationally sensitive |
 | SQS metrics refresh failure | app stays up, failure counted, last good metrics preserved | cached snapshot + failure counter | queue metrics can become stale until refresh recovers |
+| SQS batch delete partial failure | worker stays safe, redelivery remains visible | delete failure counter + idempotent worker | message churn can increase temporarily |
 | malformed request | request rejected cleanly | DTO and controller validation | validation cannot prove honest gameplay |
 | LocalStack/Testcontainers unavailable | integration validation cannot run | docs/runbook separate Docker-dependent checks | local full verify depends on Docker |
 
@@ -276,6 +283,7 @@ Current mitigation approach:
 
 - validation of request structure and ranges
 - future-time rejection for `playedAt`
+- max submission age window for `playedAt`
 - rate limiting
 - suspicious/quarantined classifications
 - risk reason persistence
@@ -306,6 +314,7 @@ Implemented:
   - `leaderboard.projection.queue.inflight`
   - `leaderboard.projection.queue.delayed`
   - `leaderboard.projection.queue.oldest_age_seconds`
+    - `leaderboard.projection.queue.delete.failures`
   - `leaderboard.projection.queue.metrics.refresh.failures`
 
 Still intentionally missing:

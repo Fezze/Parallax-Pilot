@@ -17,6 +17,7 @@ app:
     table-prefix: pp_
     exact-rank-threshold: 100
     idempotency-ttl-days: 14
+    max-submission-age-days: 7
     projection-queue-name: pp_score-submissions
     projection-queue-metrics-enabled: true
     projection-queue-metrics-refresh-ms: 30000

@@ -7,6 +7,7 @@ public record LeaderboardProperties(
     String tablePrefix,
     int exactRankThreshold,
     int idempotencyTtlDays,
+    int maxSubmissionAgeDays,
     String projectionQueueName,
     boolean projectionQueueMetricsEnabled,
     long projectionQueueMetricsRefreshMs,

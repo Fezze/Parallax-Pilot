@@ -1,5 +1,6 @@
 package com.parallaxpilot.leaderboard.service;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -20,20 +21,24 @@ public class AntiAbuseService {
     private final RateLimitRepository rateLimitRepository;
     private final RiskSignalRepository riskSignalRepository;
     private final LeaderboardProperties properties;
+    private final Clock clock;
 
     public AntiAbuseService(
         RateLimitRepository rateLimitRepository,
         RiskSignalRepository riskSignalRepository,
-        LeaderboardProperties properties
+        LeaderboardProperties properties,
+        Clock clock
     ) {
         this.rateLimitRepository = rateLimitRepository;
         this.riskSignalRepository = riskSignalRepository;
         this.properties = properties;
+        this.clock = clock;
     }
 
     public Assessment assess(SubmitScoreRequest request) {
         var reasons = new ArrayList<String>();
-        var currentWindowCount = rateLimitRepository.incrementPlayerWindow(request.playerId(), Instant.now());
+        var now = clock.instant();
+        var currentWindowCount = rateLimitRepository.incrementPlayerWindow(request.playerId(), now);
 
         if (currentWindowCount > properties.rateLimitPerMinute()) {
             reasons.add(RiskSignals.RATE_LIMIT);
@@ -46,7 +51,7 @@ public class AntiAbuseService {
         }
 
         var quarantined = !reasons.isEmpty();
-        persistSignals(request.submissionId(), request.playerId(), reasons, quarantined, Instant.now());
+        persistSignals(request.submissionId(), request.playerId(), reasons, quarantined, now);
         return new Assessment(quarantined, List.copyOf(reasons));
     }
 

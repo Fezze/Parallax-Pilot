@@ -14,7 +14,7 @@ import jakarta.validation.Payload;
 @Constraint(validatedBy = SubmissionPlayedAtValidator.class)
 public @interface SubmissionPlayedAt {
 
-    String message() default "playedAt must not be more than 5 minutes in the future";
+    String message() default "playedAt must be within the allowed submission window";
 
     Class<?>[] groups() default {};
 

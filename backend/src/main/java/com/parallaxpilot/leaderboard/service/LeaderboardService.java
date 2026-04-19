@@ -1,5 +1,6 @@
 package com.parallaxpilot.leaderboard.service;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -75,6 +76,7 @@ public class LeaderboardService {
     private final RiskSignalRepository riskSignalRepository;
     private final LeaderboardProperties properties;
     private final MeterRegistry meterRegistry;
+    private final Clock clock;
 
     public LeaderboardService(
         BestScoreRepository bestScoreRepository,
@@ -91,7 +93,8 @@ public class LeaderboardService {
         ProjectionProcessedRepository projectionProcessedRepository,
         RiskSignalRepository riskSignalRepository,
         LeaderboardProperties properties,
-        MeterRegistry meterRegistry
+        MeterRegistry meterRegistry,
+        Clock clock
     ) {
         this.bestScoreRepository = bestScoreRepository;
         this.idempotencyRepository = idempotencyRepository;
@@ -108,6 +111,7 @@ public class LeaderboardService {
         this.riskSignalRepository = riskSignalRepository;
         this.properties = properties;
         this.meterRegistry = meterRegistry;
+        this.clock = clock;
     }
 
     public SubmitScoreResponse submitScore(SubmitScoreRequest request) {
@@ -117,7 +121,9 @@ public class LeaderboardService {
             if (rebuildLockRepository.isActive()) {
                 throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, REBUILD_IN_PROGRESS);
             }
-            if (!idempotencyRepository.acquire(request.submissionId(), request.playedAt())) {
+            var now = clock.instant();
+            var acquireResult = idempotencyRepository.acquire(request.submissionId(), now);
+            if (acquireResult == IdempotencyRepository.AcquireResult.ALREADY_COMPLETED) {
                 outcome = "duplicate";
                 meterRegistry.counter("leaderboard.submissions", "outcome", outcome).increment();
                 return new SubmitScoreResponse(
@@ -130,6 +136,9 @@ public class LeaderboardService {
                     classify(request.playerId()),
                     unavailableSubmittedRoundClassifications(request, CLASSIFICATION_AVAILABILITY_DUPLICATE)
                 );
+            }
+            if (acquireResult == IdempotencyRepository.AcquireResult.ALREADY_ACQUIRED) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Submission is already being processed");
             }
 
             var assessment = antiAbuseService.assess(request);
@@ -149,7 +158,7 @@ public class LeaderboardService {
             submissionRepository.put(submission);
 
             if (assessment.quarantined()) {
-                idempotencyRepository.complete(request.submissionId());
+                idempotencyRepository.complete(request.submissionId(), clock.instant());
                 outcome = "quarantined";
                 meterRegistry.counter("leaderboard.submissions", "outcome", outcome).increment();
                 LOG.info(
@@ -197,7 +206,7 @@ public class LeaderboardService {
                 }
             }
 
-            idempotencyRepository.complete(request.submissionId());
+            idempotencyRepository.complete(request.submissionId(), clock.instant());
             outcome = "accepted";
             meterRegistry.counter("leaderboard.submissions", "outcome", outcome).increment();
             LOG.info(
@@ -382,7 +391,7 @@ public class LeaderboardService {
     public SeasonMetadataResponse getActiveSeason() {
         var active = seasonService.getActiveSeason()
             .orElseGet(() -> {
-                var now = Instant.now();
+                var now = clock.instant();
                 var seasonKey = scopeResolver.resolve(now).stream()
                     .filter(scope -> scope.scopeKind() == ScopeKind.SEASONAL)
                     .findFirst()
@@ -550,7 +559,7 @@ public class LeaderboardService {
     }
 
     private String activeScopeKey(ScopeKind scopeKind) {
-        return scopeResolver.resolve(Instant.now()).stream()
+        return scopeResolver.resolve(clock.instant()).stream()
             .filter(scope -> scope.scopeKind() == scopeKind)
             .findFirst()
             .map(ScopeKey::scopeKey)
