@@ -1,4 +1,6 @@
-# AI Validation Runbook
+# Validation Runbook
+
+Audience: AI agents only. Human-facing documentation belongs only in `README.md` files.
 
 Ten plik mówi, co uruchamiać po zmianach i jak interpretować wyniki.
 

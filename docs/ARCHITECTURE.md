@@ -1,4 +1,6 @@
-# AI Architecture Map
+# Architecture Map
+
+Audience: AI agents only. Human-facing documentation belongs only in `README.md` files.
 
 Ten dokument opisuje architekturę repo tak, żeby agent mógł wejść w pracę bez reverse engineeringu.
 

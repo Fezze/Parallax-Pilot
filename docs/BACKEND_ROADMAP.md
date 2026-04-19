@@ -1,6 +1,8 @@
 # Backend Roadmap
 
-AI takeover docs start in `docs/AI_TAKEOVER.md`.
+Audience: AI agents only. Human-facing documentation belongs only in `README.md` files.
+
+Agent takeover docs start in `docs/TAKEOVER.md`.
 Short handoff for the next agent lives in `docs/BACKEND_HANDOFF.md`.
 
 ## Current status

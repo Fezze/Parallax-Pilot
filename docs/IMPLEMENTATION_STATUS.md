@@ -1,4 +1,6 @@
-# AI Implementation Status
+# Implementation Status
+
+Audience: AI agents only. Human-facing documentation belongs only in `README.md` files.
 
 Ten plik opisuje, co jest zrobione, gdzie leży kod i jaki jest poziom pewności.
 

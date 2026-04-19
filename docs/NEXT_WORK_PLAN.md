@@ -1,4 +1,6 @@
-# AI Next Work Plan
+# Next Work Plan
+
+Audience: AI agents only. Human-facing documentation belongs only in `README.md` files.
 
 Ten plik opisuje, co jeszcze warto zrobić, z priorytetami, plikami i kryteriami akceptacji.
 

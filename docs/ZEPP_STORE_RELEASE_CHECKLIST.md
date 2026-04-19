@@ -1,5 +1,7 @@
 # Zepp Store Release Checklist
 
+Audience: AI agents only. Human-facing documentation belongs only in `README.md` files.
+
 Status na podstawie repo `Parallax Pilot` i oficjalnych docs Zepp.
 
 ## 1. Rejestracja i tożsamość aplikacji

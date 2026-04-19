@@ -1,6 +1,8 @@
 # Backlog
 
-AI takeover docs: `docs/AI_TAKEOVER.md`.
+Audience: AI agents only. Human-facing documentation belongs only in `README.md` files.
+
+Agent takeover docs: `docs/TAKEOVER.md`.
 Backend handoff summary: `docs/BACKEND_HANDOFF.md`.
 
 ## P1

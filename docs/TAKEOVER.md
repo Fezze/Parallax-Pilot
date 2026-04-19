@@ -1,18 +1,21 @@
-# AI Takeover Guide
+# Takeover Guide
+
+Audience: AI agents only. Human-facing documentation belongs only in `README.md` files.
 
 Ten plik jest punktem startowym dla kolejnego agenta AI. Cel: przejąć pracę bez przeszukiwania całego repozytorium.
 
 ## Najpierw Przeczytaj
-1. `docs/AI_IMPLEMENTATION_STATUS.md` - co faktycznie jest zrobione.
-2. `docs/AI_ARCHITECTURE.md` - jak działa system i gdzie jest kod.
-3. `docs/AI_NEXT_WORK_PLAN.md` - co zostało i w jakiej kolejności robić.
-4. `docs/AI_VALIDATION_RUNBOOK.md` - jak walidować zmiany.
-5. `docs/BACKEND_HANDOFF.md` - krótki historyczny handoff z ostatniej sesji.
+1. `docs/DOCUMENTATION_POLICY.md` - zasady dokumentacji: internal docs są dla AI, `README.md` dla ludzi.
+2. `docs/IMPLEMENTATION_STATUS.md` - co faktycznie jest zrobione.
+3. `docs/ARCHITECTURE.md` - jak działa system i gdzie jest kod.
+4. `docs/NEXT_WORK_PLAN.md` - co zostało i w jakiej kolejności robić.
+5. `docs/VALIDATION_RUNBOOK.md` - jak walidować zmiany.
+6. `docs/BACKEND_HANDOFF.md` - krótki historyczny handoff z ostatniej sesji.
 
 ## Aktualny Stan Repo
-- Ostatni commit dokumentacyjny: `487ea0f Document backend handoff`.
+- Ostatni commit dokumentacyjny przed reorganizacją: `9dff60d Add AI backend takeover docs`.
 - Ostatni commit funkcjonalny: `5e9e03a Add backend ops and score submit flow`.
-- Repo było czyste po commicie `487ea0f`.
+- Repo było czyste po commicie `9dff60d` przed tą reorganizacją dokumentacji.
 - Backend ma Maven Wrapper w `backend/`.
 - Backendowe skrypty npm używają `scripts/backend-maven.mjs`.
 - Pełne `backend:verify` wymaga Docker/Testcontainers; Docker został pominięty na życzenie użytkownika.

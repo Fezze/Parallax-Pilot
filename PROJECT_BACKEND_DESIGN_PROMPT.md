@@ -1,5 +1,7 @@
 # Portfolio Backend Design Prompt
 
+Audience: AI agents only. Human-facing documentation belongs only in `README.md` files.
+
 Use this document as the source prompt and design brief for generating the backend architecture, deeper design details, and later implementation plans for the project.
 
 The goal is not just to produce a working backend. The goal is to produce a backend design that looks thoughtful, production-oriented, scalable, and portfolio-worthy.
