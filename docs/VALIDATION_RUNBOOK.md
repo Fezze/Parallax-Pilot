@@ -61,6 +61,7 @@ Oczekiwane:
 - Coverage report przez Jacoco.
 - Public responses mają `X-Request-Id`.
 - `/v1/admin/**` wymaga `X-Admin-Token` powiązanego z `PARALLAX_ADMIN_TOKEN` po stronie runtime.
+- Actuator metrics zawierają także `leaderboard.projection.queue.visible`, `leaderboard.projection.queue.inflight`, `leaderboard.projection.queue.delayed`, `leaderboard.projection.queue.oldest_age_seconds`.
 
 Jeśli fail jest na Docker init:
 - To nie jest błąd backendu.
@@ -95,6 +96,21 @@ Jeśli Docker działa, dodaj przed commitem:
 ```powershell
 cmd /c npm run backend:verify
 ```
+
+## Lokalna Walidacja Queue Metrics
+Używaj przy zmianach w SQS projection observability.
+
+Przykładowy flow:
+
+```powershell
+cmd /c npm run backend:verify
+```
+
+Co sprawdzić logicznie:
+- Po starcie backendu albo testów LocalStack metryki `leaderboard.projection.queue.visible`, `leaderboard.projection.queue.inflight`, `leaderboard.projection.queue.delayed`, `leaderboard.projection.queue.oldest_age_seconds` są zarejestrowane.
+- Po opublikowaniu score przed `projections:drain` licznik `visible` powinien wzrosnąć.
+- Po pobraniu/drain queue wartości `visible` i `inflight` powinny wracać w dół.
+- `Approximate*` atrybuty SQS nie są natychmiastowe, więc nie zakładaj idealnie stabilnych wartości co do pojedynczej sekundy albo jednej próbki.
 
 ## Full App Workflow
 Używaj przy zmianach Zepp app albo submit flow.

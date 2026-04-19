@@ -18,6 +18,8 @@ app:
     exact-rank-threshold: 100
     idempotency-ttl-days: 14
     projection-queue-name: pp_score-submissions
+    projection-queue-metrics-enabled: true
+    projection-queue-metrics-refresh-ms: 30000
     around-me-window: 2
     rate-limit-per-minute: 20
     quarantine-score-threshold: 100000

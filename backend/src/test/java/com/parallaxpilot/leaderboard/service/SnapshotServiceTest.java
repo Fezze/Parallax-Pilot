@@ -36,6 +36,8 @@ class SnapshotServiceTest {
             100,
             14,
             "pp_score-submissions",
+            true,
+            30000,
             2,
             20,
             100000,

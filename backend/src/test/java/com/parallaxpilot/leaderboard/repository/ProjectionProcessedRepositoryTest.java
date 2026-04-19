@@ -28,7 +28,7 @@ import software.amazon.awssdk.services.dynamodb.model.ScanResponse;
 class ProjectionProcessedRepositoryTest {
 
     private static LeaderboardProperties properties() {
-        return new LeaderboardProperties("test-", 10, 7, "queue", 10, 60, 1000, 10000L, 1000, 5000L, 15, false, "snapshots");
+        return new LeaderboardProperties("test-", 10, 7, "queue", true, 30000L, 10, 60, 1000, 10000L, 1000, 5000L, 15, false, "snapshots");
     }
 
     @Test

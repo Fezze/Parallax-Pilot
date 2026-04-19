@@ -232,25 +232,30 @@ Braki:
 - Brak endpointów risk review/quarantine release.
 
 ## Zrobione: Observability Baseline
-Status: podstawy są, production observability nie.
+Status: sensowna baza jest, ale production layer nadal nie jest domknięty.
 
 Pliki:
 - `backend/src/main/java/com/parallaxpilot/leaderboard/service/LeaderboardService.java`
 - `backend/src/main/java/com/parallaxpilot/leaderboard/service/ProjectionService.java`
 - `backend/src/main/java/com/parallaxpilot/leaderboard/service/SnapshotService.java`
+- `backend/src/main/java/com/parallaxpilot/leaderboard/service/ProjectionQueueMetricsService.java`
+- `backend/src/main/java/com/parallaxpilot/leaderboard/web/RequestCorrelationFilter.java`
 - `backend/src/main/resources/application.yml`
 
 Zachowanie:
 - Actuator exposes `health`, `info`, `metrics`.
 - Są podstawowe logi submit/projection.
-- Są podstawowe Micrometer counters submit/projection/snapshot.
+- Są Micrometer counters dla submit/projection/snapshot i admin auth failures.
+- Jest `X-Request-Id` response header oraz MDC key `requestId`.
+- Są latency timery: `leaderboard.submit.latency`, `leaderboard.read.latency`, `leaderboard.projection.drain.latency`, `leaderboard.snapshot.export.latency`.
+- Są SQS queue metrics z cache odświeżanym okresowo: `leaderboard.projection.queue.visible`, `leaderboard.projection.queue.inflight`, `leaderboard.projection.queue.delayed`, `leaderboard.projection.queue.oldest_age_seconds`.
+- Fail refreshu queue metrics nie wywraca aplikacji i zwiększa `leaderboard.projection.queue.metrics.refresh.failures`.
 
 Braki:
-- Timery latency.
-- Queue depth/lag metrics.
-- Correlation ID.
 - CloudWatch dashboard/alarms.
 - Readiness checks dla DynamoDB/SQS/S3.
+- Distributed tracing / OpenTelemetry.
+- Production alert thresholds i gotowe operacyjne dashboardy.
 
 ## Zrobione: Terraform Deployment Shape
 Status: baseline resources plus runtime shape, env templates, managed secret scaffolding, remote state bootstrap i podstawowe CI rollout; nadal niepełny deployment produkcyjny.

@@ -8,6 +8,8 @@ public record LeaderboardProperties(
     int exactRankThreshold,
     int idempotencyTtlDays,
     String projectionQueueName,
+    boolean projectionQueueMetricsEnabled,
+    long projectionQueueMetricsRefreshMs,
     int aroundMeWindow,
     int rateLimitPerMinute,
     int quarantineScoreThreshold,

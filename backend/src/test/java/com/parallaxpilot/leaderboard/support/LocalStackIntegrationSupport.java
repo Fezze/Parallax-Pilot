@@ -46,6 +46,7 @@ public abstract class LocalStackIntegrationSupport {
         registry.add("aws.endpoint", () -> LOCALSTACK.getEndpointOverride(LocalStackContainer.Service.DYNAMODB).toString());
         registry.add("app.leaderboard.table-prefix", () -> "pp_");
         registry.add("app.leaderboard.consumer-fixed-delay-ms", () -> "600000");
+        registry.add("app.leaderboard.projection-queue-metrics-refresh-ms", () -> "600000");
     }
 
     protected static void bootstrapResources() {

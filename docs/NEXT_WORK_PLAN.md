@@ -154,12 +154,10 @@ Pliki startowe:
 - `infra/terraform/main.tf`
 
 Proponowane kroki:
-1. Dodać timers dla submit/read/projection.
-2. Dodać metric dla SQS queue depth i age/lag.
-3. Dodać correlation ID filter.
-4. Dodać readiness health indicators dla DynamoDB/SQS/S3.
-5. Dodać CloudWatch dashboard.
-6. Dodać alarms: queue age, projection failures, high quarantine ratio, API 5xx.
+1. Dodać readiness health indicators dla DynamoDB/SQS/S3.
+2. Dodać CloudWatch dashboard.
+3. Dodać alarms: queue age, projection failures, high quarantine ratio, API 5xx.
+4. Ustalić produkcyjne progi alertów i ownership.
 
 Akceptacja:
 - Actuator pokazuje nowe metryki.
@@ -167,14 +165,15 @@ Akceptacja:
 - Logi mają pola wystarczające do debugowania `submissionId` i `playerId`.
 
 Najbliższy sensowny krok po obecnym utwardzeniu backendu:
-1. Dodać correlation/request ID na każdej odpowiedzi i w logach.
-2. Dodać per-endpoint latency timers dla submit/read/admin.
-3. Dodać metryki odrzuconych admin tokenów i projection lag/backlog.
+1. Dodać readiness health indicators dla DynamoDB/SQS/S3.
+2. Zbudować CloudWatch dashboard i alarmy na istniejących metrykach.
+3. Ustalić operacyjne progi dla queue age, projection failures i API 5xx.
 
 Status po follow-up hardening:
 1. `X-Request-Id` i bazowe latency metrics są już dodane.
 2. Jest licznik `leaderboard.admin.auth.failures`.
-3. Queue depth / oldest message age nadal są odłożone, bo wymagają osobnego, czystego metrics bindera dla SQS.
+3. Queue depth / inflight / delayed / oldest age są już wystawione przez osobny binder SQS z cache refresh.
+4. Dashboardy, alarmy i readiness checks nadal są odłożone.
 
 ## P2: Ranking Stability
 Problem:
