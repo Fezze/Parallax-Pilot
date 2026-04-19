@@ -64,6 +64,8 @@ Akceptacja:
 - Nie wyłączono ani nie pominięto testów integracyjnych, żeby ukryć problem.
 
 ## P1: Runtime Verification Of Watch Submit
+Status: kod i harness coverage są mocne, nadal brak potwierdzenia runtime.
+
 Problem:
 - Kod BLE/messaging i offline queue buduje się, ale nie był potwierdzony runtime na zegarku/symulatorze.
 
@@ -89,6 +91,10 @@ Akceptacja:
 - Submit działa po stronie runtime, nie tylko w buildzie.
 - Offline queue nie gubi wyniku.
 - Refresh leaderboardu po submit pokazuje nowy best/rank.
+
+Stan pomocniczy:
+- `tests/phone-services.test.js`, `tests/leaderboard-device-bridge.test.js` i `tests/app-bootstrap.test.js` pokrywają już Node-harness ścieżki settings/side-service/bridge/bootstrap.
+- Następny sensowny krok to runtime/simulator proof, nie kolejny duży refactor harnessu.
 
 ## P2: Production Deployment Shape
 Status: częściowo zrobione.
@@ -246,6 +252,7 @@ Wdrożone:
 3. Dodana migration z demo defaults.
 4. Dodany UI w Settings App: alias, player ID, hint i `New alias`.
 5. Dodane testy helperów i screenshot coverage dla phone leaderboard.
+6. Dodane Node harness testy dla `AppSettingsPage`, `AppSideService`, `leaderboard-device-bridge.js` i `app.js`.
 
 Akceptacja:
 - Nowy user nie submituje jako `demo-player`.

@@ -115,12 +115,18 @@ cmd /c npm run test:playwright:screens
 
 ## Ostatnie Znane Wyniki
 Z ostatniej sesji:
-- `cmd /c npm test`: pass, 54 tests.
+- `cmd /c npm test`: pass, 66 tests.
+- `npx c8 --all --src zepp-app --exclude tests/** --reporter=text node --import ./tests/register-zepp-globals.mjs --test`: pass, `86.4%` statements / `82.09%` branches / `85.04%` functions.
+- Najważniejsze JS coverage po harness push:
+	- `zepp-app/setting/index.js`: `96.06%` statements
+	- `zepp-app/app-side/index.js`: `88.84%` statements
+	- `zepp-app/shared/leaderboard-device-bridge.js`: `95.4%` statements
+	- `zepp-app/app.js`: `100%` statements
 - `cmd /c npm run test:playwright:screens`: pass, 140 tests.
 - Screenshoty phone leaderboard dla `en-US` i `pl-PL` po zmianie onboardingu zostały obejrzane.
 - `cmd /c npm run build`: pass, bez bumpa wersji watch app.
 - `cmd /c npm run build:backend`: pass.
-- `cmd /c npm run backend:verify`: pass, 25 backend tests, Docker/Testcontainers aktywne.
+- `cmd /c npm run backend:verify`: pass, 34 backend tests, Docker/Testcontainers aktywne.
 
 ## Docker Status Z Ostatniej Sesji
 - `docker version` przechodzi w aktywnym środowisku.

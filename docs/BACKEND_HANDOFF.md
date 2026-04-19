@@ -21,12 +21,13 @@ Start with `docs/TAKEOVER.md` for the full agent-oriented documentation set.
 - Anonymous identity onboarding replaced `demo-player` / `Pilot` defaults in the active code.
 
 ## Validation Already Run
-- `cmd /c npm test` passed: 54 tests.
+- `cmd /c npm test` passed: 66 tests.
+- `npx c8 --all --src zepp-app --exclude tests/** --reporter=text node --import ./tests/register-zepp-globals.mjs --test` passed: `86.4%` statements / `82.09%` branches / `85.04%` functions for `zepp-app`.
 - `cmd /c npm run test:playwright:screens` passed: 140 tests.
 - Updated phone leaderboard screenshots were reviewed manually.
 - `cmd /c npm run build` passed without bumping the Zepp app version.
 - `cmd /c npm run build:backend` passed.
-- `cmd /c npm run backend:verify` passed: 25 backend tests with Docker/Testcontainers.
+- `cmd /c npm run backend:verify` passed: 34 backend tests with Docker/Testcontainers.
 
 ## Docker / Full Verify Status
 - Docker/Testcontainers are usable in the current environment.
@@ -44,6 +45,12 @@ Start with `docs/TAKEOVER.md` for the full agent-oriented documentation set.
 - CI/CD: workflow verifies only; no artifact publish, image build/push, environment promotion, Terraform plan/apply, approval gates, or secrets wiring.
 - Terraform: remote state, locking, environment modules, secrets wiring, and deploy automation are still missing.
 - Offline queue hardening: watch and side queues exist, but need physical/simulator verification of BLE messaging, retry backoff, queue TTL, and user-visible submit status.
+
+## JS Coverage Notes
+- `zepp-app/setting/index.js` is now covered through Node harness tests.
+- `zepp-app/app-side/index.js` is now covered through Node harness tests with mocked `@zos/fetch`, `@zos/settings`, and peer socket messaging.
+- `zepp-app/shared/leaderboard-device-bridge.js` is now covered with a fake BLE adapter.
+- `zepp-app/app.js` root bootstrap is now covered with a mocked `@zos/ble` module.
 
 ## Recommended Next Plan
 1. Deployment shape.

@@ -14,6 +14,7 @@ Ten plik opisuje, co jest zrobione, gdzie leży kod i jaki jest poziom pewności
 - Build walidacyjny Zepp jest oddzielony od release bumpa wersji.
 - Anonymous identity onboarding zastąpił `demo-player` / `Pilot`.
 - Pełne `cmd /c npm run backend:verify` przechodzi lokalnie.
+- JS harness obejmuje już root app bootstrap, phone settings, side service i watch BLE bridge.
 
 ## Zrobione: Backend-only Versioning
 Status: zaimplementowane.
@@ -55,7 +56,16 @@ Zachowanie:
 
 Testy:
 - `tests/shared-helpers.test.js` sprawdza helpery kolejki i serializację wiadomości.
-- `cmd /c npm test` przeszedł po zmianach.
+- `tests/phone-services.test.js` pokrywa `AppSettingsPage` i `AppSideService` w Node harnessie.
+- `tests/leaderboard-device-bridge.test.js` pokrywa watch BLE bridge z fake BLE adapterem.
+- `tests/app-bootstrap.test.js` pokrywa root `App` bootstrap i cleanup.
+- `cmd /c npm test` przechodzi.
+
+Pokrycie:
+- `zepp-app/setting/index.js`: `96.06%` statements.
+- `zepp-app/app-side/index.js`: `88.84%` statements.
+- `zepp-app/shared/leaderboard-device-bridge.js`: `95.4%` statements.
+- `zepp-app/app.js`: `100%` statements.
 
 Ryzyko:
 - Brak fizycznej walidacji BLE/messaging.
@@ -280,9 +290,9 @@ Ryzyko:
 - Brak approval gates.
 
 ## Ostatnia Znana Walidacja
-- `cmd /c npm test`: pass, 52 tests.
-- `cmd /c npm run backend:test`: pass, 12 tests.
+- `cmd /c npm test`: pass, 66 tests.
+- `npx c8 --all --src zepp-app --exclude tests/** --reporter=text node --import ./tests/register-zepp-globals.mjs --test`: pass, `86.4%` statements / `82.09%` branches / `85.04%` functions dla `zepp-app`.
 - `cmd /c npm run build`: pass, bez bumpa wersji watch app.
 - `cmd /c npm run build:backend`: pass.
-- `node scripts/zeus-proxy.mjs build --bump-version --dry-run`: pass, ścieżka release deklaruje bump `2.4.5 -> 2.4.6` bez modyfikacji plików.
-- `cmd /c npm run backend:verify`: fail only at Docker/Testcontainers initialization in current Codex environment.
+- `cmd /c npm run backend:test`: pass, 12 tests.
+- `cmd /c npm run backend:verify`: pass, Docker/Testcontainers aktywne.

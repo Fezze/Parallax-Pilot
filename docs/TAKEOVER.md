@@ -19,6 +19,7 @@ Ten plik jest punktem startowym dla kolejnego agenta AI. Cel: przejąć pracę b
 - Backend ma Maven Wrapper w `backend/`.
 - Backendowe skrypty npm używają `scripts/backend-maven.mjs`.
 - Pełne `backend:verify` przechodzi lokalnie z Docker/Testcontainers.
+- JS harness coverage została mocno podniesiona; `setting/index.js`, `app-side/index.js`, `shared/leaderboard-device-bridge.js` i `app.js` nie są już na `0%`.
 
 ## Najważniejsze Zasady Projektu
 - Po zmianie kodu uruchom build jako walidację zamykającą.
@@ -49,6 +50,7 @@ Jeśli robisz release watch app albo przygotowujesz store submission, użyj:
 - `cmd /c npm run build:app`
 
 ## Główne Obszary Kodu
+- Root watch bootstrap: `zepp-app/app.js`
 - Backend API: `backend/src/main/java/com/parallaxpilot/leaderboard/api/LeaderboardController.java`
 - Submit/rebuild/ranking service: `backend/src/main/java/com/parallaxpilot/leaderboard/service/LeaderboardService.java`
 - Projection worker entrypoint: `backend/src/main/java/com/parallaxpilot/leaderboard/ProjectionWorkerApplication.java`
@@ -59,6 +61,7 @@ Jeśli robisz release watch app albo przygotowujesz store submission, użyj:
 - Zepp submit contract/queue helpers: `zepp-app/shared/leaderboard-submit.js`
 - Zepp Side Service: `zepp-app/app-side/index.js`
 - Zepp Settings App onboarding UI: `zepp-app/setting/index.js`
+- Node harness for Zepp app/service tests: `tests/register-zepp-globals.mjs`, `tests/zos-loader.mjs`, `tests/mocks/zos/*`
 - Terraform baseline: `infra/terraform/`
 - Backend CI: `.github/workflows/backend.yml`
 
