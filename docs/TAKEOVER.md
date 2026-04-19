@@ -21,6 +21,7 @@ Ten plik jest punktem startowym dla kolejnego agenta AI. Cel: przejąć pracę b
 - Pełne `backend:verify` przechodzi lokalnie z Docker/Testcontainers.
 - JS harness coverage została mocno podniesiona; `setting/index.js`, `app-side/index.js`, `shared/leaderboard-device-bridge.js` i `app.js` nie są już na `0%`.
 - P2 deployment shape ma nowy postęp: workflow publikuje obrazy do ECR na `main`, Terraform przyjmuje runtime env/secrets/autoscaling, a `infra/terraform/environments/*.tfvars.example` daje wzorzec env split.
+- P2 deployment shape ma kolejny postęp: main Terraform używa backendu `s3`, istnieje bootstrap stack dla remote state + DynamoDB locking, Terraform potrafi tworzyć managed SSM/Secrets Manager resources, a workflow robi rollout ECS task definition revisions po pushu SHA-tagged obrazów.
 
 ## Najważniejsze Zasady Projektu
 - Po zmianie kodu uruchom build jako walidację zamykającą.
@@ -68,5 +69,5 @@ Jeśli robisz release watch app albo przygotowujesz store submission, użyj:
 
 ## Czego Nie Zakładać
 - Nie zakładaj, że BLE submit został potwierdzony na fizycznym zegarku. Build przeszedł, ale wymaga testu runtime.
-- Nie zakładaj, że Terraform wdraża pełny production-ready stack. Jest już runtime shape ECS/ALB/IAM, env/secrets wiring, autoscaling scaffold i image publish path, ale nadal bez remote state, apply gates i pełnego deploy rollout.
+- Nie zakładaj, że Terraform wdraża pełny production-ready stack. Jest już runtime shape ECS/ALB/IAM, env/secrets wiring, managed secret scaffolding, remote state bootstrap, image publish path i ECS rollout path, ale nadal bez zatwierdzanego `apply`, environment protection i pełnej operacyjnej walidacji plan/apply.
 - Nie zakładaj, że admin/debug ma UI. Jest tylko backend API.

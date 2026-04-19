@@ -16,8 +16,10 @@ Start with `docs/TAKEOVER.md` for the full agent-oriented documentation set.
 - Baseline Terraform exists in `infra/terraform/` for DynamoDB, SQS, S3 snapshots, CloudWatch log groups, and ECR repos.
 - Terraform runtime shape now also includes ECS/ALB/IAM definitions for API and projection worker plus `backend/Dockerfile`.
 - Terraform runtime shape now also includes env/secrets wiring and ECS autoscaling scaffolding.
+- Terraform main stack now also expects `s3` remote state with DynamoDB locking, and the bootstrap resources for that live under `infra/terraform/bootstrap-state/`.
 - Baseline CI exists in `.github/workflows/backend.yml`.
 - CI can now optionally publish backend images to ECR on `main` and run a manual Terraform plan via `workflow_dispatch`.
+- CI can now also roll ECS services to newly registered task definition revisions after publishing SHA-tagged images.
 - `npm run build` is now a neutral validation build; `npm run build:app` is the explicit watch release build with version bump.
 - Current watch version remains `2.4.5`, code `61` until the next explicit `build:app` run.
 - Anonymous identity onboarding replaced `demo-player` / `Pilot` defaults in the active code.
@@ -44,9 +46,9 @@ Start with `docs/TAKEOVER.md` for the full agent-oriented documentation set.
 - Observability: logs and Micrometer counters exist, but no dashboard, alert rules, trace/correlation model, projection lag metric, or queue-depth alarm.
 - S3 snapshots: export exists; restore, diff, and drift comparison tooling are not implemented.
 - Admin/debug view: backend debug API exists; there is no UI screen. If a UI screen is added, add Playwright screenshot coverage per repo rules.
-- Worker deployment: runtime shape exists in Terraform, but managed secrets resources, remote state, and rollout automation are still missing.
-- CI/CD: image publish and manual plan now exist, but there is still no environment promotion, Terraform apply, approval gates, or ECS rollout automation for SHA-tagged images.
-- Terraform: remote state, locking, managed secrets resources, environment modules, and deploy automation are still missing.
+- Worker deployment: runtime shape exists in Terraform, but environment modules, alarms, and production apply discipline are still missing.
+- CI/CD: image publish, manual plan, and ECS rollout now exist, but there is still no environment promotion, Terraform apply, or approval gates.
+- Terraform: bootstrap for remote state and managed secrets resources now exist, but validated real plan/apply and environment modules are still missing.
 - Offline queue hardening: watch and side queues exist, but need physical/simulator verification of BLE messaging, retry backoff, queue TTL, and user-visible submit status.
 
 ## JS Coverage Notes
@@ -57,8 +59,8 @@ Start with `docs/TAKEOVER.md` for the full agent-oriented documentation set.
 
 ## Recommended Next Plan
 1. Deployment shape.
-   - Finish Terraform with managed Parameter Store/Secrets Manager config, remote state, env modules, and validated plan/apply path.
-   - Add ECS rollout automation and environment promotion on top of the new image publish path.
+   - Finish Terraform with validated real plan/apply path and environment modules.
+   - Add environment promotion, approval gates, and stronger ECS rollout validation on top of the new image publish path.
 
 2. Observability.
    - Add timers for submit/read/projection paths.

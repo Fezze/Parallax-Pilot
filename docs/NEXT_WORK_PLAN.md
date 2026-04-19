@@ -97,7 +97,7 @@ Stan pomocniczy:
 - Następny sensowny krok to runtime/simulator proof, nie kolejny duży refactor harnessu.
 
 ## P2: Production Deployment Shape
-Status: częściowo zrobione, z nowym postępem w CI image publish i runtime config wiring.
+Status: częściowo zrobione, z nowym postępem w CI image publish, rollout i state/secrets wiring.
 
 Problem:
 - Terraform tworzy baseline resources, ale nie wdraża API/worker runtime.
@@ -123,13 +123,16 @@ Wdrożone:
 8. Dodane `infra/terraform/environments/*.tfvars.example` jako wzorce env split.
 9. Workflow backend potrafi publikować obrazy do ECR na `main`.
 10. Workflow backend potrafi wykonać manualny `terraform plan` przez `workflow_dispatch`.
+11. Dodany bootstrap stack dla remote state bucket + DynamoDB locking.
+12. Dodane managed SSM Parameter Store i Secrets Manager resources dla API i worker.
+13. Workflow backend potrafi zrobić rollout ECS task definition revisions po pushu nowych SHA-tagged obrazów.
 
 Pozostało:
-1. Dodać managed Parameter Store/Secrets Manager resources zamiast tylko secret refs.
-2. Dodać remote state i locking przed realnym `apply`.
-3. Dodać Terraform apply z approval gates i environment protection.
-4. Zweryfikować realny `terraform plan` po zainstalowaniu `terraform` lokalnie lub w docelowym CI.
-5. Dodać rollout/deploy automation dla ECS task definition revisions opartych o SHA image tags.
+1. Dodać zatwierdzany `terraform apply` z environment protection i rollback discipline.
+2. Zweryfikować realny `terraform plan` / `apply` po zainstalowaniu `terraform` lokalnie lub w docelowym CI.
+3. Dodać environment modules zamiast jedynie przykładowych `tfvars`.
+4. Dodać dashboard/alarms i readiness checks do produkcyjnego wdrożenia.
+5. Dodać lepszą walidację i obserwowalność samego deploy rolloutu ECS.
 
 Akceptacja:
 - CI publikuje obrazy.

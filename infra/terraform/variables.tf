@@ -147,3 +147,27 @@ variable "projection_worker_cpu_target" {
   type    = number
   default = 60
 }
+
+variable "api_managed_ssm_parameters" {
+  type      = map(string)
+  default   = {}
+  sensitive = true
+}
+
+variable "projection_worker_managed_ssm_parameters" {
+  type      = map(string)
+  default   = {}
+  sensitive = true
+}
+
+variable "api_managed_secrets_manager" {
+  type      = map(string)
+  default   = {}
+  sensitive = true
+}
+
+variable "projection_worker_managed_secrets_manager" {
+  type      = map(string)
+  default   = {}
+  sensitive = true
+}

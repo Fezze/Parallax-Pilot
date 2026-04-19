@@ -11,6 +11,9 @@ Provisioning baseline for the leaderboard backend:
 - optional public ALB for the API service
 - optional ECS autoscaling policies
 - optional runtime environment variables and secret references for ECS tasks
+- optional managed SSM Parameter Store and Secrets Manager resources for ECS task secrets
+
+Remote state for this stack is expected to use the `s3` backend with DynamoDB locking. Bootstrap that backend first with `infra/terraform/bootstrap-state/`.
 
 ```sh
 terraform init
@@ -42,3 +45,13 @@ terraform plan \
 ```
 
 Example per-environment files live under `infra/terraform/environments/` and are intended as templates, not committed secret values.
+
+Managed secret resources can also be created directly by Terraform:
+
+```sh
+terraform plan \
+	-var environment=dev \
+	-var api_image=123456789012.dkr.ecr.eu-west-2.amazonaws.com/parallax-pilot-dev-api:sha-abcdef0 \
+	-var 'api_managed_ssm_parameters={APP_LEADERBOARD_DYNAMODB_ENDPOINT="https://dynamodb.local"}' \
+	-var 'projection_worker_managed_secrets_manager={APP_LEADERBOARD_SQS_ENDPOINT="https://sqs.local"}'
+```

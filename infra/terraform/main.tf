@@ -24,6 +24,36 @@ locals {
     APP_LEADERBOARD_PROJECTION_QUEUE_NAME = var.projection_queue_name
     APP_LEADERBOARD_SNAPSHOT_BUCKET_NAME = var.snapshot_bucket_name
   }, var.projection_worker_environment_variables)
+  api_ssm_parameter_paths = {
+    for name, _value in var.api_managed_ssm_parameters :
+    name => "/parallax-pilot/${var.environment}/api/${replace(lower(name), "_", "-")}"
+  }
+  projection_worker_ssm_parameter_paths = {
+    for name, _value in var.projection_worker_managed_ssm_parameters :
+    name => "/parallax-pilot/${var.environment}/projection-worker/${replace(lower(name), "_", "-")}"
+  }
+  api_secrets_manager_names = {
+    for name, _value in var.api_managed_secrets_manager :
+    name => "parallax-pilot/${var.environment}/api/${replace(lower(name), "_", "-")}"
+  }
+  projection_worker_secrets_manager_names = {
+    for name, _value in var.projection_worker_managed_secrets_manager :
+    name => "parallax-pilot/${var.environment}/projection-worker/${replace(lower(name), "_", "-")}"
+  }
+  api_secret_value_from = merge(
+    var.api_secret_environment,
+    { for name, parameter in aws_ssm_parameter.api_managed : name => parameter.arn },
+    { for name, secret in aws_secretsmanager_secret.api_managed : name => secret.arn }
+  )
+  projection_worker_secret_value_from = merge(
+    var.projection_worker_secret_environment,
+    { for name, parameter in aws_ssm_parameter.projection_worker_managed : name => parameter.arn },
+    { for name, secret in aws_secretsmanager_secret.projection_worker_managed : name => secret.arn }
+  )
+  execution_secret_arns = distinct(concat(
+    values(local.api_secret_value_from),
+    values(local.projection_worker_secret_value_from)
+  ))
   tables = toset([
     "score_submissions",
     "best_scores",
@@ -98,6 +128,52 @@ resource "aws_s3_bucket_versioning" "snapshots" {
   }
 }
 
+resource "aws_ssm_parameter" "api_managed" {
+  for_each = var.api_managed_ssm_parameters
+
+  name  = local.api_ssm_parameter_paths[each.key]
+  type  = "SecureString"
+  value = each.value
+  tags  = local.common_tags
+}
+
+resource "aws_ssm_parameter" "projection_worker_managed" {
+  for_each = var.projection_worker_managed_ssm_parameters
+
+  name  = local.projection_worker_ssm_parameter_paths[each.key]
+  type  = "SecureString"
+  value = each.value
+  tags  = local.common_tags
+}
+
+resource "aws_secretsmanager_secret" "api_managed" {
+  for_each = var.api_managed_secrets_manager
+
+  name = local.api_secrets_manager_names[each.key]
+  tags = local.common_tags
+}
+
+resource "aws_secretsmanager_secret_version" "api_managed" {
+  for_each = var.api_managed_secrets_manager
+
+  secret_id     = aws_secretsmanager_secret.api_managed[each.key].id
+  secret_string = each.value
+}
+
+resource "aws_secretsmanager_secret" "projection_worker_managed" {
+  for_each = var.projection_worker_managed_secrets_manager
+
+  name = local.projection_worker_secrets_manager_names[each.key]
+  tags = local.common_tags
+}
+
+resource "aws_secretsmanager_secret_version" "projection_worker_managed" {
+  for_each = var.projection_worker_managed_secrets_manager
+
+  secret_id     = aws_secretsmanager_secret.projection_worker_managed[each.key].id
+  secret_string = each.value
+}
+
 data "aws_iam_policy_document" "ecs_task_assume_role" {
   count = local.runtime_enabled ? 1 : 0
 
@@ -108,6 +184,25 @@ data "aws_iam_policy_document" "ecs_task_assume_role" {
       type        = "Service"
       identifiers = ["ecs-tasks.amazonaws.com"]
     }
+  }
+}
+
+data "aws_iam_policy_document" "ecs_execution_secrets_access" {
+  count = local.runtime_enabled && length(local.execution_secret_arns) > 0 ? 1 : 0
+
+  statement {
+    actions = [
+      "ssm:GetParameter",
+      "ssm:GetParameters",
+      "ssm:GetParametersByPath",
+      "secretsmanager:GetSecretValue",
+    ]
+    resources = local.execution_secret_arns
+  }
+
+  statement {
+    actions   = ["kms:Decrypt"]
+    resources = ["*"]
   }
 }
 
@@ -270,6 +365,13 @@ resource "aws_iam_role_policy_attachment" "ecs_execution" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+resource "aws_iam_role_policy" "ecs_execution_secrets_access" {
+  count  = local.runtime_enabled && length(local.execution_secret_arns) > 0 ? 1 : 0
+  name   = "${local.name_prefix}-ecs-execution-secrets"
+  role   = aws_iam_role.ecs_execution[0].id
+  policy = data.aws_iam_policy_document.ecs_execution_secrets_access[0].json
+}
+
 resource "aws_iam_role" "api_task" {
   count              = local.runtime_enabled ? 1 : 0
   name               = "${local.name_prefix}-api-task"
@@ -328,9 +430,9 @@ resource "aws_ecs_task_definition" "api" {
         }
       ]
       secrets = [
-        for name in sort(keys(var.api_secret_environment)) : {
+        for name in sort(keys(local.api_secret_value_from)) : {
           name      = name
-          valueFrom = var.api_secret_environment[name]
+          valueFrom = local.api_secret_value_from[name]
         }
       ]
       logConfiguration = {
@@ -370,9 +472,9 @@ resource "aws_ecs_task_definition" "projection_worker" {
         }
       ]
       secrets = [
-        for name in sort(keys(var.projection_worker_secret_environment)) : {
+        for name in sort(keys(local.projection_worker_secret_value_from)) : {
           name      = name
-          valueFrom = var.projection_worker_secret_environment[name]
+          valueFrom = local.projection_worker_secret_value_from[name]
         }
       ]
       logConfiguration = {

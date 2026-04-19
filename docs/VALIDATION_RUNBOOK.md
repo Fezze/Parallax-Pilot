@@ -131,8 +131,10 @@ Z ostatniej sesji:
 
 ## P2 Deployment Shape Notes
 - `backend/Dockerfile` oczekuje teraz stabilnej ścieżki `target/app.jar`, co upraszcza CI image build.
-- `.github/workflows/backend.yml` ma nowy job publish do ECR na `main` oraz manualny `terraform plan` przez `workflow_dispatch`.
-- Terraform ma nowe zmienne dla env maps, secret refs i autoscaling, ale lokalne `terraform` CLI nadal nie jest dostępne w tym środowisku.
+- `.github/workflows/backend.yml` ma nowy job publish do ECR na `main`, rollout ECS task definition revisions oraz manualny `terraform plan` przez `workflow_dispatch`.
+- Terraform ma nowe zmienne dla env maps, secret refs, managed SSM/Secrets Manager i autoscaling.
+- Main stack używa backendu `s3`, a bootstrap dla state bucket/lock table jest wydzielony do `infra/terraform/bootstrap-state/`.
+- Lokalne `terraform` CLI nadal nie jest dostępne w tym środowisku.
 
 ## Docker Status Z Ostatniej Sesji
 - `docker version` przechodzi w aktywnym środowisku.
