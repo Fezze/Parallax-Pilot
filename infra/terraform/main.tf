@@ -11,6 +11,19 @@ locals {
     var.api_image != ""
   )
   effective_projection_worker_image = var.projection_worker_image != "" ? var.projection_worker_image : var.api_image
+  api_environment = merge({
+    SERVER_PORT                          = tostring(var.api_container_port)
+    AWS_REGION                           = var.aws_region
+    APP_LEADERBOARD_TABLE_PREFIX         = var.table_prefix
+    APP_LEADERBOARD_PROJECTION_QUEUE_NAME = var.projection_queue_name
+    APP_LEADERBOARD_SNAPSHOT_BUCKET_NAME = var.snapshot_bucket_name
+  }, var.api_environment_variables)
+  projection_worker_environment = merge({
+    AWS_REGION                           = var.aws_region
+    APP_LEADERBOARD_TABLE_PREFIX         = var.table_prefix
+    APP_LEADERBOARD_PROJECTION_QUEUE_NAME = var.projection_queue_name
+    APP_LEADERBOARD_SNAPSHOT_BUCKET_NAME = var.snapshot_bucket_name
+  }, var.projection_worker_environment_variables)
   tables = toset([
     "score_submissions",
     "best_scores",
@@ -309,11 +322,16 @@ resource "aws_ecs_task_definition" "api" {
         }
       ]
       environment = [
-        { name = "SERVER_PORT", value = tostring(var.api_container_port) },
-        { name = "AWS_REGION", value = var.aws_region },
-        { name = "APP_LEADERBOARD_TABLE_PREFIX", value = var.table_prefix },
-        { name = "APP_LEADERBOARD_PROJECTION_QUEUE_NAME", value = var.projection_queue_name },
-        { name = "APP_LEADERBOARD_SNAPSHOT_BUCKET_NAME", value = var.snapshot_bucket_name },
+        for name in sort(keys(local.api_environment)) : {
+          name  = name
+          value = local.api_environment[name]
+        }
+      ]
+      secrets = [
+        for name in sort(keys(var.api_secret_environment)) : {
+          name      = name
+          valueFrom = var.api_secret_environment[name]
+        }
       ]
       logConfiguration = {
         logDriver = "awslogs"
@@ -346,10 +364,16 @@ resource "aws_ecs_task_definition" "projection_worker" {
       essential = true
       command   = ["--spring.profiles.active=worker"]
       environment = [
-        { name = "AWS_REGION", value = var.aws_region },
-        { name = "APP_LEADERBOARD_TABLE_PREFIX", value = var.table_prefix },
-        { name = "APP_LEADERBOARD_PROJECTION_QUEUE_NAME", value = var.projection_queue_name },
-        { name = "APP_LEADERBOARD_SNAPSHOT_BUCKET_NAME", value = var.snapshot_bucket_name },
+        for name in sort(keys(local.projection_worker_environment)) : {
+          name  = name
+          value = local.projection_worker_environment[name]
+        }
+      ]
+      secrets = [
+        for name in sort(keys(var.projection_worker_secret_environment)) : {
+          name      = name
+          valueFrom = var.projection_worker_secret_environment[name]
+        }
       ]
       logConfiguration = {
         logDriver = "awslogs"
@@ -372,6 +396,7 @@ resource "aws_ecs_service" "api" {
   task_definition = aws_ecs_task_definition.api[0].arn
   desired_count   = var.api_desired_count
   launch_type     = "FARGATE"
+  enable_execute_command = var.enable_execute_command
 
   network_configuration {
     subnets          = var.private_subnet_ids
@@ -397,6 +422,7 @@ resource "aws_ecs_service" "projection_worker" {
   task_definition = aws_ecs_task_definition.projection_worker[0].arn
   desired_count   = var.projection_worker_desired_count
   launch_type     = "FARGATE"
+  enable_execute_command = var.enable_execute_command
 
   network_configuration {
     subnets          = var.private_subnet_ids
@@ -405,6 +431,58 @@ resource "aws_ecs_service" "projection_worker" {
   }
 
   tags = local.common_tags
+}
+
+resource "aws_appautoscaling_target" "api" {
+  count              = local.runtime_enabled ? 1 : 0
+  max_capacity       = var.api_max_capacity
+  min_capacity       = var.api_min_capacity
+  resource_id        = "service/${aws_ecs_cluster.backend[0].name}/${aws_ecs_service.api[0].name}"
+  scalable_dimension = "ecs:service:DesiredCount"
+  service_namespace  = "ecs"
+}
+
+resource "aws_appautoscaling_policy" "api_cpu" {
+  count              = local.runtime_enabled ? 1 : 0
+  name               = "${local.name_prefix}-api-cpu"
+  policy_type        = "TargetTrackingScaling"
+  resource_id        = aws_appautoscaling_target.api[0].resource_id
+  scalable_dimension = aws_appautoscaling_target.api[0].scalable_dimension
+  service_namespace  = aws_appautoscaling_target.api[0].service_namespace
+
+  target_tracking_scaling_policy_configuration {
+    predefined_metric_specification {
+      predefined_metric_type = "ECSServiceAverageCPUUtilization"
+    }
+
+    target_value = var.api_cpu_target
+  }
+}
+
+resource "aws_appautoscaling_target" "projection_worker" {
+  count              = local.runtime_enabled ? 1 : 0
+  max_capacity       = var.projection_worker_max_capacity
+  min_capacity       = var.projection_worker_min_capacity
+  resource_id        = "service/${aws_ecs_cluster.backend[0].name}/${aws_ecs_service.projection_worker[0].name}"
+  scalable_dimension = "ecs:service:DesiredCount"
+  service_namespace  = "ecs"
+}
+
+resource "aws_appautoscaling_policy" "projection_worker_cpu" {
+  count              = local.runtime_enabled ? 1 : 0
+  name               = "${local.name_prefix}-projection-worker-cpu"
+  policy_type        = "TargetTrackingScaling"
+  resource_id        = aws_appautoscaling_target.projection_worker[0].resource_id
+  scalable_dimension = aws_appautoscaling_target.projection_worker[0].scalable_dimension
+  service_namespace  = aws_appautoscaling_target.projection_worker[0].service_namespace
+
+  target_tracking_scaling_policy_configuration {
+    predefined_metric_specification {
+      predefined_metric_type = "ECSServiceAverageCPUUtilization"
+    }
+
+    target_value = var.projection_worker_cpu_target
+  }
 }
 
 resource "aws_s3_bucket_lifecycle_configuration" "snapshots" {

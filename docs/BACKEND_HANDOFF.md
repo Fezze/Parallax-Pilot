@@ -7,7 +7,7 @@ This note is for the next AI taking over backend work in this repo.
 Start with `docs/TAKEOVER.md` for the full agent-oriented documentation set.
 
 ## Current Baseline
-- Latest backend-related commit before this unfinished working tree: `a3f32d7 Split validation and release app builds`.
+- Latest backend-related commit before this unfinished working tree: `b1eb7c5 Expand Zepp harness coverage for services and bootstrap`.
 - The repo has Maven Wrapper support under `backend/` and npm scripts for backend builds/tests.
 - Zepp watch score submit is wired through BLE/messaging into `Side Service`.
 - `Side Service` keeps an offline submit queue in `settingsStorage` and posts to `POST /v1/scores:submit`.
@@ -15,7 +15,9 @@ Start with `docs/TAKEOVER.md` for the full agent-oriented documentation set.
 - Projection worker runtime exists as `ProjectionWorkerApplication` plus `worker` profile; default API profile does not run scheduled projection draining.
 - Baseline Terraform exists in `infra/terraform/` for DynamoDB, SQS, S3 snapshots, CloudWatch log groups, and ECR repos.
 - Terraform runtime shape now also includes ECS/ALB/IAM definitions for API and projection worker plus `backend/Dockerfile`.
+- Terraform runtime shape now also includes env/secrets wiring and ECS autoscaling scaffolding.
 - Baseline CI exists in `.github/workflows/backend.yml`.
+- CI can now optionally publish backend images to ECR on `main` and run a manual Terraform plan via `workflow_dispatch`.
 - `npm run build` is now a neutral validation build; `npm run build:app` is the explicit watch release build with version bump.
 - Current watch version remains `2.4.5`, code `61` until the next explicit `build:app` run.
 - Anonymous identity onboarding replaced `demo-player` / `Pilot` defaults in the active code.
@@ -27,6 +29,7 @@ Start with `docs/TAKEOVER.md` for the full agent-oriented documentation set.
 - Updated phone leaderboard screenshots were reviewed manually.
 - `cmd /c npm run build` passed without bumping the Zepp app version.
 - `cmd /c npm run build:backend` passed.
+- `docker build -f backend/Dockerfile backend` passed locally after preparing `backend/target/app.jar`.
 - `cmd /c npm run backend:verify` passed: 34 backend tests with Docker/Testcontainers.
 
 ## Docker / Full Verify Status
@@ -41,9 +44,9 @@ Start with `docs/TAKEOVER.md` for the full agent-oriented documentation set.
 - Observability: logs and Micrometer counters exist, but no dashboard, alert rules, trace/correlation model, projection lag metric, or queue-depth alarm.
 - S3 snapshots: export exists; restore, diff, and drift comparison tooling are not implemented.
 - Admin/debug view: backend debug API exists; there is no UI screen. If a UI screen is added, add Playwright screenshot coverage per repo rules.
-- Worker deployment: runtime shape exists in Terraform, but CI/CD, secrets, autoscaling, and env modules are still missing.
-- CI/CD: workflow verifies only; no artifact publish, image build/push, environment promotion, Terraform plan/apply, approval gates, or secrets wiring.
-- Terraform: remote state, locking, environment modules, secrets wiring, and deploy automation are still missing.
+- Worker deployment: runtime shape exists in Terraform, but managed secrets resources, remote state, and rollout automation are still missing.
+- CI/CD: image publish and manual plan now exist, but there is still no environment promotion, Terraform apply, approval gates, or ECS rollout automation for SHA-tagged images.
+- Terraform: remote state, locking, managed secrets resources, environment modules, and deploy automation are still missing.
 - Offline queue hardening: watch and side queues exist, but need physical/simulator verification of BLE messaging, retry backoff, queue TTL, and user-visible submit status.
 
 ## JS Coverage Notes
@@ -54,8 +57,8 @@ Start with `docs/TAKEOVER.md` for the full agent-oriented documentation set.
 
 ## Recommended Next Plan
 1. Deployment shape.
-   - Finish Terraform with Parameter Store/Secrets Manager config, autoscaling, env modules, and validated plan/apply path.
-   - Add GitHub Actions image build/push and environment promotion.
+   - Finish Terraform with managed Parameter Store/Secrets Manager config, remote state, env modules, and validated plan/apply path.
+   - Add ECS rollout automation and environment promotion on top of the new image publish path.
 
 2. Observability.
    - Add timers for submit/read/projection paths.

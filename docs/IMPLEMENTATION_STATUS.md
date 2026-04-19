@@ -15,6 +15,7 @@ Ten plik opisuje, co jest zrobione, gdzie leży kod i jaki jest poziom pewności
 - Anonymous identity onboarding zastąpił `demo-player` / `Pilot`.
 - Pełne `cmd /c npm run backend:verify` przechodzi lokalnie.
 - JS harness obejmuje już root app bootstrap, phone settings, side service i watch BLE bridge.
+- Backend Docker image path jest ustabilizowany pod CI przez `backend/Dockerfile` oczekujący `target/app.jar`.
 
 ## Zrobione: Backend-only Versioning
 Status: zaimplementowane.
@@ -236,7 +237,7 @@ Braki:
 - Readiness checks dla DynamoDB/SQS/S3.
 
 ## Zrobione: Terraform Deployment Shape
-Status: baseline resources plus wstępny runtime shape, nadal niepełny deployment produkcyjny.
+Status: baseline resources plus runtime shape, env templates i podstawowe CI image publish; nadal niepełny deployment produkcyjny.
 
 Pliki:
 - `infra/terraform/versions.tf`
@@ -255,21 +256,33 @@ Zasoby:
 - IAM execution/task roles dla API i worker.
 - ALB, target group i listener dla API.
 - ECS task definitions/services dla API i projection worker.
+- ECS autoscaling targets/policies dla API i projection worker.
+- Optional runtime environment variable maps dla API i worker.
+- Optional ECS secret references (`valueFrom`) dla API i worker.
 - `backend/Dockerfile` jako runtime image target.
+- `infra/terraform/environments/dev.tfvars.example`
+- `infra/terraform/environments/staging.tfvars.example`
+- `infra/terraform/environments/prod.tfvars.example`
 
 Braki:
 - Remote state i locking.
-- Secrets/Parameter Store.
-- Autoscaling.
 - Alarms/dashboard.
 - Environment modules.
 
+CI/CD:
+- `.github/workflows/backend.yml` nadal robi verify.
+- Na `main` może teraz także buildować i pushować obraz do dwóch repozytoriów ECR przez OIDC, jeśli ustawione są repo vars.
+- `workflow_dispatch` pozwala uruchomić manualny `terraform fmt -check`, `init` i `plan` z parametrami runtime.
+- Nadal brak zautomatyzowanego `terraform apply`, approval gates i rolloutu ECS na podstawie SHA image tags.
+
 Walidacja:
 - `cmd /c npm run build:backend` przechodzi.
+- `cmd /c npm run build` przechodzi.
+- `docker build -f backend/Dockerfile backend` przechodzi lokalnie po przygotowaniu `backend/target/app.jar`.
 - `terraform fmt -check` nie został uruchomiony lokalnie, bo CLI `terraform` nie jest zainstalowany.
 
 ## Zrobione: CI Baseline
-Status: verify workflow, brak deployment.
+Status: verify workflow plus image publish/manual plan, brak pełnego deployment pipeline.
 
 Pliki:
 - `.github/workflows/backend.yml`
@@ -282,17 +295,19 @@ Zachowanie:
 - `npm test`
 - `npm run build:backend`
 - `npm run backend:verify`
+- Optional image build/push do ECR na `main` przy skonfigurowanych vars.
+- Optional manual `terraform plan` przez `workflow_dispatch`.
 
 Ryzyko:
 - `backend:verify` wymaga Docker na runnerze.
-- Brak image build/push.
-- Brak Terraform plan/apply.
-- Brak approval gates.
+- Nadal brak `terraform apply` i approval gates.
+- Workflow zależy od repo vars typu `AWS_DEPLOY_ROLE_ARN`, `AWS_API_ECR_REPOSITORY`, `AWS_PROJECTION_WORKER_ECR_REPOSITORY`.
 
 ## Ostatnia Znana Walidacja
 - `cmd /c npm test`: pass, 66 tests.
 - `npx c8 --all --src zepp-app --exclude tests/** --reporter=text node --import ./tests/register-zepp-globals.mjs --test`: pass, `86.4%` statements / `82.09%` branches / `85.04%` functions dla `zepp-app`.
 - `cmd /c npm run build`: pass, bez bumpa wersji watch app.
 - `cmd /c npm run build:backend`: pass.
+- `docker build -f backend/Dockerfile backend`: pass po skopiowaniu zbudowanego jar do `backend/target/app.jar`.
 - `cmd /c npm run backend:test`: pass, 12 tests.
 - `cmd /c npm run backend:verify`: pass, Docker/Testcontainers aktywne.

@@ -1,6 +1,6 @@
 FROM eclipse-temurin:21-jre
 
-ARG JAR_FILE=target/leaderboard-backend-0.0.6-SNAPSHOT.jar
+ARG JAR_FILE=target/app.jar
 
 WORKDIR /app
 COPY ${JAR_FILE} app.jar

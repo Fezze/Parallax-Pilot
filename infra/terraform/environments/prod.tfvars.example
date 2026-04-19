@@ -1,0 +1,26 @@
+environment = "prod"
+table_prefix = "pp_prod_"
+projection_queue_name = "pp-prod-score-submissions"
+snapshot_bucket_name = "pp-prod-leaderboard-snapshots"
+
+api_desired_count = 2
+api_min_capacity = 2
+api_max_capacity = 6
+api_cpu_target = 50
+
+projection_worker_desired_count = 2
+projection_worker_min_capacity = 2
+projection_worker_max_capacity = 6
+projection_worker_cpu_target = 55
+
+api_environment_variables = {
+  MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE = "health,info,metrics"
+}
+
+api_secret_environment = {
+  # APP_LEADERBOARD_DYNAMODB_ENDPOINT = "arn:aws:ssm:eu-west-2:123456789012:parameter/parallax-pilot/prod/api/dynamodb-endpoint"
+}
+
+projection_worker_secret_environment = {
+  # APP_LEADERBOARD_SQS_ENDPOINT = "arn:aws:ssm:eu-west-2:123456789012:parameter/parallax-pilot/prod/worker/sqs-endpoint"
+}

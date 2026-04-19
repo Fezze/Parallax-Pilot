@@ -14,12 +14,13 @@ Ten plik jest punktem startowym dla kolejnego agenta AI. Cel: przejąć pracę b
 
 ## Aktualny Stan Repo
 - Ostatni commit dokumentacyjny przed reorganizacją: `9dff60d Add AI backend takeover docs`.
-- Ostatni commit funkcjonalny przed bieżącą sesją: `a3f32d7 Split validation and release app builds`.
+- Ostatni commit funkcjonalny przed bieżącą sesją: `b1eb7c5 Expand Zepp harness coverage for services and bootstrap`.
 - Repo było czyste po commicie `9dff60d` przed tą reorganizacją dokumentacji.
 - Backend ma Maven Wrapper w `backend/`.
 - Backendowe skrypty npm używają `scripts/backend-maven.mjs`.
 - Pełne `backend:verify` przechodzi lokalnie z Docker/Testcontainers.
 - JS harness coverage została mocno podniesiona; `setting/index.js`, `app-side/index.js`, `shared/leaderboard-device-bridge.js` i `app.js` nie są już na `0%`.
+- P2 deployment shape ma nowy postęp: workflow publikuje obrazy do ECR na `main`, Terraform przyjmuje runtime env/secrets/autoscaling, a `infra/terraform/environments/*.tfvars.example` daje wzorzec env split.
 
 ## Najważniejsze Zasady Projektu
 - Po zmianie kodu uruchom build jako walidację zamykającą.
@@ -67,5 +68,5 @@ Jeśli robisz release watch app albo przygotowujesz store submission, użyj:
 
 ## Czego Nie Zakładać
 - Nie zakładaj, że BLE submit został potwierdzony na fizycznym zegarku. Build przeszedł, ale wymaga testu runtime.
-- Nie zakładaj, że Terraform wdraża pełny production-ready stack. Jest już runtime shape ECS/ALB/IAM dla API i worker, ale bez pełnego CI/CD, secrets i env split.
+- Nie zakładaj, że Terraform wdraża pełny production-ready stack. Jest już runtime shape ECS/ALB/IAM, env/secrets wiring, autoscaling scaffold i image publish path, ale nadal bez remote state, apply gates i pełnego deploy rollout.
 - Nie zakładaj, że admin/debug ma UI. Jest tylko backend API.

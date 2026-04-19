@@ -126,7 +126,13 @@ Z ostatniej sesji:
 - Screenshoty phone leaderboard dla `en-US` i `pl-PL` po zmianie onboardingu zostały obejrzane.
 - `cmd /c npm run build`: pass, bez bumpa wersji watch app.
 - `cmd /c npm run build:backend`: pass.
+- `docker build -f backend/Dockerfile backend`: pass po przygotowaniu `backend/target/app.jar`.
 - `cmd /c npm run backend:verify`: pass, 34 backend tests, Docker/Testcontainers aktywne.
+
+## P2 Deployment Shape Notes
+- `backend/Dockerfile` oczekuje teraz stabilnej ścieżki `target/app.jar`, co upraszcza CI image build.
+- `.github/workflows/backend.yml` ma nowy job publish do ECR na `main` oraz manualny `terraform plan` przez `workflow_dispatch`.
+- Terraform ma nowe zmienne dla env maps, secret refs i autoscaling, ale lokalne `terraform` CLI nadal nie jest dostępne w tym środowisku.
 
 ## Docker Status Z Ostatniej Sesji
 - `docker version` przechodzi w aktywnym środowisku.

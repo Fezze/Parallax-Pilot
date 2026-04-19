@@ -92,3 +92,58 @@ variable "tags" {
   type    = map(string)
   default = {}
 }
+
+variable "api_environment_variables" {
+  type    = map(string)
+  default = {}
+}
+
+variable "projection_worker_environment_variables" {
+  type    = map(string)
+  default = {}
+}
+
+variable "api_secret_environment" {
+  type    = map(string)
+  default = {}
+}
+
+variable "projection_worker_secret_environment" {
+  type    = map(string)
+  default = {}
+}
+
+variable "enable_execute_command" {
+  type    = bool
+  default = true
+}
+
+variable "api_min_capacity" {
+  type    = number
+  default = 1
+}
+
+variable "api_max_capacity" {
+  type    = number
+  default = 2
+}
+
+variable "api_cpu_target" {
+  type    = number
+  default = 60
+}
+
+variable "projection_worker_min_capacity" {
+  type    = number
+  default = 1
+}
+
+variable "projection_worker_max_capacity" {
+  type    = number
+  default = 2
+}
+
+variable "projection_worker_cpu_target" {
+  type    = number
+  default = 60
+}

@@ -5,6 +5,37 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      terraform_environment:
+        description: Terraform environment name
+        required: true
+        default: dev
+        type: string
+      terraform_vpc_id:
+        description: VPC id for runtime plan
+        required: false
+        type: string
+      terraform_public_subnet_ids:
+        description: JSON array of public subnet ids
+        required: false
+        type: string
+      terraform_private_subnet_ids:
+        description: JSON array of private subnet ids
+        required: false
+        type: string
+      terraform_api_image:
+        description: Full API image URI for Terraform plan
+        required: false
+        type: string
+      terraform_projection_worker_image:
+        description: Full worker image URI for Terraform plan
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
 
 jobs:
   verify:
@@ -26,3 +57,113 @@ jobs:
       - run: npm test
       - run: npm run build:backend
       - run: npm run backend:verify
+
+  publish-images:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.AWS_DEPLOY_ROLE_ARN != '' && vars.AWS_API_ECR_REPOSITORY != '' && vars.AWS_PROJECTION_WORKER_ECR_REPOSITORY != ''
+    needs: verify
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION != '' && vars.AWS_REGION || 'eu-west-2' }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - run: npm ci
+
+      - name: Package backend jar
+        run: npm run build:backend
+
+      - name: Prepare stable Docker jar name
+        run: |
+          JAR_PATH=$(find backend/target -maxdepth 1 -type f -name 'leaderboard-backend-*.jar' ! -name '*.original' | head -n 1)
+          test -n "$JAR_PATH"
+          cp "$JAR_PATH" backend/target/app.jar
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: aws-actions/amazon-ecr-login@v2
+
+      - id: metadata
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ vars.AWS_API_ECR_REPOSITORY }}
+            ${{ vars.AWS_PROJECTION_WORKER_ECR_REPOSITORY }}
+          tags: |
+            type=sha,prefix=sha-
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}
+
+  terraform-plan:
+    if: github.event_name == 'workflow_dispatch' && vars.AWS_DEPLOY_ROLE_ARN != ''
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION != '' && vars.AWS_REGION || 'eu-west-2' }}
+      TF_ENVIRONMENT: ${{ inputs.terraform_environment }}
+      TF_VPC_ID: ${{ inputs.terraform_vpc_id }}
+      TF_PUBLIC_SUBNET_IDS: ${{ inputs.terraform_public_subnet_ids }}
+      TF_PRIVATE_SUBNET_IDS: ${{ inputs.terraform_private_subnet_ids }}
+      TF_API_IMAGE: ${{ inputs.terraform_api_image }}
+      TF_PROJECTION_WORKER_IMAGE: ${{ inputs.terraform_projection_worker_image }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform fmt check
+        run: terraform -chdir=infra/terraform fmt -check
+
+      - name: Terraform init
+        run: terraform -chdir=infra/terraform init
+
+      - name: Terraform plan
+        run: |
+          terraform_args=(
+            -var "aws_region=$AWS_REGION"
+            -var "environment=$TF_ENVIRONMENT"
+          )
+
+          if [ -n "$TF_VPC_ID" ]; then
+            terraform_args+=( -var "vpc_id=$TF_VPC_ID" )
+          fi
+
+          if [ -n "$TF_PUBLIC_SUBNET_IDS" ]; then
+            terraform_args+=( -var "public_subnet_ids=$TF_PUBLIC_SUBNET_IDS" )
+          fi
+
+          if [ -n "$TF_PRIVATE_SUBNET_IDS" ]; then
+            terraform_args+=( -var "private_subnet_ids=$TF_PRIVATE_SUBNET_IDS" )
+          fi
+
+          if [ -n "$TF_API_IMAGE" ]; then
+            terraform_args+=( -var "api_image=$TF_API_IMAGE" )
+          fi
+
+          if [ -n "$TF_PROJECTION_WORKER_IMAGE" ]; then
+            terraform_args+=( -var "projection_worker_image=$TF_PROJECTION_WORKER_IMAGE" )
+          fi
+
+          terraform -chdir=infra/terraform plan "${terraform_args[@]}"

@@ -97,7 +97,7 @@ Stan pomocniczy:
 - Następny sensowny krok to runtime/simulator proof, nie kolejny duży refactor harnessu.
 
 ## P2: Production Deployment Shape
-Status: częściowo zrobione.
+Status: częściowo zrobione, z nowym postępem w CI image publish i runtime config wiring.
 
 Problem:
 - Terraform tworzy baseline resources, ale nie wdraża API/worker runtime.
@@ -118,13 +118,18 @@ Wdrożone:
 3. Dodany osobny worker service/task z profilem `worker`.
 4. Dodany `backend/Dockerfile` jako image target.
 5. Dodane outputy i README dla runtime planu.
+6. Dodane env/secrets wiring dla ECS task definitions.
+7. Dodane ECS autoscaling targets/policies dla API i worker.
+8. Dodane `infra/terraform/environments/*.tfvars.example` jako wzorce env split.
+9. Workflow backend potrafi publikować obrazy do ECR na `main`.
+10. Workflow backend potrafi wykonać manualny `terraform plan` przez `workflow_dispatch`.
 
 Pozostało:
-1. Dodać Parameter Store/Secrets Manager config.
-2. Dodać image build/push w GitHub Actions.
-3. Dodać Terraform plan/apply z approval gates.
-4. Dodać env split: local/staging/prod.
-5. Zweryfikować Terraform CLI i plan po zainstalowaniu `terraform` lokalnie.
+1. Dodać managed Parameter Store/Secrets Manager resources zamiast tylko secret refs.
+2. Dodać remote state i locking przed realnym `apply`.
+3. Dodać Terraform apply z approval gates i environment protection.
+4. Zweryfikować realny `terraform plan` po zainstalowaniu `terraform` lokalnie lub w docelowym CI.
+5. Dodać rollout/deploy automation dla ECS task definition revisions opartych o SHA image tags.
 
 Akceptacja:
 - CI publikuje obrazy.
