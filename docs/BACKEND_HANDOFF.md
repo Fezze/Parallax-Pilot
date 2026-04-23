@@ -42,7 +42,7 @@ Start with `docs/TAKEOVER.md` for the full agent-oriented documentation set.
 
 ## Still Missing Or Partial
 - Anti-abuse depth: current logic is player rate limit plus basic score/survival sanity; still missing device/IP throttling, version anomaly rules, replay-pattern heuristics, and richer admin workflows.
-- Rank stability: tie-break logic exists, but equal-score/equal-time behavior needs explicit tests and docs across global/daily/seasonal scopes.
+- Rank stability: tie-break logic exists and integration tests cover survival time, earlier `playedAt`, and `playerId` fallback; global-scale rank estimation beyond bounded MVP remains open.
 - Observability: logs and Micrometer counters exist, but no dashboard, alert rules, trace/correlation model, projection lag metric, or queue-depth alarm.
 - S3 snapshots: export exists; restore, diff, and drift comparison tooling are not implemented.
 - Admin/debug view: backend debug API exists; there is no UI screen. If a UI screen is added, add Playwright screenshot coverage per repo rules.
@@ -69,7 +69,8 @@ Start with `docs/TAKEOVER.md` for the full agent-oriented documentation set.
    - Add CloudWatch dashboard and alarms in Terraform.
 
 3. Ranking and abuse hardening.
-   - Add equal-score tie tests.
+   - Keep deterministic tie-break behavior aligned if read/projection paths change.
+   - Design rank estimation beyond bounded MVP only if the project needs deeper leaderboard scale.
    - Add richer suspicious-signal rules.
    - Add admin endpoints for risk review and quarantine release if needed.
 

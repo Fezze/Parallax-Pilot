@@ -176,8 +176,10 @@ Status po follow-up hardening:
 4. Dashboardy, alarmy i readiness checks nadal są odłożone.
 
 ## P2: Ranking Stability
+Status: implementacja i podstawowe testy integracyjne są zamknięte; otwarta pozostaje tylko skala rank estimation.
+
 Problem:
-- Tie-break jest w kodzie, ale brak wystarczającej dokumentacji i testów dla edge cases.
+- Tie-break jest deterministyczny w kodzie i ma testy integracyjne dla survival time, `playedAt` i `playerId`, ale read path nadal jest bounded/approx dla głębokich rankingów.
 
 Cel:
 - Ranking jest deterministyczny i testowany dla remisów.
@@ -190,19 +192,19 @@ Pliki startowe:
 - `ProjectionDedupeIntegrationTest.java`
 
 Proponowane kroki:
-1. Dopisać testy dla equal score, equal survivedMs, different playedAt.
-2. Dopisać testy dla equal score/time i playerId fallback.
-3. Sprawdzić global/daily/seasonal consistency.
-4. Dopisać opis tie-break w architekturze.
+1. Jeśli ranking ma wyjść poza MVP, zaprojektować prawdziwie global-scale rank estimation albo exact-rank strategy.
+2. Przy zmianach projection/read path utrzymać zgodność z tie-break `score -> survivedMs -> earlier playedAt -> playerId`.
+3. Rozszerzyć testy tylko wtedy, gdy nowa implementacja dotknie global/daily/seasonal consistency.
 
 Akceptacja:
-- Testy potwierdzają deterministyczną kolejność.
-- Projection rebuild daje ten sam ranking co live path.
+- Nowa ścieżka rank estimation ma jawne gwarancje dokładności/approximation.
+- Projection rebuild daje ten sam ranking co live path dla obsługiwanych zakresów.
 
 Stan po ostatniej zmianie:
 1. Tie-break `score -> survivedMs -> earlier playedAt -> playerId` jest już wyrównany między service i projection path.
 2. Submitted-round classification zastępuje koncepcyjnie istniejący best-score tego samego gracza zamiast liczyć go drugi raz.
-3. Nadal brakuje ścieżki prawdziwie global-scale rank estimation poza bounded scan MVP.
+3. `LeaderboardIntegrationTest` pokrywa survival-time tie-break oraz fallback przez wcześniejszy `playedAt` i `playerId`.
+4. Nadal brakuje ścieżki prawdziwie global-scale rank estimation poza bounded scan MVP.
 
 ## P2: Anti-abuse Hardening
 Problem:
