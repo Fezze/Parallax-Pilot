@@ -4,3 +4,10 @@ node_modules/
 coverage/
 .c8_output/
 output/playwright/
+.npm-cache/
+backend/target/
+backend/.localstack/
+backend/dev/localstack/.data/
+backend/.tools/
+backend/.m2repo/
+backend/.m2home/
