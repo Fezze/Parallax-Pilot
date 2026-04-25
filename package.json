@@ -1,6 +1,6 @@
 {
   "name": "parallax-pilot-workspace",
-  "version": "2.3.4",
+  "version": "2.3.6",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,18 +10,23 @@
     "hooks:install": "git config core.hooksPath .githooks",
     "test": "node --import ./tests/register-zepp-globals.mjs --test",
     "test:coverage": "c8 --all --src zepp-app/shared --exclude tests/** --exclude zepp-app/shared/page-ui.js --exclude zepp-app/shared/storage.js --reporter=text --reporter=html --reporter=lcov node --import ./tests/register-zepp-globals.mjs --test",
-    "test:playwright": "playwright test",
-    "test:playwright:screens": "playwright test tests/playwright/page-preview.spec.js",
-    "test:playwright:headed": "playwright test --headed",
-    "playwright:install": "playwright install chromium",
+    "test:playwright": "node scripts/playwright-proxy.mjs test",
+    "test:playwright:screens": "node scripts/playwright-proxy.mjs test tests/playwright/page-preview.spec.js",
+    "test:playwright:headed": "node scripts/playwright-proxy.mjs test --headed",
+    "playwright:install": "node scripts/playwright-proxy.mjs install chromium",
     "build": "node scripts/zeus-proxy.mjs build",
-    "build:raw": "cmd /c \"cd /d zepp-app && zeus build\"",
+    "build:raw": "node scripts/zeus-proxy.mjs build --no-version-bump",
     "dev": "node scripts/zeus-proxy.mjs dev",
     "preview": "node scripts/zeus-proxy.mjs preview",
+    "submission:prepare": "node scripts/prepare-store-submission.mjs",
     "push": "node scripts/git-push-proxy.mjs"
+  },
+  "_moduleAliases": {
+    "zeppos-app-utils": "node_modules/@zeppos/zeus-cli/private-modules/zeppos-app-utils"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
+    "@zeppos/zeus-cli": "^1.9.0",
     "c8": "^11.0.0"
   }
 }

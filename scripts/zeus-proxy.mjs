@@ -1,15 +1,18 @@
+import fs from 'node:fs'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, '..')
+const zeppAppDir = path.join(repoRoot, 'zepp-app')
 const command = process.argv[2]
 const dryRun = process.argv.includes('--dry-run')
-const shouldBumpVersion = command !== 'preview'
+const noVersionBump = process.argv.includes('--no-version-bump')
+const shouldBumpVersion = command !== 'preview' && !noVersionBump
 
 if (!['dev', 'preview', 'build'].includes(command)) {
-  console.error('Usage: node scripts/zeus-proxy.mjs <dev|preview|build> [--dry-run]')
+  console.error('Usage: node scripts/zeus-proxy.mjs <dev|preview|build> [--dry-run] [--no-version-bump]')
   process.exit(1)
 }
 
@@ -33,15 +36,25 @@ if (dryRun) {
   process.exit(0)
 }
 
-const zeusRun = spawnSync(
-  process.platform === 'win32' ? 'cmd' : 'sh',
-  process.platform === 'win32'
-    ? ['/c', 'zeus', command]
-    : ['-lc', `cd "${path.join(repoRoot, 'zepp-app')}" && zeus ${command}`],
-  {
-    cwd: path.join(repoRoot, 'zepp-app'),
+const localZeus = path.join(repoRoot, 'node_modules', '.bin', process.platform === 'win32' ? 'zeus.cmd' : 'zeus')
+const zeusCommand = fs.existsSync(localZeus) ? localZeus : 'zeus'
+const zeusRun = process.platform === 'win32'
+  ? spawnSync('cmd', ['/d', '/s', '/c', `"${zeusCommand}" ${command}`], {
+    cwd: zeppAppDir,
     stdio: 'inherit',
-  }
-)
+  })
+  : spawnSync(zeusCommand, [command], {
+    cwd: zeppAppDir,
+    stdio: 'inherit',
+  })
 
-process.exit(zeusRun.status || 0)
+if (zeusRun.error) {
+  if (zeusRun.error.code === 'ENOENT') {
+    console.error('Cannot find zeus. Run npm install, or install @zeppos/zeus-cli.')
+  } else {
+    console.error(`Failed to run zeus ${command}: ${zeusRun.error.message}`)
+  }
+  process.exit(1)
+}
+
+process.exit(zeusRun.status ?? 1)

@@ -4,7 +4,7 @@ Status na podstawie repo `Parallax Pilot` i oficjalnych docs Zepp.
 
 ## 1. Rejestracja i tożsamość aplikacji
 
-- [x] `appId` jest ustawione w [zepp-app/app.json](C:/Users/krzys/Projects/Parallax-Pilot/zepp-app/app.json): `1110694`
+- [x] `appId` jest ustawione w [zepp-app/app.json](../zepp-app/app.json): `1110694`
 - [x] `appName`, `version.name`, `version.code`, `vender`, `description` są ustawione
 - [x] `appId 1110694` w Zepp Console jest już znane dla tej aplikacji
 - [x] Nazwa aplikacji nie koliduje z inną Twoją aplikacją w konsoli; to pierwsza aplikacja na tym koncie
@@ -24,7 +24,7 @@ Status na podstawie repo `Parallax Pilot` i oficjalnych docs Zepp.
 - [x] Runtime jest ustawiony na `4.0`
 - [x] Są targety dla round i square
 - [x] Są lokalizacje `en-US` i `pl-PL`
-- [x] Finalny support matrix jest już określony w [zepp-app/app.json](C:/Users/krzys/Projects/Parallax-Pilot/zepp-app/app.json):
+- [x] Finalny support matrix jest już określony w [zepp-app/app.json](../zepp-app/app.json):
   - `round-480`
   - `round-466`
   - `square-390x450`
