@@ -11,24 +11,24 @@
 
 ## Package
 
-- Application package: `artifacts/Parallax_Pilot-2.1.17-release.zab`
-- Current app manifest version: `2.1.17`
-- Current app manifest version code: `34`
+- Application package: `artifacts/Parallax_Pilot-2.3.13-release.zab`
+- Current app manifest version: `2.3.13`
+- Current app manifest version code: `64`
 - Supporting devices: auto-filled by Zepp Console after ZAB upload
 - Current target device set in `app.json`:
+  - `Amazfit Falcon`
+  - `Amazfit Cheetah (Round)`
+  - `Amazfit T-Rex Ultra`
+  - `Amazfit Active 3 Premium`
+  - `Amazfit T-Rex 3 Pro (44mm)`
+  - `Amazfit Active 2 (Round)`
+  - `Amazfit GTR 4`
   - `Amazfit Balance`
   - `Amazfit Balance 2`
   - `Amazfit T-Rex 3`
   - `Amazfit T-Rex 3 Pro (48mm)`
   - `Amazfit Active Max`
   - `Amazfit Cheetah Pro`
-  - `Amazfit Active 3 Premium`
-  - `Amazfit T-Rex 3 Pro (44mm)`
-  - `Amazfit Active 2 (Round)`
-  - `Amazfit GTR 4`
-  - `Amazfit Cheetah (Round)`
-  - `Amazfit T-Rex Ultra`
-  - `Amazfit Falcon`
   - `Amazfit Active 2 (Square)`
   - `Amazfit Bip 6`
   - `Amazfit Active`
@@ -52,11 +52,13 @@
 ## App Introduction Screenshots
 
 - `en-US` round: `10` screenshots in `assets/screenshots/en-US/round/`
+- `en-US` square: `10` screenshots in `assets/screenshots/en-US/square/`
 - `pl-PL` round: `10` screenshots in `assets/screenshots/pl-PL/round/`
+- `pl-PL` square: `10` screenshots in `assets/screenshots/pl-PL/square/`
 - Full map: `assets/screenshots/manifest.json`
 - Format prepared: `360x360 PNG` with transparent background
 - Round export: no margins
-- Rectangular export: equal left/right margins, no top/bottom margins
+- Rectangular export: equal left/right margins, rounded screen corners, and source border visible along the curved screen edge
 
 ## Store Icon
 

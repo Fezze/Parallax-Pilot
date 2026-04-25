@@ -11,8 +11,10 @@ const manifestPath = path.join(submissionRoot, 'assets', 'screenshots', 'manifes
 const dryRun = process.argv.includes('--dry-run')
 const targetSize = 360
 const squareSourceResolution = '390x450'
-const cornerRadius = 30
-const squareInsetY = 12
+const squareSourceWidth = 390
+const squareSourceHeight = 450
+const squarePreviewWidth = Math.round((targetSize * squareSourceWidth) / squareSourceHeight)
+const squarePreviewOffsetX = Math.round((targetSize - squarePreviewWidth) / 2)
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8').replace(/^\uFEFF/, ''))
@@ -29,7 +31,6 @@ async function renderSquarePreview(page, sourcePath, destinationPath) {
 
   const imageBase64 = fs.readFileSync(sourcePath).toString('base64')
   const dataUrl = `data:image/png;base64,${imageBase64}`
-  const previewHeight = targetSize - squareInsetY * 2
 
   await page.setViewportSize({ width: targetSize, height: targetSize })
   await page.setContent(`
@@ -46,16 +47,13 @@ async function renderSquarePreview(page, sourcePath, destinationPath) {
         width: ${targetSize}px;
         height: ${targetSize}px;
         background: transparent;
-        overflow: hidden;
       }
 
       #frame img {
         position: absolute;
-        inset: ${squareInsetY}px auto auto 50%;
-        height: ${previewHeight}px;
-        width: auto;
-        border-radius: ${cornerRadius}px;
-        transform: translateX(-50%);
+        inset: 0 auto 0 ${squarePreviewOffsetX}px;
+        width: ${squarePreviewWidth}px;
+        height: ${targetSize}px;
         display: block;
       }
     </style>

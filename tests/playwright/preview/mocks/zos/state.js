@@ -6,6 +6,8 @@ const defaultDeviceInfo = {
   keyNumber: 2,
 }
 
+const SQUARE_SCREEN_CORNER_RADIUS = 36
+
 const state = {
   deviceInfo: { ...defaultDeviceInfo },
   languageCode: 2,
@@ -34,7 +36,7 @@ function applyWatchFrame() {
   state.watchRoot.style.width = `${state.deviceInfo.width}px`
   state.watchRoot.style.height = `${state.deviceInfo.height}px`
   state.watchRoot.style.borderRadius =
-    state.deviceInfo.screenShape === 'round' ? '50%' : '28px'
+    state.deviceInfo.screenShape === 'round' ? '50%' : `${SQUARE_SCREEN_CORNER_RADIUS}px`
 }
 
 export function setRootElement(element) {

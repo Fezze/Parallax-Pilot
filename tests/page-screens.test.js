@@ -741,6 +741,56 @@ test('game screen renders without debug text widgets in the canvas HUD', async (
   }
 })
 
+test('game square HUD uses rounded corner arc segments', async () => {
+  resetEnv()
+  __setDeviceInfo({
+    width: 390,
+    height: 450,
+    screenShape: 'square',
+    keyType: 'normal_21',
+    keyNumber: 2,
+  })
+  __seedLocalStorage({
+    settings_v1: JSON.stringify({
+      controlMode: 'tilt',
+      wristSide: 'left',
+      timeScale: 1,
+      spawnMultiplier: 1,
+      tiltSensitivity: 1,
+    }),
+  })
+
+  const originalSetInterval = globalThis.setInterval
+  const originalClearInterval = globalThis.clearInterval
+  globalThis.setInterval = () => 1
+  globalThis.clearInterval = () => {}
+
+  try {
+    const page = await loadPageDefinition('../zepp-app/page/game/index.js')
+    page.onInit()
+    page.build()
+
+    const [canvas] = __getCanvasWidgets()
+    const drawCalls = canvas.__getDrawCalls()
+    const hudArcCalls = drawCalls.filter((call) => call.method === 'strokeArc')
+    const fullWidthHudRects = drawCalls.filter((call) =>
+      call.method === 'drawRect' &&
+      call.args.y1 === 0 &&
+      call.args.y2 === 8 &&
+      call.args.x1 === 0 &&
+      call.args.x2 === 390
+    )
+
+    assert.ok(hudArcCalls.length >= 8)
+    assert.equal(fullWidthHudRects.length, 0)
+
+    page.onDestroy()
+  } finally {
+    globalThis.setInterval = originalSetInterval
+    globalThis.clearInterval = originalClearInterval
+  }
+})
+
 test('game swipe input moves relatively and does not teleport on touch down', async () => {
   resetEnv()
   __seedLocalStorage({
