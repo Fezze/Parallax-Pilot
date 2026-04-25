@@ -1,6 +1,6 @@
 {
   "name": "parallax-pilot-workspace",
-  "version": "2.3.6",
+  "version": "2.3.7",
   "private": true,
   "type": "module",
   "scripts": {
@@ -18,6 +18,10 @@
     "build:raw": "node scripts/zeus-proxy.mjs build --no-version-bump",
     "dev": "node scripts/zeus-proxy.mjs dev",
     "preview": "node scripts/zeus-proxy.mjs preview",
+    "bridge": "node scripts/zeus-proxy.mjs bridge",
+    "sim:doctor": "node scripts/simulator-harness.mjs doctor",
+    "sim:run": "node scripts/simulator-harness.mjs run",
+    "sim:smoke": "node scripts/simulator-harness.mjs smoke",
     "submission:prepare": "node scripts/prepare-store-submission.mjs",
     "push": "node scripts/git-push-proxy.mjs"
   },

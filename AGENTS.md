@@ -6,3 +6,9 @@ Project rules:
 - Keep screenshot coverage aligned with supported locale, shape, and resolution matrices already used by the repo.
 - After finishing a code change, always run a build as part of the close-out validation.
 - After every successful build, create a commit before moving on.
+
+Workflow for simulator harness:
+- `npm run sim:doctor`
+- `npm run dev`
+- `npm run sim:smoke`
+- `npm run build`

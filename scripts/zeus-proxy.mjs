@@ -9,10 +9,10 @@ const zeppAppDir = path.join(repoRoot, 'zepp-app')
 const command = process.argv[2]
 const dryRun = process.argv.includes('--dry-run')
 const noVersionBump = process.argv.includes('--no-version-bump')
-const shouldBumpVersion = command !== 'preview' && !noVersionBump
+const shouldBumpVersion = command !== 'preview' && command !== 'bridge' && !noVersionBump
 
-if (!['dev', 'preview', 'build'].includes(command)) {
-  console.error('Usage: node scripts/zeus-proxy.mjs <dev|preview|build> [--dry-run] [--no-version-bump]')
+if (!['dev', 'preview', 'build', 'bridge'].includes(command)) {
+  console.error('Usage: node scripts/zeus-proxy.mjs <dev|preview|build|bridge> [--dry-run] [--no-version-bump]')
   process.exit(1)
 }
 

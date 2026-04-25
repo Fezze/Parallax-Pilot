@@ -1,0 +1,10 @@
+{
+  "deviceWindowTitle": "Device Simulator|Amazfit|Simulator",
+  "screen": { "x": 0, "y": 0, "w": 480, "h": 480 },
+  "targets": {
+    "boardCenter": { "x": 0.5, "y": 0.5 },
+    "tutorialStart": { "x": 0.5, "y": 0.82 },
+    "quickMenuMode": { "x": 0.5, "y": 0.52 },
+    "modeRound": { "x": 0.5, "y": 0.42 }
+  }
+}
