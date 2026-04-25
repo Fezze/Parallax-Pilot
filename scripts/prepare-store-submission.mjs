@@ -1,11 +1,13 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, '..')
 const submissionRoot = path.join(repoRoot, 'submission')
 const artifactsDir = path.join(submissionRoot, 'artifacts')
+const renderAssetsScript = path.join(repoRoot, 'scripts', 'render-store-assets.mjs')
 const args = process.argv.slice(2)
 const dryRun = args.includes('--dry-run')
 
@@ -60,9 +62,26 @@ function latestZabPath() {
   return files[0].filePath
 }
 
+function renderSubmissionAssets() {
+  const render = spawnSync(process.execPath, [renderAssetsScript, ...(dryRun ? ['--dry-run'] : [])], {
+    cwd: repoRoot,
+    stdio: 'inherit',
+  })
+
+  if (render.error) {
+    throw render.error
+  }
+
+  if (render.status !== 0) {
+    throw new Error(`Failed to render submission assets with status ${render.status ?? 1}`)
+  }
+}
+
 if (!fs.existsSync(submissionRoot)) {
   throw new Error('Missing submission folder')
 }
+
+renderSubmissionAssets()
 
 const appConfig = readJson(path.join(repoRoot, 'zepp-app', 'app.json'))
 const localeNames = Object.keys(appConfig.i18n || {})

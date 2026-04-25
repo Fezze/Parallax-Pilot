@@ -1,6 +1,6 @@
 {
   "name": "parallax-pilot-workspace",
-  "version": "2.3.8",
+  "version": "2.3.9",
   "private": true,
   "type": "module",
   "scripts": {
@@ -22,6 +22,7 @@
     "sim:doctor": "node scripts/simulator-harness.mjs doctor",
     "sim:run": "node scripts/simulator-harness.mjs run",
     "sim:smoke": "node scripts/simulator-harness.mjs smoke",
+    "submission:render-assets": "node scripts/render-store-assets.mjs",
     "submission:prepare": "node scripts/prepare-store-submission.mjs",
     "push": "node scripts/git-push-proxy.mjs"
   },

@@ -18,10 +18,16 @@ Current release scope:
 - `assets/screenshots/<locale>/<shape>/*.png`: screenshot sets grouped by language and shape, `10` per shape for each locale, exported as `360x360 PNG`
 - screenshot backgrounds are transparent
 - round screenshots fill the full square with no margins
-- rectangular screenshots are centered with equal left/right margins and no top/bottom margins
+- rectangular screenshots are centered with equal left/right margins, no top/bottom margins, and rounded screen corners
 - `assets/language-preview/*.png`: preview image draft for each language
 - `listing/*.md`: app name, short description, and full description for `en-US` and `pl-PL`
 - `privacy/*.md`: privacy statement drafts for `en-US` and `pl-PL`
+
+## Regenerating Square Store Assets
+
+- Run `npm run test:playwright:screens` to refresh raw preview screenshots under `output/playwright/screenshots/`
+- Run `npm run submission:render-assets` to rebuild square submission screenshots and language preview images from the raw 390x450 captures using the existing Playwright toolchain
+- Run `npm run submission:prepare` to validate the pack and refresh the release artifact
 
 ## Still manual in Zepp Console
 

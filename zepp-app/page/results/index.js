@@ -135,7 +135,7 @@ Page({
     const actionRowY = isRound
       ? (isSmallRound ? height - roundActionButtonH - 12 : height - roundActionButtonH)
       : isSquare && !lastSession
-        ? height - 54
+        ? height - 62
         : isSquare
           ? height - 64
           : isEmptyState

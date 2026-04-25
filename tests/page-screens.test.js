@@ -565,10 +565,12 @@ test('results square pagination keeps the page label above nav and footer rows',
   assert.ok(lastVisibleRow)
   assert.ok(pageLabel)
   assert.equal(lastVisibleRow.props.y, 248)
-  assert.equal(pageLabel.props.y, 320)
-  assert.equal(nextButton.props.y, 344)
-  assert.equal(backButton.props.y, 396)
-  assert.equal(playButton.props.y, 396)
+  assert.equal(pageLabel.props.y, 312)
+  assert.equal(nextButton.props.y, 336)
+  assert.equal(backButton.props.y, 388)
+  assert.equal(playButton.props.y, 388)
+  assert.equal(backButton.props.y + backButton.props.h <= 438, true)
+  assert.equal(playButton.props.y + playButton.props.h <= 438, true)
 })
 
 test('results small round pagination keeps page label and actions above the lower cutout', async () => {
