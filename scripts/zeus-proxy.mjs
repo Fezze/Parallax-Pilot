@@ -7,6 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, '..')
 const zeppAppDir = path.join(repoRoot, 'zepp-app')
 const command = process.argv[2]
+const forwardedArgs = process.argv.slice(3).filter((arg) => arg !== '--dry-run' && arg !== '--no-version-bump')
 const dryRun = process.argv.includes('--dry-run')
 const noVersionBump = process.argv.includes('--no-version-bump')
 const shouldBumpVersion = command !== 'preview' && command !== 'bridge' && !noVersionBump
@@ -32,7 +33,7 @@ if (shouldBumpVersion) {
 }
 
 if (dryRun) {
-  console.log(`Dry run: zeus ${command}`)
+  console.log(`Dry run: zeus ${command} ${forwardedArgs.join(' ')}`.trim())
   process.exit(0)
 }
 
@@ -43,7 +44,7 @@ const zeusRun = process.platform === 'win32'
     cwd: zeppAppDir,
     stdio: 'inherit',
   })
-  : spawnSync(zeusCommand, [command], {
+  : spawnSync(zeusCommand, [command, ...forwardedArgs], {
     cwd: zeppAppDir,
     stdio: 'inherit',
   })

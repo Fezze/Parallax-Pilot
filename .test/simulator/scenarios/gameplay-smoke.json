@@ -2,13 +2,21 @@
   "id": "gameplay-smoke",
   "requires": ["simulator", "input", "screenshot"],
   "steps": [
+    { "action": "launch" },
     { "action": "wait", "ms": 3000 },
-    { "action": "focus", "target": "deviceWindow" },
+    { "action": "focus" },
     { "action": "key", "key": "Home" },
     { "action": "tap", "target": "tutorialStart" },
     { "action": "swipe", "target": "boardCenter", "dx": -180, "dy": 0, "durationMs": 350 },
     { "action": "tap", "target": "quickMenuMode" },
     { "action": "tap", "target": "modeRound" },
-    { "action": "screenshot", "name": "round-board" }
+    { "action": "screenshot", "name": "round-board" },
+    { "action": "tap", "target": "quickMenuBoard" },
+    { "action": "tap", "target": "boardSquare" },
+    { "action": "screenshot", "name": "square-board" },
+    { "action": "tap", "target": "quickMenuSpeed" },
+    { "action": "tap", "target": "speedFast" },
+    { "action": "tap", "target": "quickMenuRecenter" },
+    { "action": "screenshot", "name": "recentered" }
   ]
 }

@@ -2,10 +2,11 @@
   "id": "bridge-install-screenshot",
   "requires": ["simulator", "input", "screenshot"],
   "steps": [
+    { "action": "bridge" },
+    { "action": "connect", "timeoutMs": 20000 },
+    { "action": "install" },
     { "action": "wait", "ms": 2000 },
-    { "action": "focus", "target": "deviceWindow" },
-    { "action": "key", "key": "Home" },
-    { "action": "tap", "target": "tutorialStart" },
+    { "action": "focus" },
     { "action": "screenshot", "name": "bridge-install" }
   ]
 }
