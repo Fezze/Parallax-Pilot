@@ -293,7 +293,7 @@ ${languageLines}
 ${screenshotLines}
 - Full map: \`${form.screenshotsManifest}\`
 - Format prepared: \`360x360 PNG\` with transparent background
-- Round export: no margins
+- Round export: preserves the captured Playwright layout inside a circular mask with transparent corners
 - Rectangular export: equal left/right margins, rounded screen corners, and source border visible along the curved screen edge
 
 ## Store Icon
@@ -353,7 +353,7 @@ Current release scope:
 - \`assets/screenshots/manifest.json\`: locale-to-screenshot map generated from \`zepp-app/app.json\`
 - \`assets/screenshots/<locale>/<shape>/*.png\`: screenshot sets grouped by language and shape, \`10\` per shape for each locale, exported as \`360x360 PNG\`
 - screenshot backgrounds are transparent
-- round screenshots fill the full square with no margins
+- round screenshots preserve the Playwright layout inside a circular mask with transparent corners
 - rectangular screenshots are centered with equal left/right margins, preserve the visible rounded display edge, and keep rounded screen corners
 - \`assets/language-preview/*.png\`: preview image draft for each language
 - \`listing/*.md\`: app details for ${locales.map((locale) => `\`${locale}\``).join(', ')}

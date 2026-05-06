@@ -11,9 +11,9 @@
 
 ## Package
 
-- Application package: `artifacts/Parallax_Pilot-2.3.18-release.zab`
-- Current app manifest version: `2.3.18`
-- Current app manifest version code: `69`
+- Application package: `artifacts/Parallax_Pilot-2.3.20-release.zab`
+- Current app manifest version: `2.3.20`
+- Current app manifest version code: `71`
 - Supporting devices: auto-filled by Zepp Console after ZAB upload
 - Current target device set in `app.json`:
   - `Amazfit Falcon`
@@ -57,7 +57,7 @@
 - `pl-PL` square: `10` screenshots in `assets/screenshots/pl-PL/square/`
 - Full map: `assets/screenshots/manifest.json`
 - Format prepared: `360x360 PNG` with transparent background
-- Round export: no margins
+- Round export: preserves the captured Playwright layout inside a circular mask with transparent corners
 - Rectangular export: equal left/right margins, rounded screen corners, and source border visible along the curved screen edge
 
 ## Store Icon

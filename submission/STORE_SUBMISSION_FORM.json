@@ -5,9 +5,9 @@
   "serviceCategory": "Normal",
   "appClassification": "Game",
   "countryOrRegion": "TODO_CONFIRM_IN_CONSOLE",
-  "applicationPackage": "artifacts/Parallax_Pilot-2.3.18-release.zab",
-  "versionName": "2.3.18",
-  "versionCode": 69,
+  "applicationPackage": "artifacts/Parallax_Pilot-2.3.20-release.zab",
+  "versionName": "2.3.20",
+  "versionCode": 71,
   "supportedDevices": [
     "Amazfit Falcon",
     "Amazfit Cheetah (Round)",
