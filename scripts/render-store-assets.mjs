@@ -15,6 +15,7 @@ const squareSourceWidth = 390
 const squareSourceHeight = 450
 const squarePreviewWidth = Math.round((targetSize * squareSourceWidth) / squareSourceHeight)
 const squarePreviewOffsetX = Math.round((targetSize - squarePreviewWidth) / 2)
+const squarePreviewCornerRadius = Math.round(targetSize * 0.085)
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8').replace(/^\uFEFF/, ''))
@@ -49,16 +50,25 @@ async function renderSquarePreview(page, sourcePath, destinationPath) {
         background: transparent;
       }
 
-      #frame img {
+      #screen {
         position: absolute;
         inset: 0 auto 0 ${squarePreviewOffsetX}px;
         width: ${squarePreviewWidth}px;
         height: ${targetSize}px;
+        border-radius: ${squarePreviewCornerRadius}px;
+        overflow: hidden;
+      }
+
+      #screen img {
+        width: 100%;
+        height: 100%;
         display: block;
       }
     </style>
     <div id="frame">
-      <img src="${dataUrl}" alt="store preview" />
+      <div id="screen">
+        <img src="${dataUrl}" alt="store preview" />
+      </div>
     </div>
   `)
 

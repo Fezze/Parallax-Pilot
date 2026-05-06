@@ -11,9 +11,9 @@
 
 ## Package
 
-- Application package: `artifacts/Parallax_Pilot-2.3.13-release.zab`
-- Current app manifest version: `2.3.13`
-- Current app manifest version code: `64`
+- Application package: `artifacts/Parallax_Pilot-2.3.18-release.zab`
+- Current app manifest version: `2.3.18`
+- Current app manifest version code: `69`
 - Supporting devices: auto-filled by Zepp Console after ZAB upload
 - Current target device set in `app.json`:
   - `Amazfit Falcon`

@@ -1,6 +1,6 @@
 # Parallax Pilot Store Submission Pack
 
-This folder contains the prepared materials for Zepp Console submission of `Parallax Pilot` `2.3.13`.
+This folder contains the prepared materials for Zepp Console submission of `Parallax Pilot` `2.3.18`.
 
 Current release scope:
 
@@ -13,7 +13,7 @@ Current release scope:
 
 - `STORE_SUBMISSION_FORM.md`: copy-ready submission draft
 - `STORE_SUBMISSION_FORM.json`: structured form draft
-- `artifacts/Parallax_Pilot-2.3.13-release.zab`: upload this package in Zepp Console
+- `artifacts/Parallax_Pilot-2.3.18-release.zab`: upload this package in Zepp Console
 - `assets/icon/store-icon-240.png`: store icon
 - `assets/screenshots/manifest.json`: locale-to-screenshot map generated from `zepp-app/app.json`
 - `assets/screenshots/<locale>/<shape>/*.png`: screenshot sets grouped by language and shape, `10` per shape for each locale, exported as `360x360 PNG`
