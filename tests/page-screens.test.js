@@ -429,6 +429,10 @@ test('results screen keeps nav buttons separate from back/play on round screens'
   assert.equal(nextButton.props.y, 360)
   assert.equal(backButton.props.y, 422)
   assert.equal(playButton.props.y, 422)
+  assert.equal(backButton.props.x, 87)
+  assert.equal(backButton.props.w, 153)
+  assert.equal(playButton.props.x, 240)
+  assert.equal(playButton.props.w, 153)
 
   nextButton.props.click_func()
 
@@ -498,6 +502,10 @@ test('results round page-last layout matches the real scoreboard spacing', async
   assert.equal(prevButton.props.y, 360)
   assert.equal(backButton.props.y, 422)
   assert.equal(playButton.props.y, 422)
+  assert.equal(backButton.props.x, 87)
+  assert.equal(backButton.props.w, 153)
+  assert.equal(playButton.props.x, 240)
+  assert.equal(playButton.props.w, 153)
   assert.equal(hasExactButtonText('NEXT'), false)
 })
 
@@ -606,6 +614,10 @@ test('results small round pagination keeps page label and actions above the lowe
   assert.equal(prevButton.props.y, 296)
   assert.equal(backButton.props.y, 352)
   assert.equal(playButton.props.y, 352)
+  assert.equal(backButton.props.x, 75)
+  assert.equal(backButton.props.w, 133)
+  assert.equal(playButton.props.x, 208)
+  assert.equal(playButton.props.w, 133)
 })
 
 test('results small round middle page keeps both prev and next above the footer on three pages', async () => {

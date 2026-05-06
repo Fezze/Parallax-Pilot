@@ -79,8 +79,8 @@ Page({
     const pad = Math.round(width * (isRound ? 0.11 : 0.07))
     const roundActionPad = Math.round(width * 0.07)
     const roundActionInset = isRound ? Math.max(12, Math.round(width * (isCompactRound ? 0.05 : 0.04))) : 0
+    const roundFooterActionInset = isRound ? Math.max(roundActionInset, Math.round(width * 0.11)) : 0
     const roundActionPairWidth = isRound ? width - roundActionPad * 2 - roundActionInset * 2 : 0
-    const roundActionHalfWidth = isRound ? Math.floor(roundActionPairWidth / 2) : 0
     const fullWidth = width - pad * 2
     const isEmptyState = items.length === 0
     const isRoundScoreboard = isRound && !lastSession
@@ -254,7 +254,7 @@ Page({
       width,
       y: actionRowY,
       safePad: isRound ? roundActionPad : Math.round(width * 0.16),
-      roundInset: roundActionInset,
+      roundInset: roundFooterActionInset,
       gap: isRound ? 0 : 10,
       buttons: [
         {

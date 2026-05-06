@@ -1,6 +1,6 @@
 {
   "name": "parallax-pilot-workspace",
-  "version": "2.3.13",
+  "version": "2.3.15",
   "private": true,
   "type": "module",
   "scripts": {
