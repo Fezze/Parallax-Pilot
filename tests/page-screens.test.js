@@ -637,6 +637,54 @@ test('results square middle pagination matches footer button widths', async () =
   assert.equal(playButton.props.w, 128)
 })
 
+test('results round middle pagination matches footer button sizes', async () => {
+  resetEnv()
+  __setDeviceInfo({
+    width: 466,
+    height: 466,
+    screenShape: SCREEN_SHAPE_ROUND,
+  })
+  __seedLocalStorage({
+    scores_v1: JSON.stringify(
+      Array.from({ length: 15 }, (_, index) => ({
+        id: `run-${index}`,
+        timestamp: 100 - index,
+        score: 7000 - index * 123,
+        survivedMs: 6000 + index * 210,
+      }))
+    ),
+  })
+
+  const page = await loadPageDefinition('../zepp-app/page/results/index.js')
+  page.onInit(JSON.stringify({ pageIndex: 1 }))
+  page.build()
+
+  const prevButton = findButton('PREVIOUS')
+  const nextButton = findButton('NEXT')
+  const backButton = findButton('BACK')
+  const playButton = findButton('PLAY')
+  const pageLabel = findText('2 / 3')
+
+  assert.ok(pageLabel)
+  assert.equal(pageLabel.props.y, 314)
+  assert.equal(prevButton.props.y, 338)
+  assert.equal(nextButton.props.y, 338)
+  assert.equal(backButton.props.y, 408)
+  assert.equal(playButton.props.y, 408)
+  assert.equal(prevButton.props.x, 84)
+  assert.equal(prevButton.props.w, 149)
+  assert.equal(prevButton.props.h, 58)
+  assert.equal(nextButton.props.x, 233)
+  assert.equal(nextButton.props.w, 149)
+  assert.equal(nextButton.props.h, 58)
+  assert.equal(backButton.props.x, 84)
+  assert.equal(backButton.props.w, 149)
+  assert.equal(backButton.props.h, 58)
+  assert.equal(playButton.props.x, 233)
+  assert.equal(playButton.props.w, 149)
+  assert.equal(playButton.props.h, 58)
+})
+
 test('results small round pagination keeps page label and actions above the lower cutout', async () => {
   resetEnv()
   __setDeviceInfo({
@@ -709,19 +757,23 @@ test('results small round middle page keeps both prev and next above the footer 
   assert.ok(prevButton)
   assert.ok(nextButton)
   assert.ok(pageLabel)
-  assert.equal(pageLabel.props.y, 274)
-  assert.equal(prevButton.props.y, 296)
-  assert.equal(nextButton.props.y, 296)
+  assert.equal(pageLabel.props.y, 270)
+  assert.equal(prevButton.props.y, 290)
+  assert.equal(nextButton.props.y, 290)
   assert.equal(backButton.props.y, 352)
   assert.equal(playButton.props.y, 352)
   assert.equal(prevButton.props.x, 75)
   assert.equal(prevButton.props.w, 133)
+  assert.equal(prevButton.props.h, 52)
   assert.equal(nextButton.props.x, 208)
   assert.equal(nextButton.props.w, 133)
+  assert.equal(nextButton.props.h, 52)
   assert.equal(backButton.props.x, 75)
   assert.equal(backButton.props.w, 133)
+  assert.equal(backButton.props.h, 52)
   assert.equal(playButton.props.x, 208)
   assert.equal(playButton.props.w, 133)
+  assert.equal(playButton.props.h, 52)
 })
 
 test('tilt calibration logs small round layout keeps debug rows above the footer', async () => {

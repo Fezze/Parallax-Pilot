@@ -144,8 +144,11 @@ Page({
           : isEmptyState
             ? 396
             : height - 66
+    const navButtonH = isRound
+      ? (navButtons.length === 2 ? roundActionButtonH : roundNavButtonH)
+      : 44
     const navRowY = isRound
-      ? actionRowY - roundRowGap - roundNavButtonH
+      ? actionRowY - roundRowGap - navButtonH
       : isSquareScoreboard
         ? actionRowY - 52
         : height - 110
@@ -248,7 +251,7 @@ Page({
           ...button,
           textSize: isRound ? (isSmallRound ? 18 : 20) : 18,
           textWidth: isRound ? undefined : Math.round(width * 0.56),
-          h: isRound ? roundNavButtonH : 42,
+          h: navButtonH,
         })),
       })
     }
