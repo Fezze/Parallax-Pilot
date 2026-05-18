@@ -1,0 +1,80 @@
+package com.parallaxpilot.leaderboard.service;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+
+import org.springframework.stereotype.Service;
+
+import com.parallaxpilot.leaderboard.api.dto.SubmitScoreRequest;
+import com.parallaxpilot.leaderboard.config.LeaderboardProperties;
+import com.parallaxpilot.leaderboard.domain.RiskSignals;
+import com.parallaxpilot.leaderboard.domain.RiskSignalRecord;
+import com.parallaxpilot.leaderboard.repository.RiskSignalRepository;
+import com.parallaxpilot.leaderboard.repository.LeaderboardTables;
+import com.parallaxpilot.leaderboard.repository.RateLimitRepository;
+
+@Service
+public class AntiAbuseService {
+
+    private final RateLimitRepository rateLimitRepository;
+    private final RiskSignalRepository riskSignalRepository;
+    private final LeaderboardProperties properties;
+    private final Clock clock;
+
+    public AntiAbuseService(
+        RateLimitRepository rateLimitRepository,
+        RiskSignalRepository riskSignalRepository,
+        LeaderboardProperties properties,
+        Clock clock
+    ) {
+        this.rateLimitRepository = rateLimitRepository;
+        this.riskSignalRepository = riskSignalRepository;
+        this.properties = properties;
+        this.clock = clock;
+    }
+
+    public Assessment assess(SubmitScoreRequest request) {
+        var reasons = new ArrayList<String>();
+        var now = clock.instant();
+        var currentWindowCount = rateLimitRepository.incrementPlayerWindow(request.playerId(), now);
+
+        if (currentWindowCount > properties.rateLimitPerMinute()) {
+            reasons.add(RiskSignals.RATE_LIMIT);
+        }
+        if (request.score() > properties.quarantineScoreThreshold()) {
+            reasons.add(RiskSignals.SCORE_OUTLIER);
+        }
+        if (request.survivedMs() > properties.quarantineSurvivedMs()) {
+            reasons.add(RiskSignals.SURVIVAL_OUTLIER);
+        }
+
+        var quarantined = !reasons.isEmpty();
+        persistSignals(request.submissionId(), request.playerId(), reasons, quarantined, now);
+        return new Assessment(quarantined, List.copyOf(reasons));
+    }
+
+    private void persistSignals(
+        String submissionId,
+        String playerId,
+        List<String> reasons,
+        boolean quarantined,
+        Instant createdAt
+    ) {
+        for (var reason : reasons) {
+            var signal = new RiskSignalRecord(
+                submissionId,
+                playerId,
+                reason,
+                quarantined ? RiskSignals.SEVERITY_HIGH : RiskSignals.SEVERITY_MEDIUM,
+                quarantined,
+                createdAt
+            );
+            riskSignalRepository.put(signal);
+        }
+    }
+
+    public record Assessment(boolean quarantined, List<String> reasons) {
+    }
+}

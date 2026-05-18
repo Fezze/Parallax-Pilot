@@ -1,0 +1,27 @@
+environment = "staging"
+table_prefix = "pp_staging_"
+projection_queue_name = "pp-staging-score-submissions"
+snapshot_bucket_name = "pp-staging-leaderboard-snapshots"
+
+api_desired_count = 2
+api_min_capacity = 2
+api_max_capacity = 4
+api_cpu_target = 55
+
+projection_worker_desired_count = 1
+projection_worker_min_capacity = 1
+projection_worker_max_capacity = 3
+projection_worker_cpu_target = 60
+
+api_environment_variables = {
+  MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE = "health,info,metrics"
+}
+
+api_secret_environment = {
+  # APP_LEADERBOARD_DYNAMODB_ENDPOINT = "arn:aws:ssm:eu-west-2:123456789012:parameter/parallax-pilot/staging/api/dynamodb-endpoint"
+  # PARALLAX_ADMIN_TOKEN = "arn:aws:ssm:eu-west-2:123456789012:parameter/parallax-pilot/staging/api/admin-token"
+}
+
+projection_worker_secret_environment = {
+  # APP_LEADERBOARD_SQS_ENDPOINT = "arn:aws:ssm:eu-west-2:123456789012:parameter/parallax-pilot/staging/worker/sqs-endpoint"
+}

@@ -44,7 +44,12 @@ export function parseCliArgs(argv) {
       continue
     }
     if (token === '--bridge-port') {
-      options.bridgePort = Number.parseInt(args.shift(), 10)
+      const bridgePortValue = args.shift()
+      const bridgePort = Number(bridgePortValue)
+      if (!bridgePortValue || !Number.isInteger(bridgePort) || bridgePort < 1 || bridgePort > 65535) {
+        throw new Error('--bridge-port requires an integer between 1 and 65535.')
+      }
+      options.bridgePort = bridgePort
       continue
     }
     if (token === '--output-dir') {
@@ -101,6 +106,13 @@ export function chooseScreenshotDriver(env, exists = commandExists) {
     return 'grim'
   }
   throw new Error('No supported screenshot driver found. Install scrot, gnome-screenshot, or grim.')
+}
+
+export function chooseFocusDriver(env, exists = commandExists) {
+  if (exists('xdotool')) {
+    return 'xdotool'
+  }
+  throw new Error('Scenario uses a focus step, but xdotool is not available. Install xdotool or remove the focus step.')
 }
 
 export function resolveLocalBin(repoRoot, binaryName) {
@@ -230,11 +242,22 @@ export async function probePort(host, port, timeoutMs = 1000) {
   })
 }
 
-export function inspectSimulatorLibraries(simulatorPath, runner = spawnSync) {
-  if (!fs.existsSync(simulatorPath)) {
+export function inspectSimulatorLibraries(simulatorPath, runner = spawnSync, platform = process.platform) {
+  if (platform !== 'linux' || !fs.existsSync(simulatorPath)) {
     return []
   }
-  const result = runner('ldd', [simulatorPath], { stdio: 'pipe', encoding: 'utf8' })
+  let result
+  try {
+    result = runner('ldd', [simulatorPath], { stdio: 'pipe', encoding: 'utf8' })
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      return []
+    }
+    throw error
+  }
+  if (result.error?.code === 'ENOENT') {
+    return []
+  }
   if (result.status !== 0 || typeof result.stdout !== 'string') {
     return []
   }
@@ -424,8 +447,29 @@ export function pressKey(runtime, driver, key) {
   performInputAction(runtime, driver, ['key', keyCode, keyCode.replace(':1', ':0')])
 }
 
-export function focusWindow(runtime, titlePattern) {
-  runtime.runLogged('xdotool', ['search', '--name', titlePattern, 'windowactivate'])
+export function focusWindow(runtime, driver, titlePattern) {
+  runtime.runLogged(driver, ['search', '--name', titlePattern, 'windowactivate'])
+}
+
+function requireInputDriver(driver, action) {
+  if (!driver) {
+    throw new Error(`Scenario action "${action}" requires an input driver. Add "input" to scenario.requires or run with --dry-run.`)
+  }
+  return driver
+}
+
+function requireScreenshotDriver(driver, action) {
+  if (!driver) {
+    throw new Error(`Scenario action "${action}" requires a screenshot driver. Add "screenshot" to scenario.requires or run with --dry-run.`)
+  }
+  return driver
+}
+
+function requireFocusDriver(driver) {
+  if (!driver) {
+    throw new Error('Scenario action "focus" requires xdotool. Install xdotool or remove the focus step.')
+  }
+  return driver
 }
 
 export function saveScreenshot(runtime, driver, calibration, outputFile) {
@@ -444,11 +488,16 @@ export function saveScreenshot(runtime, driver, calibration, outputFile) {
 export async function executeScenario(runtime, options) {
   const { scenario } = loadScenario(runtime.repoRoot, options.scenarioPath)
   const { calibration } = loadCalibration(runtime.repoRoot, options.calibrationPath)
+  const commandAvailable = (name) => commandExists(name, runtime.runSync)
+  const usesFocus = scenario.steps.some((step) => step.action === 'focus')
   const inputDriver = !options.dryRun && scenario.requires?.includes('input')
-    ? chooseInputDriver(runtime.env)
+    ? chooseInputDriver(runtime.env, commandAvailable)
     : undefined
   const screenshotDriver = !options.dryRun && scenario.requires?.includes('screenshot')
-    ? chooseScreenshotDriver(runtime.env)
+    ? chooseScreenshotDriver(runtime.env, commandAvailable)
+    : undefined
+  const focusDriver = !options.dryRun && usesFocus
+    ? chooseFocusDriver(runtime.env, commandAvailable)
     : undefined
   const outputDir = options.outputDir
     ? path.resolve(runtime.repoRoot, options.outputDir)
@@ -472,28 +521,28 @@ export async function executeScenario(runtime, options) {
     }
 
     if (step.action === 'focus') {
-      focusWindow(runtime, step.title ?? calibration.deviceWindowTitle)
+      focusWindow(runtime, requireFocusDriver(focusDriver), step.title ?? calibration.deviceWindowTitle)
       continue
     }
 
     if (step.action === 'key') {
-      pressKey(runtime, inputDriver, step.key)
+      pressKey(runtime, requireInputDriver(inputDriver, step.action), step.key)
       continue
     }
 
     if (step.action === 'tap') {
-      tap(runtime, inputDriver, resolveTargetPoint(calibration, step.target))
+      tap(runtime, requireInputDriver(inputDriver, step.action), resolveTargetPoint(calibration, step.target))
       continue
     }
 
     if (step.action === 'swipe') {
-      swipe(runtime, inputDriver, resolveTargetPoint(calibration, step.target), step)
+      swipe(runtime, requireInputDriver(inputDriver, step.action), resolveTargetPoint(calibration, step.target), step)
       continue
     }
 
     if (step.action === 'screenshot') {
       const outputFile = path.join(outputDir, `${step.name}.png`)
-      saveScreenshot(runtime, screenshotDriver, calibration, outputFile)
+      saveScreenshot(runtime, requireScreenshotDriver(screenshotDriver, step.action), calibration, outputFile)
       runtime.log(`saved:${outputFile}`)
       continue
     }

@@ -1,15 +1,18 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import {
+  chooseFocusDriver,
   chooseInputDriver,
   chooseScreenshotDriver,
   cleanSimulatorEnv,
   createRuntime,
   executeScenario,
+  inspectSimulatorLibraries,
   parseCliArgs,
   resolveTargetPoint,
   validateCalibration,
@@ -51,6 +54,14 @@ describe('Simulator Harness', () => {
     assert.equal(driver, 'ydotool')
   })
 
+  test('requires xdotool for focus actions', () => {
+    assert.equal(chooseFocusDriver({}, (name) => name === 'xdotool'), 'xdotool')
+    assert.throws(
+      () => chooseFocusDriver({}, () => false),
+      /focus step, but xdotool is not available/
+    )
+  })
+
   test('prefers grim screenshots on Wayland', () => {
     const driver = chooseScreenshotDriver({ WAYLAND_DISPLAY: 'wayland-1' }, (name) => name === 'grim')
     assert.equal(driver, 'grim')
@@ -75,6 +86,26 @@ describe('Simulator Harness', () => {
     assert.equal(parsed.options.scenarioPath, '.test/simulator/scenarios/gameplay-smoke.json')
   })
 
+  test('validates bridge port CLI argument', () => {
+    const parsed = parseCliArgs(['doctor', '--bridge-port', '7651'])
+    assert.equal(parsed.options.bridgePort, 7651)
+    assert.throws(() => parseCliArgs(['doctor', '--bridge-port']), /--bridge-port requires an integer/)
+    assert.throws(() => parseCliArgs(['doctor', '--bridge-port', 'not-a-port']), /--bridge-port requires an integer/)
+  })
+
+  test('skips simulator library inspection when ldd is unavailable', () => {
+    const error = Object.assign(new Error('not found'), { code: 'ENOENT' })
+    assert.deepEqual(inspectSimulatorLibraries('/missing/simulator', () => {
+      throw new Error('ldd should not run for missing simulator')
+    }), [])
+    assert.deepEqual(inspectSimulatorLibraries(process.execPath, () => {
+      throw error
+    }), [])
+    assert.deepEqual(inspectSimulatorLibraries(process.execPath, () => {
+      throw new Error('ldd should not run outside linux')
+    }, 'darwin'), [])
+  })
+
   test('dry-run scenario does not require real simulator binaries', async () => {
     const lines = []
     const runtime = createRuntime({
@@ -96,5 +127,33 @@ describe('Simulator Harness', () => {
     assert.equal(result.scenarioId, 'gameplay-smoke')
     assert(lines.some((line) => line.includes('dry-run:{"action":"launch"}')))
     assert(lines.some((line) => line.includes('dry-run:{"action":"screenshot","name":"round-board"}')))
+  })
+
+  test('reports a targeted error when an input action lacks an input requirement', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'simulator-harness-'))
+    const scenarioPath = path.join(tmpDir, 'missing-input-requirement.json')
+    fs.writeFileSync(scenarioPath, JSON.stringify({
+      id: 'missing-input-requirement',
+      steps: [{ action: 'key', key: 'Home' }],
+    }), 'utf8')
+
+    const runtime = createRuntime({
+      repoRoot,
+      stdout: { write: () => {} },
+      stderr: { write: () => {} },
+      syncRunner: () => ({ status: 0, stdout: '' }),
+      asyncRunner: () => ({ unref() {} }),
+    })
+
+    await assert.rejects(
+      executeScenario(runtime, {
+        dryRun: false,
+        scenarioPath,
+        simulatorPath: '/missing/simulator',
+        bridgeHost: '127.0.0.1',
+        bridgePort: 7650,
+      }),
+      /Scenario action "key" requires an input driver/
+    )
   })
 })

@@ -7,14 +7,26 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, '..')
 const zeppAppDir = path.join(repoRoot, 'zepp-app')
 const command = process.argv[2]
-const forwardedArgs = process.argv.slice(3).filter((arg) => arg !== '--dry-run' && arg !== '--no-version-bump')
+const proxyFlags = new Set(['--dry-run', '--no-version-bump', '--bump-version'])
+const forwardedArgs = process.argv.slice(3).filter((arg) => !proxyFlags.has(arg))
 const dryRun = process.argv.includes('--dry-run')
 const noVersionBump = process.argv.includes('--no-version-bump')
-const shouldBumpVersion = command !== 'preview' && command !== 'bridge' && !noVersionBump
+const shouldBumpVersion = process.argv.includes('--bump-version') && !noVersionBump
 
 if (!['dev', 'preview', 'build', 'bridge'].includes(command)) {
-  console.error('Usage: node scripts/zeus-proxy.mjs <dev|preview|build|bridge> [--dry-run] [--no-version-bump]')
+  console.error('Usage: node scripts/zeus-proxy.mjs <dev|preview|build|bridge> [--dry-run] [--bump-version] [--no-version-bump] [...zeus args]')
   process.exit(1)
+}
+
+function quoteWindowsCmdArg(value) {
+  const text = String(value)
+  if (text.length === 0) {
+    return '""'
+  }
+
+  return `"${text
+    .replace(/(\\*)"/g, '$1$1\\"')
+    .replace(/(\\+)$/g, '$1$1')}"`
 }
 
 if (shouldBumpVersion) {
@@ -33,18 +45,20 @@ if (shouldBumpVersion) {
 }
 
 if (dryRun) {
-  console.log(`Dry run: zeus ${command} ${forwardedArgs.join(' ')}`.trim())
+  const argsText = [command, ...forwardedArgs].join(' ')
+  console.log(`Dry run: zeus ${argsText}${shouldBumpVersion ? ' with version bump' : ''}`.trim())
   process.exit(0)
 }
 
 const localZeus = path.join(repoRoot, 'node_modules', '.bin', process.platform === 'win32' ? 'zeus.cmd' : 'zeus')
 const zeusCommand = fs.existsSync(localZeus) ? localZeus : 'zeus'
+const zeusArgs = [command, ...forwardedArgs]
 const zeusRun = process.platform === 'win32'
-  ? spawnSync('cmd', ['/d', '/s', '/c', `"${zeusCommand}" ${command}`], {
+  ? spawnSync('cmd', ['/d', '/s', '/c', [quoteWindowsCmdArg(zeusCommand), ...zeusArgs.map(quoteWindowsCmdArg)].join(' ')], {
     cwd: zeppAppDir,
     stdio: 'inherit',
   })
-  : spawnSync(zeusCommand, [command, ...forwardedArgs], {
+  : spawnSync(zeusCommand, zeusArgs, {
     cwd: zeppAppDir,
     stdio: 'inherit',
   })

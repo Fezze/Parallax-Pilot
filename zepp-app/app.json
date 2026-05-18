@@ -6,7 +6,7 @@
     "appType": "app",
     "version": {
       "code": 71,
-      "name": "2.3.20"
+      "name": "2.4.5"
     },
     "icon": "icon.png",
     "vender": "Fezze",
@@ -36,6 +36,12 @@
             "page/tilt-calibration/index",
             "page/tilt-calibration-logs/index"
           ]
+        },
+        "app-side": {
+          "path": "app-side/index"
+        },
+        "setting": {
+          "path": "setting/index"
         }
       },
       "platforms": [
@@ -61,6 +67,12 @@
             "page/tilt-calibration/index",
             "page/tilt-calibration-logs/index"
           ]
+        },
+        "app-side": {
+          "path": "app-side/index"
+        },
+        "setting": {
+          "path": "setting/index"
         }
       },
       "platforms": [
@@ -94,6 +106,12 @@
             "page/tilt-calibration/index",
             "page/tilt-calibration-logs/index"
           ]
+        },
+        "app-side": {
+          "path": "app-side/index"
+        },
+        "setting": {
+          "path": "setting/index"
         }
       },
       "platforms": [
@@ -183,6 +201,12 @@
             "page/tilt-calibration/index",
             "page/tilt-calibration-logs/index"
           ]
+        },
+        "app-side": {
+          "path": "app-side/index"
+        },
+        "setting": {
+          "path": "setting/index"
         }
       },
       "platforms": [
@@ -264,6 +288,12 @@
             "page/tilt-calibration/index",
             "page/tilt-calibration-logs/index"
           ]
+        },
+        "app-side": {
+          "path": "app-side/index"
+        },
+        "setting": {
+          "path": "setting/index"
         }
       },
       "platforms": [

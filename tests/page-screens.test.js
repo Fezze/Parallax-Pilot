@@ -14,7 +14,7 @@ import {
   __resetUI,
 } from './mocks/zos/ui.mjs'
 import { __resetInteraction } from './mocks/zos/interaction.mjs'
-import { __resetSensors } from './mocks/zos/sensor.mjs'
+import { __getAccelerometers, __resetSensors } from './mocks/zos/sensor.mjs'
 import {
   __getLastBrightTime,
   __getResetCount,
@@ -23,6 +23,7 @@ import {
 import { __resetLanguage, __setLanguage } from './mocks/zos/settings.mjs'
 import {
   __readLocalStorage,
+  __readSessionStorage,
   __resetStorage,
   __seedLocalStorage,
   __seedSessionStorage,
@@ -1007,4 +1008,125 @@ test('game spawn catch-up is capped to avoid burst walls after a delayed frame',
     globalThis.setInterval = originalSetInterval
     globalThis.clearInterval = originalClearInterval
   }
+})
+
+test('game touch input moves the ship and releasing stops further movement', async () => {
+  resetEnv()
+  __seedLocalStorage({
+    settings_v1: JSON.stringify({
+      controlMode: 'touch',
+      wristSide: 'left',
+      timeScale: 1,
+      spawnMultiplier: 1,
+      tiltSensitivity: 1,
+    }),
+  })
+
+  const originalSetInterval = globalThis.setInterval
+  const originalClearInterval = globalThis.clearInterval
+  globalThis.setInterval = () => 1
+  globalThis.clearInterval = () => {}
+
+  try {
+    const page = await loadPageDefinition('../zepp-app/page/game/index.js')
+    page.onInit()
+    page.build()
+
+    const [canvas] = __getCanvasWidgets()
+    const initialCenterY = page.shipCenterY
+
+    canvas.__emit('CLICK_DOWN', { y: 420 })
+    page.lastFrameAt = Date.now() - 16
+    page.tick()
+
+    assert.ok(page.shipCenterY > initialCenterY)
+
+    const movedCenterY = page.shipCenterY
+    canvas.__emit('CLICK_UP')
+    page.lastFrameAt = Date.now() - 16
+    page.tick()
+
+    assert.equal(page.shipCenterY, movedCenterY)
+    page.onDestroy()
+  } finally {
+    globalThis.setInterval = originalSetInterval
+    globalThis.clearInterval = originalClearInterval
+  }
+})
+
+test('game tilt mode starts the accelerometer and uses sensor input during ticks', async () => {
+  resetEnv()
+  __seedLocalStorage({
+    settings_v1: JSON.stringify({
+      controlMode: 'tilt',
+      wristSide: 'left',
+      timeScale: 1,
+      spawnMultiplier: 1,
+      tiltSensitivity: 1,
+    }),
+  })
+
+  const originalSetInterval = globalThis.setInterval
+  const originalClearInterval = globalThis.clearInterval
+  globalThis.setInterval = () => 1
+  globalThis.clearInterval = () => {}
+
+  try {
+    const page = await loadPageDefinition('../zepp-app/page/game/index.js')
+    page.onInit()
+    page.build()
+
+    const [accelerometer] = __getAccelerometers()
+    assert.ok(accelerometer)
+    assert.equal(accelerometer.started, true)
+
+    const initialCenterY = page.shipCenterY
+    accelerometer.current = { y: 9 }
+    page.lastFrameAt = Date.now() - 16
+    page.tick()
+
+    assert.ok(page.shipCenterY > initialCenterY)
+    page.onDestroy()
+    assert.equal(accelerometer.started, false)
+  } finally {
+    globalThis.setInterval = originalSetInterval
+    globalThis.clearInterval = originalClearInterval
+  }
+})
+
+test('game finish run persists the session, score history, leaderboard queue and navigation', async () => {
+  resetEnv()
+  let flushCount = 0
+  globalThis.getApp = () => ({
+    _options: {
+      globalData: {
+        leaderboardBridge: {
+          flush() {
+            flushCount += 1
+          },
+        },
+      },
+    },
+  })
+
+  const page = await loadPageDefinition('../zepp-app/page/game/index.js')
+  page.onInit()
+  page.startedAt = 1_000
+  page.finishRun(5_000)
+
+  const lastSession = JSON.parse(__readSessionStorage('last_session_v1'))
+  const storedScores = JSON.parse(__readLocalStorage('scores_v1'))
+  const submitQueue = JSON.parse(__readLocalStorage('leaderboard_submit_queue'))
+
+  assert.equal(page.finished, true)
+  assert.equal(lastSession.survivedMs, 4000)
+  assert.equal(storedScores.length, 1)
+  assert.equal(storedScores[0].survivedMs, 4000)
+  assert.equal(submitQueue.length, 1)
+  assert.match(submitQueue[0].playerId, /^pilot-[a-f0-9]{8}$/)
+  assert.match(submitQueue[0].submissionId, /^watch-pilot-[a-f0-9]{8}-/)
+  assert.equal(flushCount, 1)
+  assert.deepEqual(__getRouterCalls(), [
+    { type: 'replace', payload: { url: 'page/results/index' } },
+  ])
 })

@@ -28,6 +28,19 @@ import {
   writeJson,
   writeScores,
 } from '../zepp-app/shared/persistence.js'
+import {
+  buildScoreSubmission,
+  decodeLeaderboardMessage,
+  encodeLeaderboardMessage,
+  queueScoreSubmission,
+  readLeaderboardSubmitConfig,
+  readSubmitQueue,
+  removeSubmittedScore,
+} from '../zepp-app/shared/leaderboard-submit.js'
+import {
+  ensureLeaderboardIdentity,
+  readLeaderboardIdentity,
+} from '../zepp-app/shared/leaderboard-identity.js'
 import { parseRouteParams } from '../zepp-app/shared/params.js'
 import {
   buildScoreRow,
@@ -58,6 +71,9 @@ function createMemoryStorage(initialValues = {}) {
     },
     setItem(key, value) {
       map.set(key, value)
+    },
+    removeItem(key) {
+      map.delete(key)
     },
   }
 }
@@ -124,6 +140,58 @@ test('settings and scores sanitize invalid values before persistence', () => {
     survivedMs: 10,
   })
   assert.equal(scores.length, 1)
+})
+
+test('leaderboard submit queue dedupes, trims and serializes messages', () => {
+  const storage = createMemoryStorage()
+  const scoreEntry = {
+    id: 'run-1',
+    timestamp: Date.parse('2026-04-09T12:00:00Z'),
+    score: 1200,
+    survivedMs: 15000,
+  }
+  const submission = buildScoreSubmission({
+    scoreEntry,
+    playerId: 'player-1',
+    nickname: 'Pilot',
+    clientVersion: '2.4.5',
+    deviceModel: 'balance-2',
+  })
+
+  assert.equal(submission.submissionId, 'watch-player-1-run-1')
+  queueScoreSubmission(storage, submission)
+  queueScoreSubmission(storage, submission)
+  assert.equal(readSubmitQueue(storage).length, 1)
+
+  const decoded = decodeLeaderboardMessage(encodeLeaderboardMessage({
+    type: 'leaderboard.submit-score',
+    submission,
+  }))
+  assert.equal(decoded.submission.submissionId, submission.submissionId)
+
+  removeSubmittedScore(storage, submission.submissionId)
+  assert.deepEqual(readSubmitQueue(storage), [])
+})
+
+test('leaderboard identity migrates demo defaults and remains stable once stored', () => {
+  const storage = createMemoryStorage({
+    leaderboard_player_id: 'demo-player',
+    leaderboard_player_nickname: 'Pilot',
+  })
+
+  const identity = ensureLeaderboardIdentity(storage, { seed: 'seed-a' })
+  assert.equal(identity.playerId, 'pilot-26726076')
+  assert.equal(identity.nickname, 'Pilot 6076')
+  assert.deepEqual(readLeaderboardIdentity(storage), identity)
+  assert.deepEqual(ensureLeaderboardIdentity(storage, { seed: 'seed-b' }), identity)
+})
+
+test('submit config always returns a non-demo leaderboard identity', () => {
+  const storage = createMemoryStorage()
+  const config = readLeaderboardSubmitConfig(storage)
+
+  assert.match(config.playerId, /^pilot-[a-f0-9]{8}$/)
+  assert.match(config.nickname, /^Pilot [A-F0-9]{4}$/)
 })
 
 test('view models format and clamp pagination predictably', () => {

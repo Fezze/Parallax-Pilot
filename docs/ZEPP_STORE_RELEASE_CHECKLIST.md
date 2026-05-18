@@ -1,5 +1,7 @@
 # Zepp Store Release Checklist
 
+Audience: AI agents only. Human-facing documentation belongs only in `README.md` files.
+
 Status na podstawie repo `Parallax Pilot` i oficjalnych docs Zepp.
 
 ## 1. Rejestracja i tożsamość aplikacji
@@ -12,9 +14,9 @@ Status na podstawie repo `Parallax Pilot` i oficjalnych docs Zepp.
 
 ## 2. Pakiet do submission
 
-- [x] Projekt buduje się do ZAB przez `npm run build`
+- [x] Projekt buduje się do ZAB przez `npm run build:app`
 - [x] `appId` w paczce zgadza się z `appId` w release
-- [x] Przed submission podbijane są `version.code` i `version.name`
+- [x] Przed submission podbijane są `version.code` i `version.name` przez `npm run build:app`
 - [x] Świeży ZAB jest budowany przed uploadem
 - [ ] Po uploadzie sprawdź w konsoli, czy wykryte supported devices zgadzają się z tym, co chcesz wspierać
 
@@ -73,7 +75,7 @@ Status na podstawie repo `Parallax Pilot` i oficjalnych docs Zepp.
 ## 8. QA przed submission
 
 - [x] `npm test`
-- [x] `npm run build`
+- [x] `npm run build:app`
 - [x] Browser preview screenshot matrix istnieje
 - [x] Smoke test na prawdziwym zegarku round był wykonany
 - [x] `ROTARY` nie idzie do release; tryb został usunięty z aktywnego flow

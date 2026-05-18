@@ -32,6 +32,12 @@ const appConfig = await loadAppConfig()
 const DEFAULT_APP_LOCALE = appConfig.defaultLanguage || DEFAULT_LOCALE
 const CONFIGURED_LOCALES = Object.keys(appConfig.i18n || {})
 const ACTIVE_LOCALES = CONFIGURED_LOCALES.length > 0 ? CONFIGURED_LOCALES : [DEFAULT_APP_LOCALE]
+const PHONE_DEVICE = {
+  width: 390,
+  height: 844,
+  screenShape: 'phone',
+  resolution: '390x844',
+}
 
 const ROUND_480_DEVICE = {
   width: 480,
@@ -211,6 +217,7 @@ function createScenarioBase({
   pageModule,
   deviceInfo,
   localStorage,
+  settingsStorage = {},
   sessionStorage = {},
   initParams,
   expectedTexts = [],
@@ -227,12 +234,62 @@ function createScenarioBase({
     deviceInfo,
     resolution: deviceInfo.resolution || `${deviceInfo.width}x${deviceInfo.height}`,
     localStorage,
+    settingsStorage,
     sessionStorage,
     initParams,
     expectedTexts,
     forbiddenTexts,
     afterBuild,
   }
+}
+
+function createPhoneLeaderboardScenario({
+  locale,
+  variant,
+  scope,
+  expectedTexts,
+}) {
+  return createScenarioBase({
+    locale,
+    pageName: 'phone-leaderboard',
+    shape: 'phone',
+    variant,
+    pageModule: '/zepp-app/setting/index.js',
+    deviceInfo: PHONE_DEVICE,
+    expectedTexts,
+    settingsStorage: {
+      leaderboard_active_scope: scope,
+      leaderboard_api_base_url: 'http://localhost:8080',
+      leaderboard_player_id: 'pilot-4fa21b7c',
+      leaderboard_player_nickname: 'Pilot 1B7C',
+      leaderboard_last_sync_at: '2026-04-09T12:00:00Z',
+      leaderboard_player_best_cache: JSON.stringify({
+        playerId: 'pilot-4fa21b7c',
+        bestScores: {
+          [scope]: {
+            score: 1420,
+            survivedMs: 18000,
+            playedAt: '2026-04-09T12:00:00Z',
+          },
+        },
+      }),
+      leaderboard_player_classification_cache: JSON.stringify({
+        playerId: 'pilot-4fa21b7c',
+        exactRank: scope === 'global' ? 4 : null,
+        approximateBand: scope === 'global' ? null : 'top-10%',
+        scope,
+      }),
+      [`leaderboard_${scope}_cache`]: JSON.stringify({
+        scope,
+        scopeKey: scope === 'global' ? 'global' : scope === 'daily' ? '2026-04-09' : '2026-Q2',
+        entries: [
+          { playerId: 'pilot-1', nickname: 'Nova', score: 1820, survivedMs: 21000, rank: 1 },
+          { playerId: 'pilot-2', nickname: 'Comet', score: 1710, survivedMs: 19600, rank: 2 },
+          { playerId: 'pilot-4fa21b7c', nickname: 'Pilot 1B7C', score: 1420, survivedMs: 18000, rank: 4 },
+        ],
+      }),
+    },
+  })
 }
 
 function createHomeScenario({
@@ -663,5 +720,25 @@ function scenariosForDevice(locale, deviceFamily) {
 }
 
 export const previewScenarios = Object.fromEntries(
-  ACTIVE_LOCALES.flatMap((locale) => DEVICE_FAMILIES.flatMap((deviceFamily) => scenariosForDevice(locale, deviceFamily)))
+  [
+    ...ACTIVE_LOCALES.flatMap((locale) => DEVICE_FAMILIES.flatMap((deviceFamily) => scenariosForDevice(locale, deviceFamily))),
+    [
+      'phone-leaderboard-global-en-US',
+      createPhoneLeaderboardScenario({
+        locale: 'en-US',
+        variant: 'global',
+        scope: 'global',
+        expectedTexts: ['Leaderboard', 'Refresh leaderboard', 'Alias: Pilot 1B7C', 'ID: pilot-4fa21b7c', 'New alias', 'Rank: 4 (Exact)', '01  Nova  1820'],
+      }),
+    ],
+    [
+      'phone-leaderboard-daily-pl-PL',
+      createPhoneLeaderboardScenario({
+        locale: 'pl-PL',
+        variant: 'daily',
+        scope: 'daily',
+        expectedTexts: ['Leaderboard', 'Odswiez leaderboard', 'Alias: Pilot 1B7C', 'ID: pilot-4fa21b7c', 'Nowy alias', 'Pozycja: top-10% (Przyblizona)', '01  Nova  1820'],
+      }),
+    ],
+  ]
 )

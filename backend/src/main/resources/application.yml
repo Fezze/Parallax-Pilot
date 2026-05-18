@@ -1,0 +1,66 @@
+spring:
+  application:
+    name: leaderboard-backend
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+app:
+  admin:
+    token: ${PARALLAX_ADMIN_TOKEN:}
+  api:
+    max-public-leaderboard-limit: 100
+  leaderboard:
+    table-prefix: pp_
+    exact-rank-threshold: 100
+    idempotency-ttl-days: 14
+    max-submission-age-days: 7
+    projection-queue-name: pp_score-submissions
+    projection-queue-metrics-enabled: true
+    projection-queue-metrics-refresh-ms: 30000
+    around-me-window: 2
+    rate-limit-per-minute: 20
+    quarantine-score-threshold: 100000
+    quarantine-survived-ms: 7200000
+    max-leaderboard-scan: 2000
+    consumer-fixed-delay-ms: 5000
+    rebuild-lock-ttl-minutes: 15
+    projection-consumer-enabled: false
+    snapshot-bucket-name: pp-leaderboard-snapshots
+
+aws:
+  region: eu-west-2
+  endpoint: ""
+
+---
+spring:
+  config:
+    activate:
+      on-profile: local
+
+aws:
+  region: eu-west-2
+  endpoint: http://localhost:4566
+
+---
+spring:
+  config:
+    activate:
+      on-profile: worker
+
+app:
+  leaderboard:
+    projection-consumer-enabled: true
+
+---
+spring:
+  config:
+    activate:
+      on-profile: test
+
+app:
+  admin:
+    token: test-admin-token
