@@ -79,8 +79,11 @@ Page({
     const pad = Math.round(width * (isRound ? 0.11 : 0.07))
     const roundActionPad = Math.round(width * 0.07)
     const roundActionInset = isRound ? Math.max(12, Math.round(width * (isCompactRound ? 0.05 : 0.04))) : 0
-    const roundActionPairWidth = isRound ? width - roundActionPad * 2 - roundActionInset * 2 : 0
-    const roundActionHalfWidth = isRound ? Math.floor(roundActionPairWidth / 2) : 0
+    const roundFooterActionInset = isRound ? Math.max(roundActionInset, Math.round(width * 0.11)) : 0
+    const actionSafePad = isRound ? roundActionPad : Math.round(width * 0.16)
+    const actionGap = isRound ? 0 : 10
+    const actionPairWidth = width - actionSafePad * 2 - (isRound ? roundFooterActionInset * 2 : 0)
+    const actionButtonWidth = Math.floor((actionPairWidth - actionGap) / 2)
     const fullWidth = width - pad * 2
     const isEmptyState = items.length === 0
     const isRoundScoreboard = isRound && !lastSession
@@ -135,14 +138,17 @@ Page({
     const actionRowY = isRound
       ? (isSmallRound ? height - roundActionButtonH - 12 : height - roundActionButtonH)
       : isSquare && !lastSession
-        ? height - 54
+        ? height - 62
         : isSquare
           ? height - 64
           : isEmptyState
             ? 396
             : height - 66
+    const navButtonH = isRound
+      ? (navButtons.length === 2 ? roundActionButtonH : roundNavButtonH)
+      : 44
     const navRowY = isRound
-      ? actionRowY - roundRowGap - roundNavButtonH
+      ? actionRowY - roundRowGap - navButtonH
       : isSquareScoreboard
         ? actionRowY - 52
         : height - 110
@@ -237,15 +243,15 @@ Page({
       createRowButtons({
         width,
         y: navRowY,
-        safePad: Math.round(width * (isRound ? 0.16 : 0.2)),
-        roundInset: isRound ? Math.max(10, Math.round(width * (isSmallRound ? 0.045 : 0.035))) : 0,
-        fixedButtonWidth: isRound && navButtons.length === 1 ? roundActionPairWidth : undefined,
-        gap: isRound && navButtons.length === 2 ? 0 : 10,
+        safePad: actionSafePad,
+        roundInset: isRound ? roundFooterActionInset : 0,
+        fixedButtonWidth: navButtons.length === 1 ? actionPairWidth : actionButtonWidth,
+        gap: actionGap,
         buttons: navButtons.map((button) => ({
           ...button,
           textSize: isRound ? (isSmallRound ? 18 : 20) : 18,
           textWidth: isRound ? undefined : Math.round(width * 0.56),
-          h: isRound ? roundNavButtonH : 42,
+          h: navButtonH,
         })),
       })
     }
@@ -253,9 +259,9 @@ Page({
     createRowButtons({
       width,
       y: actionRowY,
-      safePad: isRound ? roundActionPad : Math.round(width * 0.16),
-      roundInset: roundActionInset,
-      gap: isRound ? 0 : 10,
+      safePad: actionSafePad,
+      roundInset: roundFooterActionInset,
+      gap: actionGap,
       buttons: [
         {
           text: t('back'),

@@ -1,5 +1,37 @@
 const DEFAULT_LOCALE = 'en-US'
-const CONFIGURED_LOCALES = ['en-US', 'pl-PL']
+
+async function loadAppConfig() {
+  try {
+    if (typeof window !== 'undefined') {
+      const response = await fetch('/zepp-app/app.json')
+      if (!response.ok) {
+        throw new Error(`Failed to load app.json: ${response.status}`)
+      }
+      return await response.json()
+    }
+
+    const fs = await import('node:fs/promises')
+    const path = await import('node:path')
+    const { fileURLToPath } = await import('node:url')
+    const __dirname = path.dirname(fileURLToPath(import.meta.url))
+    const repoRoot = path.resolve(__dirname, '..', '..', '..')
+
+    return JSON.parse(await fs.readFile(path.join(repoRoot, 'zepp-app', 'app.json'), 'utf8'))
+  } catch {
+    return {
+      defaultLanguage: DEFAULT_LOCALE,
+      i18n: {
+        'en-US': {},
+        'pl-PL': {},
+      },
+    }
+  }
+}
+
+const appConfig = await loadAppConfig()
+const DEFAULT_APP_LOCALE = appConfig.defaultLanguage || DEFAULT_LOCALE
+const CONFIGURED_LOCALES = Object.keys(appConfig.i18n || {})
+const ACTIVE_LOCALES = CONFIGURED_LOCALES.length > 0 ? CONFIGURED_LOCALES : [DEFAULT_APP_LOCALE]
 const PHONE_DEVICE = {
   width: 390,
   height: 844,
@@ -142,7 +174,7 @@ const LOCALE_META = {
 }
 
 function localeMeta(locale) {
-  return LOCALE_META[locale] || LOCALE_META[DEFAULT_LOCALE] || LOCALE_META['en-US']
+  return LOCALE_META[locale] || LOCALE_META[DEFAULT_APP_LOCALE] || LOCALE_META[DEFAULT_LOCALE]
 }
 
 function t(locale, key, params = {}) {
@@ -689,7 +721,7 @@ function scenariosForDevice(locale, deviceFamily) {
 
 export const previewScenarios = Object.fromEntries(
   [
-    ...CONFIGURED_LOCALES.flatMap((locale) => DEVICE_FAMILIES.flatMap((deviceFamily) => scenariosForDevice(locale, deviceFamily))),
+    ...ACTIVE_LOCALES.flatMap((locale) => DEVICE_FAMILIES.flatMap((deviceFamily) => scenariosForDevice(locale, deviceFamily))),
     [
       'phone-leaderboard-global-en-US',
       createPhoneLeaderboardScenario({

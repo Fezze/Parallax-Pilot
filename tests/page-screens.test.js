@@ -430,6 +430,12 @@ test('results screen keeps nav buttons separate from back/play on round screens'
   assert.equal(nextButton.props.y, 360)
   assert.equal(backButton.props.y, 422)
   assert.equal(playButton.props.y, 422)
+  assert.equal(nextButton.props.x, 87)
+  assert.equal(nextButton.props.w, 306)
+  assert.equal(backButton.props.x, 87)
+  assert.equal(backButton.props.w, 153)
+  assert.equal(playButton.props.x, 240)
+  assert.equal(playButton.props.w, 153)
 
   nextButton.props.click_func()
 
@@ -499,6 +505,12 @@ test('results round page-last layout matches the real scoreboard spacing', async
   assert.equal(prevButton.props.y, 360)
   assert.equal(backButton.props.y, 422)
   assert.equal(playButton.props.y, 422)
+  assert.equal(prevButton.props.x, 87)
+  assert.equal(prevButton.props.w, 306)
+  assert.equal(backButton.props.x, 87)
+  assert.equal(backButton.props.w, 153)
+  assert.equal(playButton.props.x, 240)
+  assert.equal(playButton.props.w, 153)
   assert.equal(hasExactButtonText('NEXT'), false)
 })
 
@@ -533,6 +545,8 @@ test('results round first page keeps the page label below the last visible score
   assert.equal(lastVisibleRow.props.y, 264)
   assert.equal(pageLabel.props.y, 336)
   assert.equal(nextButton.props.y, 360)
+  assert.equal(nextButton.props.x, 87)
+  assert.equal(nextButton.props.w, 306)
 })
 
 test('results square pagination keeps the page label above nav and footer rows', async () => {
@@ -566,10 +580,110 @@ test('results square pagination keeps the page label above nav and footer rows',
   assert.ok(lastVisibleRow)
   assert.ok(pageLabel)
   assert.equal(lastVisibleRow.props.y, 248)
-  assert.equal(pageLabel.props.y, 320)
-  assert.equal(nextButton.props.y, 344)
-  assert.equal(backButton.props.y, 396)
-  assert.equal(playButton.props.y, 396)
+  assert.equal(pageLabel.props.y, 312)
+  assert.equal(nextButton.props.y, 336)
+  assert.equal(backButton.props.y, 388)
+  assert.equal(playButton.props.y, 388)
+  assert.equal(nextButton.props.x, 62)
+  assert.equal(nextButton.props.w, 266)
+  assert.equal(backButton.props.x, 62)
+  assert.equal(backButton.props.w, 128)
+  assert.equal(playButton.props.x, 200)
+  assert.equal(playButton.props.w, 128)
+  assert.equal(backButton.props.y + backButton.props.h <= 438, true)
+  assert.equal(playButton.props.y + playButton.props.h <= 438, true)
+})
+
+test('results square middle pagination matches footer button widths', async () => {
+  resetEnv()
+  __setDeviceInfo({
+    width: 390,
+    height: 450,
+    screenShape: 'square',
+  })
+  __seedLocalStorage({
+    scores_v1: JSON.stringify(
+      Array.from({ length: 15 }, (_, index) => ({
+        id: `run-${index}`,
+        timestamp: 100 - index,
+        score: 7000 - index * 123,
+        survivedMs: 6000 + index * 210,
+      }))
+    ),
+  })
+
+  const page = await loadPageDefinition('../zepp-app/page/results/index.js')
+  page.onInit(JSON.stringify({ pageIndex: 1 }))
+  page.build()
+
+  const prevButton = findButton('PREVIOUS')
+  const nextButton = findButton('NEXT')
+  const backButton = findButton('BACK')
+  const playButton = findButton('PLAY')
+  const pageLabel = findText('2 / 3')
+
+  assert.ok(pageLabel)
+  assert.equal(pageLabel.props.y, 312)
+  assert.equal(prevButton.props.y, 336)
+  assert.equal(nextButton.props.y, 336)
+  assert.equal(backButton.props.y, 388)
+  assert.equal(playButton.props.y, 388)
+  assert.equal(prevButton.props.x, 62)
+  assert.equal(prevButton.props.w, 128)
+  assert.equal(nextButton.props.x, 200)
+  assert.equal(nextButton.props.w, 128)
+  assert.equal(backButton.props.x, 62)
+  assert.equal(backButton.props.w, 128)
+  assert.equal(playButton.props.x, 200)
+  assert.equal(playButton.props.w, 128)
+})
+
+test('results round middle pagination matches footer button sizes', async () => {
+  resetEnv()
+  __setDeviceInfo({
+    width: 466,
+    height: 466,
+    screenShape: SCREEN_SHAPE_ROUND,
+  })
+  __seedLocalStorage({
+    scores_v1: JSON.stringify(
+      Array.from({ length: 15 }, (_, index) => ({
+        id: `run-${index}`,
+        timestamp: 100 - index,
+        score: 7000 - index * 123,
+        survivedMs: 6000 + index * 210,
+      }))
+    ),
+  })
+
+  const page = await loadPageDefinition('../zepp-app/page/results/index.js')
+  page.onInit(JSON.stringify({ pageIndex: 1 }))
+  page.build()
+
+  const prevButton = findButton('PREVIOUS')
+  const nextButton = findButton('NEXT')
+  const backButton = findButton('BACK')
+  const playButton = findButton('PLAY')
+  const pageLabel = findText('2 / 3')
+
+  assert.ok(pageLabel)
+  assert.equal(pageLabel.props.y, 314)
+  assert.equal(prevButton.props.y, 338)
+  assert.equal(nextButton.props.y, 338)
+  assert.equal(backButton.props.y, 408)
+  assert.equal(playButton.props.y, 408)
+  assert.equal(prevButton.props.x, 84)
+  assert.equal(prevButton.props.w, 149)
+  assert.equal(prevButton.props.h, 58)
+  assert.equal(nextButton.props.x, 233)
+  assert.equal(nextButton.props.w, 149)
+  assert.equal(nextButton.props.h, 58)
+  assert.equal(backButton.props.x, 84)
+  assert.equal(backButton.props.w, 149)
+  assert.equal(backButton.props.h, 58)
+  assert.equal(playButton.props.x, 233)
+  assert.equal(playButton.props.w, 149)
+  assert.equal(playButton.props.h, 58)
 })
 
 test('results small round pagination keeps page label and actions above the lower cutout', async () => {
@@ -605,6 +719,12 @@ test('results small round pagination keeps page label and actions above the lowe
   assert.equal(prevButton.props.y, 296)
   assert.equal(backButton.props.y, 352)
   assert.equal(playButton.props.y, 352)
+  assert.equal(prevButton.props.x, 75)
+  assert.equal(prevButton.props.w, 266)
+  assert.equal(backButton.props.x, 75)
+  assert.equal(backButton.props.w, 133)
+  assert.equal(playButton.props.x, 208)
+  assert.equal(playButton.props.w, 133)
 })
 
 test('results small round middle page keeps both prev and next above the footer on three pages', async () => {
@@ -638,11 +758,23 @@ test('results small round middle page keeps both prev and next above the footer 
   assert.ok(prevButton)
   assert.ok(nextButton)
   assert.ok(pageLabel)
-  assert.equal(pageLabel.props.y, 274)
-  assert.equal(prevButton.props.y, 296)
-  assert.equal(nextButton.props.y, 296)
+  assert.equal(pageLabel.props.y, 270)
+  assert.equal(prevButton.props.y, 290)
+  assert.equal(nextButton.props.y, 290)
   assert.equal(backButton.props.y, 352)
   assert.equal(playButton.props.y, 352)
+  assert.equal(prevButton.props.x, 75)
+  assert.equal(prevButton.props.w, 133)
+  assert.equal(prevButton.props.h, 52)
+  assert.equal(nextButton.props.x, 208)
+  assert.equal(nextButton.props.w, 133)
+  assert.equal(nextButton.props.h, 52)
+  assert.equal(backButton.props.x, 75)
+  assert.equal(backButton.props.w, 133)
+  assert.equal(backButton.props.h, 52)
+  assert.equal(playButton.props.x, 208)
+  assert.equal(playButton.props.w, 133)
+  assert.equal(playButton.props.h, 52)
 })
 
 test('tilt calibration logs small round layout keeps debug rows above the footer', async () => {
@@ -734,6 +866,56 @@ test('game screen renders without debug text widgets in the canvas HUD', async (
     assert.equal(__getLastBrightTime(), 600000)
     page.onDestroy()
     assert.equal(__getResetCount(), 1)
+  } finally {
+    globalThis.setInterval = originalSetInterval
+    globalThis.clearInterval = originalClearInterval
+  }
+})
+
+test('game square HUD uses rounded corner arc segments', async () => {
+  resetEnv()
+  __setDeviceInfo({
+    width: 390,
+    height: 450,
+    screenShape: 'square',
+    keyType: 'normal_21',
+    keyNumber: 2,
+  })
+  __seedLocalStorage({
+    settings_v1: JSON.stringify({
+      controlMode: 'tilt',
+      wristSide: 'left',
+      timeScale: 1,
+      spawnMultiplier: 1,
+      tiltSensitivity: 1,
+    }),
+  })
+
+  const originalSetInterval = globalThis.setInterval
+  const originalClearInterval = globalThis.clearInterval
+  globalThis.setInterval = () => 1
+  globalThis.clearInterval = () => {}
+
+  try {
+    const page = await loadPageDefinition('../zepp-app/page/game/index.js')
+    page.onInit()
+    page.build()
+
+    const [canvas] = __getCanvasWidgets()
+    const drawCalls = canvas.__getDrawCalls()
+    const hudArcCalls = drawCalls.filter((call) => call.method === 'strokeArc')
+    const fullWidthHudRects = drawCalls.filter((call) =>
+      call.method === 'drawRect' &&
+      call.args.y1 === 0 &&
+      call.args.y2 === 8 &&
+      call.args.x1 === 0 &&
+      call.args.x2 === 390
+    )
+
+    assert.ok(hudArcCalls.length >= 8)
+    assert.equal(fullWidthHudRects.length, 0)
+
+    page.onDestroy()
   } finally {
     globalThis.setInterval = originalSetInterval
     globalThis.clearInterval = originalClearInterval

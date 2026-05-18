@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+set -eu
+
+if git diff --cached --quiet -- package.json package-lock.json zepp-app/app.json; then
+  node scripts/version-proxy.mjs patch --stage
+fi

@@ -54,9 +54,23 @@ const SQUARE_SPAWN_INTERVAL_FACTOR = 0.84
 const GAME_BRIGHT_TIME_MS = 600000
 const MAX_SPAWNS_PER_TICK = 2
 const CONTROL_BASE_SPEED_FACTOR = 0.46
+const SQUARE_HUD_CORNER_RADIUS = 36
+const HUD_DISPLAY_HP_SPEED = 72
 
 function clampShipY(value, viewportHeight) {
   return clamp(value, SHIP_BOUNDARY, viewportHeight - SHIP_BOUNDARY)
+}
+
+function moveTowards(current, target, maxDelta) {
+  if (current === target) {
+    return current
+  }
+
+  if (Math.abs(target - current) <= maxDelta) {
+    return target
+  }
+
+  return current + Math.sign(target - current) * maxDelta
 }
 
 function updateShipPoints(points, shipRect, wristSide) {
@@ -113,87 +127,138 @@ function restoreScreenTimeout() {
   } catch (_error) {}
 }
 
+function drawHudLineSegment(canvas, segment, length, color) {
+  if (length <= 0) {
+    return
+  }
+
+  if (segment.kind === 'line') {
+    const ratio = length / segment.length
+    canvas.drawLine({
+      x1: segment.x1,
+      y1: segment.y1,
+      x2: segment.x1 + (segment.x2 - segment.x1) * ratio,
+      y2: segment.y1 + (segment.y2 - segment.y1) * ratio,
+      color,
+    })
+    return
+  }
+
+  canvas.strokeArc({
+    center_x: segment.centerX,
+    center_y: segment.centerY,
+    radius_x: segment.radius,
+    radius_y: segment.radius,
+    start_angle: segment.startAngle,
+    end_angle: segment.startAngle + (segment.endAngle - segment.startAngle) * (length / segment.length),
+    color,
+  })
+}
+
 function drawSquareHud(canvas, viewport, hpRatio) {
   const thickness = 8
-  const perimeter =
-    viewport.width * 2 + viewport.height * 2 - thickness * 4
-  const active = perimeter * hpRatio
-  let remaining = active
+  const inset = thickness / 2
+  const radius = SQUARE_HUD_CORNER_RADIUS
+  const left = inset
+  const top = inset
+  const right = viewport.width - inset
+  const bottom = viewport.height - inset
+  const horizontalLength = right - left - radius * 2
+  const verticalLength = bottom - top - radius * 2
+  const arcLength = (Math.PI * radius) / 2
+  const segments = [
+    {
+      kind: 'arc',
+      centerX: left + radius,
+      centerY: top + radius,
+      radius,
+      startAngle: 180,
+      endAngle: 270,
+      length: arcLength,
+    },
+    {
+      kind: 'line',
+      x1: left + radius,
+      y1: top,
+      x2: right - radius,
+      y2: top,
+      length: horizontalLength,
+    },
+    {
+      kind: 'arc',
+      centerX: right - radius,
+      centerY: top + radius,
+      radius,
+      startAngle: 270,
+      endAngle: 360,
+      length: arcLength,
+    },
+    {
+      kind: 'line',
+      x1: right,
+      y1: top + radius,
+      x2: right,
+      y2: bottom - radius,
+      length: verticalLength,
+    },
+    {
+      kind: 'arc',
+      centerX: right - radius,
+      centerY: bottom - radius,
+      radius,
+      startAngle: 0,
+      endAngle: 90,
+      length: arcLength,
+    },
+    {
+      kind: 'line',
+      x1: right - radius,
+      y1: bottom,
+      x2: left + radius,
+      y2: bottom,
+      length: horizontalLength,
+    },
+    {
+      kind: 'arc',
+      centerX: left + radius,
+      centerY: bottom - radius,
+      radius,
+      startAngle: 90,
+      endAngle: 180,
+      length: arcLength,
+    },
+    {
+      kind: 'line',
+      x1: left,
+      y1: bottom - radius,
+      x2: left,
+      y2: top + radius,
+      length: verticalLength,
+    },
+  ]
+  const perimeter = segments.reduce((sum, segment) => sum + segment.length, 0)
+  let remaining = perimeter * hpRatio
 
-  canvas.drawRect({
-    x1: 0,
-    y1: 0,
-    x2: viewport.width,
-    y2: thickness,
+  canvas.setPaint({
     color: COLORS.hudInactive,
+    line_width: thickness,
   })
-  canvas.drawRect({
-    x1: viewport.width - thickness,
-    y1: 0,
-    x2: viewport.width,
-    y2: viewport.height,
-    color: COLORS.hudInactive,
-  })
-  canvas.drawRect({
-    x1: 0,
-    y1: viewport.height - thickness,
-    x2: viewport.width,
-    y2: viewport.height,
-    color: COLORS.hudInactive,
-  })
-  canvas.drawRect({
-    x1: 0,
-    y1: 0,
-    x2: thickness,
-    y2: viewport.height,
-    color: COLORS.hudInactive,
-  })
-
-  const topLength = Math.min(remaining, viewport.width)
-  if (topLength > 0) {
-    canvas.drawRect({
-      x1: 0,
-      y1: 0,
-      x2: topLength,
-      y2: thickness,
-      color: COLORS.hudActive,
-    })
+  for (const segment of segments) {
+    drawHudLineSegment(canvas, segment, segment.length, COLORS.hudInactive)
   }
-  remaining -= topLength
 
-  const rightLength = Math.min(remaining, viewport.height)
-  if (rightLength > 0) {
-    canvas.drawRect({
-      x1: viewport.width - thickness,
-      y1: 0,
-      x2: viewport.width,
-      y2: rightLength,
-      color: COLORS.hudActive,
-    })
-  }
-  remaining -= rightLength
+  canvas.setPaint({
+    color: COLORS.hudActive,
+    line_width: thickness,
+  })
+  for (const segment of segments) {
+    if (remaining <= 0) {
+      break
+    }
 
-  const bottomLength = Math.min(remaining, viewport.width)
-  if (bottomLength > 0) {
-    canvas.drawRect({
-      x1: viewport.width - bottomLength,
-      y1: viewport.height - thickness,
-      x2: viewport.width,
-      y2: viewport.height,
-      color: COLORS.hudActive,
-    })
-  }
-  remaining -= bottomLength
-
-  const leftLength = Math.min(remaining, viewport.height)
-  if (leftLength > 0) {
-    canvas.drawRect({
-      x1: 0,
-      y1: viewport.height - leftLength,
-      x2: thickness,
-      y2: viewport.height,
-      color: COLORS.hudActive,
-    })
+    const segmentLength = Math.min(remaining, segment.length)
+    drawHudLineSegment(canvas, segment, segmentLength, COLORS.hudActive)
+    remaining -= segmentLength
   }
 }
 
@@ -279,6 +344,7 @@ Page({
     )
     this.asteroidSeed = 0
     this.hp = HP_MAX
+    this.displayedHp = HP_MAX
     this.startedAt = Date.now()
     this.lastFrameAt = this.startedAt
     this.lastSpawnAt = this.startedAt
@@ -551,6 +617,11 @@ Page({
       this.collisionCandidates
     )
     this.handleCollisions(now, shipRect, difficulty)
+    this.displayedHp = moveTowards(
+      this.displayedHp,
+      this.hp,
+      HUD_DISPLAY_HP_SPEED * deltaSeconds
+    )
     this.drawFrame(shipRect)
   },
 
@@ -582,7 +653,7 @@ Page({
       updateShipPoints(this.shipPoints, shipRect, this.settings.wristSide)
     )
 
-    const hpRatio = this.hp / HP_MAX
+    const hpRatio = this.displayedHp / HP_MAX
     if (this.deviceInfo.screenShape === SCREEN_SHAPE_ROUND) {
       drawRoundHud(this.canvas, this.viewport, hpRatio)
     } else {
