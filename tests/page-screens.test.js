@@ -951,7 +951,7 @@ test('game swipe input moves relatively and does not teleport on touch down', as
 
     canvas.__emit('MOVE', { y: 140 })
     assert.equal(page.shipCenterY, initialCenterY)
-    page.lastFrameAt = Date.now() - 16
+    page.simulationClock.lastFrameAt = Date.now() - 16
     page.tick()
     assert.equal(page.shipCenterY, initialCenterY + 60)
 

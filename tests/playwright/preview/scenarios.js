@@ -446,8 +446,8 @@ function createGameScenario({
       }),
     },
     afterBuild(page) {
-      page.lastSpawnAt = page.startedAt - 2600
-      page.lastFrameAt = Date.now() - 16
+      page.lastSpawnAt = -2600
+      page.simulationClock.lastFrameAt = Date.now() - 16
       page.tick()
       page.tick()
 

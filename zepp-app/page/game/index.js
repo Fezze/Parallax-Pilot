@@ -38,6 +38,7 @@ import {
   getSpawnIntervalMs,
 } from '../../shared/game-core.js'
 import { sanitizeControlMode } from '../../shared/device.js'
+import { advanceSimulationClock, createSimulationClock } from '../../shared/simulation-clock.js'
 import { normalizeTiltInput } from '../../shared/tilt-calibration.js'
 import { appendScore, loadSettings, loadTiltCalibration, saveLastSession, saveSettings } from '../../shared/storage.js'
 
@@ -332,10 +333,9 @@ Page({
     this.asteroidSeed = 0
     this.hp = HP_MAX
     this.displayedHp = HP_MAX
-    this.startedAt = Date.now()
-    this.lastFrameAt = this.startedAt
-    this.lastSpawnAt = this.startedAt
-    this.lastDamageAt = 0
+    this.simulationClock = createSimulationClock(Date.now())
+    this.lastSpawnAt = 0
+    this.lastDamageAt = -Infinity
     this.finished = false
     this.accelerometer = null
     this.vibrator = new Vibrator()
@@ -415,10 +415,13 @@ Page({
     }
 
     this.canvas.addEventListener(event.CLICK_DOWN, (info) => {
+      this.advanceSimulation(Date.now())
+      if (this.finished) return
       this.pointerDown = true
       beginPointerInput(info.y)
     })
     this.canvas.addEventListener(event.CLICK_UP, () => {
+      this.advanceSimulation(Date.now())
       this.pointerDown = false
       this.touchDirection = 0
       this.swipeStartTouchY = null
@@ -429,6 +432,8 @@ Page({
         return
       }
 
+      this.advanceSimulation(Date.now())
+      if (this.finished) return
       updatePointerInput(info.y)
     })
   },
@@ -515,6 +520,9 @@ Page({
         wristSide: this.settings.wristSide,
       })
 
+      // A newly spawned asteroid has never damaged the ship. Zero is now a
+      // real simulation instant rather than an epoch-time sentinel.
+      asteroid.lastHitAt = -Infinity
       this.asteroids.push(asteroid)
       addAsteroidToCollisionGrid(asteroid, this.collisionGrid)
     }
@@ -550,31 +558,34 @@ Page({
     }
 
     if (this.hp <= 0) {
-      this.finishRun(now)
+      this.finishRun()
     }
   },
 
-  finishRun(now) {
+  finishRun(now = Date.now()) {
     if (this.finished) {
       return
     }
 
     this.finished = true
-    const scoreEntry = createScoreEntry(now - this.startedAt, this.settings, now)
+    const scoreEntry = createScoreEntry(this.simulationClock.elapsedMs, this.settings, now)
     saveLastSession(scoreEntry)
     appendScore(scoreEntry)
     replace({ url: ROUTES.RESULTS })
   },
 
-  tick() {
+  advanceSimulation(now) {
     if (this.finished) {
       return
     }
 
-    const now = Date.now()
-    const deltaSeconds = Math.min((now - this.lastFrameAt) / 1000, 0.05)
-    this.lastFrameAt = now
+    advanceSimulationClock(this.simulationClock, now, (deltaSeconds, elapsedMs) => {
+      this.stepSimulation(deltaSeconds, elapsedMs)
+      return !this.finished
+    })
+  },
 
+  stepSimulation(deltaSeconds, now) {
     this.updateShip(deltaSeconds)
 
     const shipRect = createShipRect(
@@ -584,7 +595,7 @@ Page({
     )
     this.shipRect = shipRect
     const difficulty = calculateDifficulty(
-      now - this.startedAt,
+      now,
       this.settings.timeScale
     )
 
@@ -607,7 +618,13 @@ Page({
       this.hp,
       HUD_DISPLAY_HP_SPEED * deltaSeconds
     )
-    this.drawFrame(shipRect)
+  },
+
+  tick() {
+    if (this.finished) return
+    this.advanceSimulation(Date.now())
+    // Collision handling may have navigated away during catch-up.
+    if (!this.finished) this.drawFrame()
   },
 
   drawFrame(shipRect = this.shipRect) {
