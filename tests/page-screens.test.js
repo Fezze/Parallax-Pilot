@@ -388,7 +388,7 @@ test('results screen keeps nav buttons separate from back/play on round screens'
   })
   __seedLocalStorage({
     scores_v1: JSON.stringify(
-      Array.from({ length: 10 }, (_, index) => ({
+      Array.from({ length: 15 }, (_, index) => ({
         id: `run-${index}`,
         timestamp: 100 - index,
         score: 1000 - index,
@@ -412,13 +412,13 @@ test('results screen keeps nav buttons separate from back/play on round screens'
   const nextButton = findButton('NEXT')
   const backButton = findButton('BACK')
   const playButton = findButton('PLAY')
-  const pageLabel = findText('1 / 2')
+  const pageLabel = findText('1 / 3')
 
   assert.ok(getTexts().includes('RUN OVER'))
   assert.ok(getTexts().includes('RECENT RUNS'))
   assert.ok(pageLabel)
   assert.equal(hasExactButtonText('PREVIOUS'), false)
-  assert.equal(pageLabel.props.y, 344)
+  assert.equal(pageLabel.props.y, 328)
   assert.equal(nextButton.props.y, 360)
   assert.equal(backButton.props.y, 422)
   assert.equal(playButton.props.y, 422)
@@ -493,7 +493,7 @@ test('results round page-last layout matches the real scoreboard spacing', async
   assert.ok(firstRow)
   assert.ok(pageLabel)
   assert.equal(firstRow.props.y, 96)
-  assert.equal(pageLabel.props.y, 336)
+  assert.equal(pageLabel.props.y, 328)
   assert.equal(prevButton.props.y, 360)
   assert.equal(backButton.props.y, 422)
   assert.equal(playButton.props.y, 422)
@@ -535,7 +535,7 @@ test('results round first page keeps the page label below the last visible score
   assert.ok(lastVisibleRow)
   assert.ok(pageLabel)
   assert.equal(lastVisibleRow.props.y, 264)
-  assert.equal(pageLabel.props.y, 336)
+  assert.equal(pageLabel.props.y, 328)
   assert.equal(nextButton.props.y, 360)
   assert.equal(nextButton.props.x, 87)
   assert.equal(nextButton.props.w, 306)
@@ -701,18 +701,20 @@ test('results small round pagination keeps page label and actions above the lowe
   page.build()
 
   const prevButton = findButton('PREVIOUS')
+  const nextButton = findButton('NEXT')
   const backButton = findButton('BACK')
   const playButton = findButton('PLAY')
-  const pageLabel = findText('2 / 2')
+  const pageLabel = findText('2 / 3')
 
   assert.ok(prevButton)
+  assert.ok(nextButton)
   assert.ok(pageLabel)
-  assert.equal(pageLabel.props.y, 272)
-  assert.equal(prevButton.props.y, 296)
+  assert.equal(pageLabel.props.y, 266)
+  assert.equal(prevButton.props.y, 290)
   assert.equal(backButton.props.y, 352)
   assert.equal(playButton.props.y, 352)
   assert.equal(prevButton.props.x, 75)
-  assert.equal(prevButton.props.w, 266)
+  assert.equal(prevButton.props.w, 133)
   assert.equal(backButton.props.x, 75)
   assert.equal(backButton.props.w, 133)
   assert.equal(playButton.props.x, 208)
@@ -750,7 +752,7 @@ test('results small round middle page keeps both prev and next above the footer 
   assert.ok(prevButton)
   assert.ok(nextButton)
   assert.ok(pageLabel)
-  assert.equal(pageLabel.props.y, 270)
+  assert.equal(pageLabel.props.y, 266)
   assert.equal(prevButton.props.y, 290)
   assert.equal(nextButton.props.y, 290)
   assert.equal(backButton.props.y, 352)
@@ -767,6 +769,86 @@ test('results small round middle page keeps both prev and next above the footer 
   assert.equal(playButton.props.x, 208)
   assert.equal(playButton.props.w, 133)
   assert.equal(playButton.props.h, 52)
+})
+
+test('results session pagination keeps every saved row, page indicator, and action readable on supported screens', async () => {
+  const devices = [
+    { width: 480, height: 480, screenShape: SCREEN_SHAPE_ROUND },
+    { width: 466, height: 466, screenShape: SCREEN_SHAPE_ROUND },
+    { width: 454, height: 454, screenShape: SCREEN_SHAPE_ROUND },
+    { width: 416, height: 416, screenShape: SCREEN_SHAPE_ROUND },
+    { width: 390, height: 450, screenShape: 'square' },
+  ]
+
+  for (const language of [2, 9]) {
+    for (const device of devices) {
+      const visibleRows = []
+      const pageLabels = []
+      let totalPages = 0
+
+      for (let pageIndex = 0; pageIndex < 10; pageIndex += 1) {
+        resetEnv()
+        __setLanguage(language)
+        __setDeviceInfo(device)
+        __seedLocalStorage({
+          scores_v1: JSON.stringify(Array.from({ length: 15 }, (_, index) => ({
+            id: `run-${index}`,
+            timestamp: 100 - index,
+            score: 7000 - index * 123,
+            survivedMs: 6000 + index * 210,
+          }))),
+        })
+        __seedSessionStorage({
+          last_session_v1: JSON.stringify({
+            score: 12345,
+            survivedMs: 4321,
+            timeScale: 2,
+            spawnMultiplier: 1.3,
+          }),
+        })
+
+        const page = await loadPageDefinition('../zepp-app/page/results/index.js')
+        page.onInit(JSON.stringify({ pageIndex }))
+        page.build()
+
+        const rows = __getTextWidgets().filter((widget) => /^\d{2}  /.test(widget.props.text))
+        const pageLabel = __getTextWidgets().find((widget) => /^\d+ \/ \d+$/.test(widget.props.text))
+        assert.ok(rows.length > 0, `rows missing on ${device.width} ${language} page ${pageIndex}`)
+        assert.ok(pageLabel, `page indicator missing on ${device.width} ${language} page ${pageIndex}`)
+        const currentPageCount = Number(pageLabel.props.text.split(' / ')[1])
+        totalPages = currentPageCount
+        pageLabels.push(pageLabel)
+        rows.forEach((row) => {
+          visibleRows.push(row.props.text)
+          assert.ok(row.props.y + row.props.h <= pageLabel.props.y - 18,
+            `row overlaps page indicator on ${device.width} ${language}`)
+        })
+
+        const previous = findButton(language === 9 ? 'POPRZEDNIA' : 'PREVIOUS')
+        const next = findButton(language === 9 ? 'NASTĘPNA' : 'NEXT')
+        const back = findButton(language === 9 ? 'MENU' : 'BACK')
+        const play = findButton(language === 9 ? 'GRAJ' : 'PLAY')
+        assert.ok(back)
+        assert.ok(play)
+        assert.ok(pageLabel.props.y + pageLabel.props.h <= Math.min(
+          ...[previous, next].filter(Boolean).map((button) => button.props.y)
+        ))
+        assert.ok([previous, next].filter(Boolean).every((button) =>
+          button.props.y + button.props.h <= back.props.y))
+
+        if (pageIndex === currentPageCount - 1) {
+          break
+        }
+        assert.ok(next, `next action missing on ${device.width} ${language} page ${pageIndex}`)
+      }
+
+      assert.equal(totalPages > 1, true)
+      assert.equal(new Set(pageLabels.map((label) => label.props.text)).size, totalPages)
+      assert.equal(visibleRows.length, 15)
+      assert.deepEqual(visibleRows.map((row) => Number(row.slice(0, 2))).sort((a, b) => a - b),
+        Array.from({ length: 15 }, (_, index) => index + 1))
+    }
+  }
 })
 
 test('tilt calibration logs small round layout keeps debug rows above the footer', async () => {

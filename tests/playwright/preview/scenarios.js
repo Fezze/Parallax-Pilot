@@ -490,10 +490,29 @@ const DEVICE_FAMILIES = [
   { key: 'square-390x450', deviceInfo: SQUARE_390X450_DEVICE },
 ]
 
+function resultsScoreboardPageSize(deviceInfo) {
+  const isRound = deviceInfo.screenShape === 'round'
+  const isSmallRound = isRound && deviceInfo.width <= 420
+  const actionHeight = isSmallRound ? 52 : 58
+  const actionY = isRound
+    ? (isSmallRound ? deviceInfo.height - actionHeight - 12 : deviceInfo.height - actionHeight)
+    : deviceInfo.height - 62
+  const navY = isRound
+    ? actionY - (isSmallRound ? 10 : 12) - actionHeight
+    : actionY - 52
+  const pagerY = navY - 24
+  const listTop = isRound ? (isSmallRound ? 88 : 96) : 104
+  const rowGap = isRound && !isSmallRound ? 28 : 24
+  const rowsBeforePager = Math.floor((pagerY - 18 - 24 - listTop) / rowGap) + 1
+  return Math.max(1, Math.min(7, rowsBeforePager))
+}
+
 function scenariosForDevice(locale, deviceFamily) {
   const { key, deviceInfo } = deviceFamily
   const isRound = deviceInfo.screenShape === 'round'
   const shapeKey = isRound ? 'round' : 'square'
+  const scoreboardPageSize = resultsScoreboardPageSize(deviceInfo)
+  const scoreboardPageCount = Math.ceil(pagedScores.length / scoreboardPageSize)
 
   return [
     [
@@ -610,6 +629,44 @@ function scenariosForDevice(locale, deviceFamily) {
       }),
     ],
     [
+      `results-${key}-session-page-first-${locale}`,
+      createResultsScenario({
+        locale,
+        deviceInfo,
+        variant: 'session-page-first',
+        scores: createScores(15),
+        lastSession,
+        pageIndex: 0,
+        expectedTexts: [t(locale, 'runOver'), t(locale, 'recentRuns'), t(locale, 'next'), t(locale, 'back'), t(locale, 'play')],
+        forbiddenTexts: [t(locale, 'prev')],
+      }),
+    ],
+    [
+      `results-${key}-session-page-middle-${locale}`,
+      createResultsScenario({
+        locale,
+        deviceInfo,
+        variant: 'session-page-middle',
+        scores: createScores(15),
+        lastSession,
+        pageIndex: 1,
+        expectedTexts: [t(locale, 'runOver'), t(locale, 'recentRuns'), t(locale, 'prev'), t(locale, 'next'), t(locale, 'back'), t(locale, 'play')],
+      }),
+    ],
+    [
+      `results-${key}-session-page-last-${locale}`,
+      createResultsScenario({
+        locale,
+        deviceInfo,
+        variant: 'session-page-last',
+        scores: createScores(15),
+        lastSession,
+        pageIndex: 99,
+        expectedTexts: [t(locale, 'runOver'), t(locale, 'recentRuns'), t(locale, 'prev'), t(locale, 'back'), t(locale, 'play')],
+        forbiddenTexts: [t(locale, 'next')],
+      }),
+    ],
+    [
       `results-${key}-page-first-${locale}`,
       createResultsScenario({
         locale,
@@ -617,7 +674,7 @@ function scenariosForDevice(locale, deviceFamily) {
         variant: 'page-first',
         scores: pagedScores,
         pageIndex: 0,
-        expectedTexts: [t(locale, 'scoreboard'), '1 / 2', t(locale, 'next'), t(locale, 'back'), t(locale, 'play')],
+        expectedTexts: [t(locale, 'scoreboard'), `1 / ${scoreboardPageCount}`, t(locale, 'next'), t(locale, 'back'), t(locale, 'play')],
         forbiddenTexts: [t(locale, 'prev')],
       }),
     ],
@@ -628,8 +685,8 @@ function scenariosForDevice(locale, deviceFamily) {
         deviceInfo,
         variant: 'page-last',
         scores: pagedScores,
-        pageIndex: 1,
-        expectedTexts: [t(locale, 'scoreboard'), '2 / 2', t(locale, 'prev'), t(locale, 'back'), t(locale, 'play')],
+        pageIndex: scoreboardPageCount - 1,
+        expectedTexts: [t(locale, 'scoreboard'), `${scoreboardPageCount} / ${scoreboardPageCount}`, t(locale, 'prev'), t(locale, 'back'), t(locale, 'play')],
         forbiddenTexts: [t(locale, 'next')],
       }),
     ],

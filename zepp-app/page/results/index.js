@@ -63,11 +63,6 @@ Page({
     const deviceInfo = getDeviceInfo()
     const scores = loadScores()
     const lastSession = loadLastSession()
-    const { pageIndex, pageCount, items } = paginateScores(
-      scores,
-      this.pageParams.pageIndex || 0,
-      RESULTS_PAGE_SIZE
-    )
     const { width, height } = deviceInfo
     const isRound = deviceInfo.screenShape === SCREEN_SHAPE_ROUND
     const isSmallRound = isRound && width <= 420
@@ -85,7 +80,7 @@ Page({
     const actionPairWidth = width - actionSafePad * 2 - (isRound ? roundFooterActionInset * 2 : 0)
     const actionButtonWidth = Math.floor((actionPairWidth - actionGap) / 2)
     const fullWidth = width - pad * 2
-    const isEmptyState = items.length === 0
+    const isEmptyState = scores.length === 0
     const isRoundScoreboard = isRound && !lastSession
     const isSquareScoreboard = isSquare && !lastSession
     const scoreTextSize = isSquareScoreboard ? 15 : isSmallRound ? 15 : 16
@@ -101,15 +96,38 @@ Page({
       : isRound
         ? (isSmallRound ? 88 : 96)
         : 104
-    const hasPrev = pageCount > 1 && pageIndex > 0
-    const hasNext = pageCount > 1 && pageIndex < pageCount - 1
-    const listBottomY =
-      items.length > 0
-        ? listTop + (items.length - 1) * listRowGap + 24
-        : listTop + 68
+    const actionRowY = isRound
+      ? (isSmallRound ? height - roundActionButtonH - 12 : height - roundActionButtonH)
+      : isSquare && !lastSession
+        ? height - 62
+        : isSquare
+          ? height - 64
+          : isEmptyState
+            ? 396
+            : height - 66
+    // Reserve the tallest navigation row on every page so page capacity does
+    // not change between first, middle, and last pages.
+    const navButtonH = isRound ? roundActionButtonH : 44
+    const navRowY = isRound
+      ? actionRowY - roundRowGap - navButtonH
+      : isSquareScoreboard
+        ? actionRowY - 52
+        : height - 110
+    const pagerY = navRowY - 24
+    const rowsBeforePager = Math.floor((pagerY - 18 - 24 - listTop) / listRowGap) + 1
+    const rowsBeforeFooter = Math.floor((actionRowY - 18 - 24 - listTop) / listRowGap) + 1
+    const sessionFitsWithoutPager = lastSession && scores.length <= rowsBeforeFooter
+    const pageSize = sessionFitsWithoutPager
+      ? Math.max(1, scores.length)
+      : Math.max(1, Math.min(RESULTS_PAGE_SIZE, rowsBeforePager))
+    const { pageIndex, pageCount, items } = paginateScores(
+      scores,
+      this.pageParams.pageIndex || 0,
+      pageSize
+    )
     const navButtons = []
 
-    if (hasPrev) {
+    if (pageCount > 1 && pageIndex > 0) {
       navButtons.push({
         text: t('prev'),
         onClick: () =>
@@ -122,7 +140,7 @@ Page({
       })
     }
 
-    if (hasNext) {
+    if (pageCount > 1 && pageIndex < pageCount - 1) {
       navButtons.push({
         text: t('next'),
         onClick: () =>
@@ -133,32 +151,6 @@ Page({
             }),
           }),
       })
-    }
-
-    const actionRowY = isRound
-      ? (isSmallRound ? height - roundActionButtonH - 12 : height - roundActionButtonH)
-      : isSquare && !lastSession
-        ? height - 62
-        : isSquare
-          ? height - 64
-          : isEmptyState
-            ? 396
-            : height - 66
-    const navButtonH = isRound
-      ? (navButtons.length === 2 ? roundActionButtonH : roundNavButtonH)
-      : 44
-    const navRowY = isRound
-      ? actionRowY - roundRowGap - navButtonH
-      : isSquareScoreboard
-        ? actionRowY - 52
-        : height - 110
-    let pagerY = Math.max(
-      listBottomY + (isRound ? 18 : 10),
-      isRoundScoreboard ? navRowY - 24 : isSquareScoreboard ? navRowY - 24 : height - (isRound ? 138 : 124)
-    )
-
-    if (!lastSession) {
-      pagerY = Math.min(pagerY, navRowY - (isRound ? (isSmallRound ? 20 : 24) : 20))
     }
 
     createLabel({
@@ -220,7 +212,7 @@ Page({
           y: listTop + index * listRowGap,
           w: fullWidth,
           h: 24,
-          text: buildScoreRow(entry, pageIndex * RESULTS_PAGE_SIZE + index),
+          text: buildScoreRow(entry, pageIndex * pageSize + index),
           textSize: scoreTextSize,
           color: index === 0 && pageIndex === 0 ? COLORS.accent : COLORS.textPrimary,
         })
@@ -240,9 +232,12 @@ Page({
     }
 
     if (navButtons.length > 0) {
+      const navButtonY = isRound
+        ? navRowY + roundActionButtonH - (navButtons.length === 2 ? roundActionButtonH : roundNavButtonH)
+        : navRowY
       createRowButtons({
         width,
-        y: navRowY,
+        y: navButtonY,
         safePad: actionSafePad,
         roundInset: isRound ? roundFooterActionInset : 0,
         fixedButtonWidth: navButtons.length === 1 ? actionPairWidth : actionButtonWidth,
