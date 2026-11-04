@@ -1,5 +1,5 @@
 import { getDeviceInfo, SCREEN_SHAPE_ROUND } from '@zos/device'
-import { push, replace } from '@zos/router'
+import { back, replace } from '@zos/router'
 import { COLORS, ROUTES, RESULTS_PAGE_SIZE } from '../../shared/constants.js'
 import {
   createActionButton,
@@ -55,14 +55,22 @@ function createRowButtons({ width, y, buttons, safePad, gap = 10, roundInset = 0
 
 Page({
   onInit(params) {
-    this.pageParams = parseRouteParams(params, { pageIndex: 0 })
+    const requested = parseRouteParams(params) || {}
+    this.pageParams = {
+      pageIndex: requested.pageIndex || 0,
+      mode: requested.mode === 'summary' ? 'summary' : 'scoreboard',
+      session: requested.session,
+    }
   },
   build() {
     hideStatusBar()
 
     const deviceInfo = getDeviceInfo()
     const scores = loadScores()
-    const lastSession = loadLastSession()
+    // Stored data alone never selects the presentation for a later visit.
+    const lastSession = this.pageParams.mode === 'summary'
+      ? this.pageParams.session || loadLastSession()
+      : null
     const { width, height } = deviceInfo
     const isRound = deviceInfo.screenShape === SCREEN_SHAPE_ROUND
     const isSmallRound = isRound && width <= 420
@@ -135,6 +143,8 @@ Page({
             url: ROUTES.RESULTS,
             params: JSON.stringify({
               pageIndex: pageIndex - 1,
+              mode: this.pageParams.mode,
+              session: lastSession || undefined,
             }),
           }),
       })
@@ -148,6 +158,8 @@ Page({
             url: ROUTES.RESULTS,
             params: JSON.stringify({
               pageIndex: pageIndex + 1,
+              mode: this.pageParams.mode,
+              session: lastSession || undefined,
             }),
           }),
       })
@@ -262,7 +274,7 @@ Page({
           text: t('back'),
           textSize: isRound ? (isSmallRound ? 18 : 20) : 22,
           h: isRound ? roundActionButtonH : 44,
-          onClick: () => push({ url: ROUTES.HOME }),
+          onClick: () => back(),
         },
         {
           text: t('play'),
@@ -271,7 +283,7 @@ Page({
           normalColor: COLORS.accent,
           pressColor: 0xc9a900,
           textColor: COLORS.background,
-          onClick: () => push({ url: ROUTES.GAME }),
+          onClick: () => replace({ url: ROUTES.GAME }),
         },
       ],
     })

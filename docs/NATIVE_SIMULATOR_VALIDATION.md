@@ -96,9 +96,15 @@ Inspect all saved frames. Required outcomes:
   survives the nominal 60 seconds;
 - 10: **PLAY on the right** starts a new game. BACK on the left is not replay.
 
-The existing R5 results-state issue can show SCOREBOARD instead of RUN OVER.
-Verify the actual saved row and PLAY behavior; do not conceal that issue or
-silently count the wrong screen as a pass. `execution.json` deliberately says
+R5 now passes explicit summary/scoreboard intent and the completed score entry
+in route parameters. A completed run must display RUN OVER with its actual
+score/duration, including after pagination. BACK returns to the existing home
+page; opening SCOREBOARD there must omit the summary. PLAY replaces results
+with a game; after that run, a native right-swipe Back from results must return
+directly to home. Gameplay intentionally consumes gestures, so test the system
+Back gesture on results rather than during a live run. Native SessionStorage
+visibility did not reproduce shared-store mock behavior; do not remove the
+completed entry from the route based only on browser or Node tests. `execution.json` deliberately says
 review is required. A wrong precondition or unchanged home frame is not success.
 
 The November 4 native evidence includes genuine TILT-to-TOUCH changes, both ship

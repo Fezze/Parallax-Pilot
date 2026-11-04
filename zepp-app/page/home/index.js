@@ -89,7 +89,7 @@ Page({
       h: secondaryButtonHeight,
       text: t('scoreboard'),
       textSize: isRound ? 22 : 20,
-      onClick: () => push({ url: ROUTES.RESULTS }),
+      onClick: () => push({ url: ROUTES.RESULTS, params: JSON.stringify({ mode: 'scoreboard' }) }),
     })
 
     createLabel({

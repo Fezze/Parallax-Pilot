@@ -307,6 +307,7 @@ function createResultsScenario({
   variant,
   scores = [],
   lastSession = null,
+  mode = lastSession ? 'summary' : 'scoreboard',
   pageIndex = 0,
   expectedTexts,
   forbiddenTexts = [],
@@ -318,7 +319,7 @@ function createResultsScenario({
     variant,
     pageModule: '/zepp-app/page/results/index.js',
     deviceInfo,
-    initParams: JSON.stringify({ pageIndex }),
+    initParams: JSON.stringify({ pageIndex, mode, session: mode === 'summary' ? lastSession : undefined }),
     localStorage: {
       scores_v1: JSON.stringify(scores),
     },
@@ -664,6 +665,19 @@ function scenariosForDevice(locale, deviceFamily) {
         pageIndex: 99,
         expectedTexts: [t(locale, 'runOver'), t(locale, 'recentRuns'), t(locale, 'prev'), t(locale, 'back'), t(locale, 'play')],
         forbiddenTexts: [t(locale, 'next')],
+      }),
+    ],
+    [
+      `results-${key}-scoreboard-after-run-${locale}`,
+      createResultsScenario({
+        locale,
+        deviceInfo,
+        variant: 'scoreboard-after-run',
+        mode: 'scoreboard',
+        scores: createScores(15),
+        lastSession,
+        expectedTexts: [t(locale, 'scoreboard'), t(locale, 'next'), t(locale, 'back'), t(locale, 'play')],
+        forbiddenTexts: [t(locale, 'runOver'), t(locale, 'recentRuns')],
       }),
     ],
     [

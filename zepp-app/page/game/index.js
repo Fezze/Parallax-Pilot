@@ -549,7 +549,7 @@ Page({
     const scoreEntry = createScoreEntry(this.simulationClock.elapsedMs, this.settings, now)
     saveLastSession(scoreEntry)
     appendScore(scoreEntry)
-    replace({ url: ROUTES.RESULTS })
+    replace({ url: ROUTES.RESULTS, params: JSON.stringify({ mode: 'summary', session: scoreEntry }) })
   },
 
   advanceSimulation(now) {

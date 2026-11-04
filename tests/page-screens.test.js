@@ -117,7 +117,7 @@ test('home screen renders simplified copy and routes from main actions', async (
 
   assert.deepEqual(__getRouterCalls(), [
     { type: 'push', payload: { url: 'page/game/index' } },
-    { type: 'push', payload: { url: 'page/results/index' } },
+    { type: 'push', payload: { url: 'page/results/index', params: JSON.stringify({ mode: 'scoreboard' }) } },
   ])
 })
 
@@ -406,7 +406,7 @@ test('results screen keeps nav buttons separate from back/play on round screens'
   })
 
   const page = await loadPageDefinition('../zepp-app/page/results/index.js')
-  page.onInit(JSON.stringify({ pageIndex: 0 }))
+  page.onInit(JSON.stringify({ pageIndex: 0, mode: 'summary' }))
   page.build()
 
   const nextButton = findButton('NEXT')
@@ -436,7 +436,9 @@ test('results screen keeps nav buttons separate from back/play on round screens'
       type: 'replace',
       payload: {
         url: 'page/results/index',
-        params: JSON.stringify({ pageIndex: 1 }),
+        params: JSON.stringify({ pageIndex: 1, mode: 'summary', session: {
+          score: 1234, survivedMs: 4321, timeScale: 2, spawnMultiplier: 1.3,
+        } }),
       },
     },
   ])
@@ -808,7 +810,7 @@ test('results session pagination keeps every saved row, page indicator, and acti
         })
 
         const page = await loadPageDefinition('../zepp-app/page/results/index.js')
-        page.onInit(JSON.stringify({ pageIndex }))
+        page.onInit(JSON.stringify({ pageIndex, mode: 'summary' }))
         page.build()
 
         const rows = __getTextWidgets().filter((widget) => /^\d{2}  /.test(widget.props.text))
@@ -1085,5 +1087,136 @@ test('game spawn catch-up is capped to avoid burst walls after a delayed frame',
   } finally {
     globalThis.setInterval = originalSetInterval
     globalThis.clearInterval = originalClearInterval
+  }
+})
+
+test('run, menu, scoreboard, pagination, replay and native Back keep one home root', async (context) => {
+  context.mock.timers.enable({ apis: ['setTimeout'] })
+  resetEnv()
+  __seedLocalStorage({
+    settings_v1: JSON.stringify({ controlMode: 'touch', wristSide: 'left', timeScale: 1, spawnMultiplier: 1, tiltSensitivity: 1 }),
+    scores_v1: JSON.stringify(Array.from({ length: 15 }, (_, index) => ({
+      id: `older-${index}`, timestamp: index, score: index * 100, survivedMs: index * 100,
+    }))),
+  })
+  const definitions = {
+    'page/home/index': await loadPageDefinition('../zepp-app/page/home/index.js'),
+    'page/game/index': await loadPageDefinition('../zepp-app/page/game/index.js'),
+    'page/results/index': await loadPageDefinition('../zepp-app/page/results/index.js'),
+  }
+  const stack = [{ url: 'page/home/index' }]
+  let active
+  function render() {
+    __resetUI()
+    const route = stack.at(-1)
+    active = { ...definitions[route.url] }
+    active.onInit?.(route.params)
+    // Game completion is exercised through the actual onInit/finishRun path;
+    // existing game simulation tests cover timer-driven death and teardown.
+    if (route.url !== 'page/game/index') active.build()
+  }
+  function follow() {
+    const calls = __getRouterCalls()
+    assert.equal(calls.length, 1)
+    const { type, payload } = calls[0]
+    __resetRouter()
+    if (type === 'push') stack.push(payload)
+    else if (type === 'replace') stack[stack.length - 1] = payload
+    else if (type === 'back') stack.pop()
+    else assert.fail(`Unexpected router operation: ${type}`)
+    assert.ok(stack.length >= 1 && stack.length <= 2)
+    assert.equal(stack[0].url, 'page/home/index')
+    render()
+  }
+  function click(label) {
+    const button = findButton(label)
+    assert.ok(button, `Missing ${label}`)
+    button.props.click_func()
+    context.mock.timers.tick(100)
+    follow()
+  }
+  function finish() {
+    active.simulationClock.elapsedMs = 4567
+    active.finishRun(1700000000000)
+    // Duplicate completion must not trigger a second route or save.
+    active.finishRun(1700000000001)
+    follow()
+    assert.ok(getTexts().includes('RUN OVER'))
+    assert.ok(getTexts().includes('4567'))
+    assert.equal(stack.length, 2)
+  }
+  render()
+  for (let loop = 0; loop < 12; loop += 1) {
+    click('START RUN')
+    finish()
+    click('NEXT')
+    assert.ok(getTexts().includes('RUN OVER'))
+    click('PREVIOUS')
+    assert.ok(getTexts().includes('RUN OVER'))
+    click('BACK')
+    assert.equal(stack.length, 1)
+    click('SCOREBOARD')
+    assert.ok(getTexts().includes('SCOREBOARD'))
+    assert.equal(getTexts().includes('RUN OVER'), false)
+    assert.equal(getTexts().includes('RECENT RUNS'), false)
+    click('NEXT')
+    assert.ok(getTexts().includes('SCOREBOARD'))
+    click('PLAY')
+    finish()
+    click('PLAY')
+    finish()
+    // Model the documented native Back operation independently of the menu button.
+    stack.pop()
+    render()
+    assert.equal(stack.length, 1)
+    assert.ok(getTexts().includes('PARALLAX PILOT'))
+  }
+  assert.equal(JSON.parse(__readLocalStorage('scores_v1')).length > 0, true)
+})
+
+test('results defaults to scoreboard regardless of retained session and safely handles a missing summary', async () => {
+  const definition = await loadPageDefinition('../zepp-app/page/results/index.js')
+  for (const params of [undefined, 'null', 'invalid-json', '{}', '{"mode":"old"}', '{"mode":"scoreboard"}']) {
+    resetEnv()
+    __seedSessionStorage({ last_session_v1: JSON.stringify({ score: 999, survivedMs: 999, timeScale: 1, spawnMultiplier: 1 }) })
+    const page = { ...definition }
+    page.onInit(params)
+    page.build()
+    assert.ok(getTexts().includes('SCOREBOARD'))
+    assert.equal(getTexts().includes('RUN OVER'), false)
+  }
+  resetEnv()
+  const page = { ...definition }
+  page.onInit('{"mode":"summary"}')
+  page.build()
+  assert.ok(getTexts().includes('SCOREBOARD'))
+  assert.ok(getTexts().includes('NO RUNS SAVED YET'))
+})
+
+
+test('summary route carries the completed run across isolated page session stores and pagination', async (context) => {
+  context.mock.timers.enable({ apis: ['setTimeout'] })
+  resetEnv()
+  __seedLocalStorage({ scores_v1: JSON.stringify(Array.from({ length: 15 }, (_, index) => ({
+    id: `run-${index}`, timestamp: index, score: index * 100, survivedMs: index * 100,
+  }))) })
+  const session = { score: 8765, survivedMs: 8765, timeScale: 1, spawnMultiplier: 1 }
+  const definition = await loadPageDefinition('../zepp-app/page/results/index.js')
+  let params = JSON.stringify({ mode: 'summary', session })
+  for (let index = 0; index < 2; index += 1) {
+    __resetUI()
+    const page = { ...definition }
+    page.onInit(params)
+    page.build()
+    assert.ok(getTexts().includes('RUN OVER'))
+    assert.ok(getTexts().includes('8765'))
+    findButton('NEXT').props.click_func()
+    context.mock.timers.tick(100)
+    const route = __getRouterCalls().at(-1)
+    assert.equal(route.type, 'replace')
+    const requested = JSON.parse(route.payload.params)
+    assert.equal(requested.mode, 'summary')
+    assert.deepEqual(requested.session, session)
+    params = route.payload.params
   }
 })
