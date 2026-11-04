@@ -1,6 +1,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import net from 'node:net'
+import os from 'node:os'
+import { createInterface } from 'node:readline/promises'
 import { spawn, spawnSync } from 'node:child_process'
 
 export const DEFAULT_SCENARIO = '.test/simulator/scenarios/gameplay-smoke.json'
@@ -13,6 +15,7 @@ export function parseCliArgs(argv) {
   const command = args.shift()
   const options = {
     dryRun: false,
+    manualInput: false,
     scenarioPath: undefined,
     calibrationPath: undefined,
     simulatorPath: DEFAULT_SIMULATOR_PATH,
@@ -23,6 +26,10 @@ export function parseCliArgs(argv) {
 
   while (args.length > 0) {
     const token = args.shift()
+    if (token === '--manual-input') {
+      options.manualInput = true
+      continue
+    }
     if (token === '--dry-run') {
       options.dryRun = true
       continue
@@ -75,6 +82,10 @@ export function cleanSimulatorEnv(env) {
 }
 
 export function chooseInputDriver(env, exists = commandExists) {
+  if (env.ZEPP_SIMULATOR_QMP_SOCKET) return 'native'
+  if (env.ZEPP_SIMULATOR_ALLOW_HOST_INPUT !== '1') {
+    throw new Error('Configure native input with npm run sim:input or use --manual-input. Host cursor input is disabled by default.')
+  }
   if (env.DISPLAY && exists('xdotool')) {
     return 'xdotool'
   }
@@ -88,6 +99,9 @@ export function chooseInputDriver(env, exists = commandExists) {
 }
 
 export function chooseScreenshotDriver(env, exists = commandExists) {
+  if (env.ZEPP_SIMULATOR_SCREENSHOT_DRIVER === 'native') {
+    return 'native'
+  }
   if (env.WAYLAND_DISPLAY && exists('grim')) {
     return 'grim'
   }
@@ -185,6 +199,13 @@ export function createRuntime({
   stderr = process.stderr,
   syncRunner = spawnSync,
   asyncRunner = spawn,
+  wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  confirm = async (instruction) => {
+    if (!process.stdin.isTTY) throw new Error('Manual native input requires an interactive terminal.')
+    const prompt = createInterface({ input: process.stdin, output: stdout })
+    try { await prompt.question(`${instruction}\nPress Enter after completing this action in the native simulator: `) }
+    finally { prompt.close() }
+  },
 } = {}) {
   function log(message) {
     stdout.write(`${message}\n`)
@@ -212,7 +233,47 @@ export function createRuntime({
     }
   }
 
-  return { repoRoot, env, stdout, stderr, log, fail, runSync, runLogged, asyncRunner }
+  return { repoRoot, env, stdout, stderr, log, fail, runSync, runLogged, asyncRunner, wait, confirm }
+}
+
+export function verifyDeployedApp(repoRoot, env = process.env) {
+  const root = env.ZEPP_SIMULATOR_ROOT || path.join(env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'simulator')
+  const metadata = loadJsonFile(path.join(root, 'last_app_info.json'))
+  const appRoot = path.join(repoRoot, 'zepp-app')
+  const manifest = loadJsonFile(path.join(appRoot, 'app.json'))
+  if (Number(metadata.app_id) !== manifest.app.appId || path.resolve(metadata.user_app_path || '') !== appRoot) {
+    throw new Error('Simulator deployment is a different application. Deploy this project with npm run dev first.')
+  }
+  // Zeus can retain the project's original import date in last_app_info.json
+  // across successful redeploys. Verify the actual native package instead.
+  if (!metadata.sim_app_path) throw new Error('Native simulator package path is missing. Redeploy with npm run dev first.')
+  const nativeManifestPath = path.join(metadata.sim_app_path, 'device', 'app.json')
+  const nativePackagePath = path.join(metadata.sim_app_path, 'device.zip')
+  if (!fs.existsSync(nativeManifestPath) || !fs.existsSync(nativePackagePath)) {
+    throw new Error('Native simulator package is missing. Redeploy with npm run dev first.')
+  }
+  const nativeManifest = loadJsonFile(nativeManifestPath)
+  if (nativeManifest.app?.appId !== manifest.app.appId ||
+      nativeManifest.app?.version?.name !== manifest.app.version.name ||
+      nativeManifest.app?.version?.code !== manifest.app.version.code) {
+    throw new Error('Native simulator package has a different application or version. Redeploy with npm run dev first.')
+  }
+  const deployedAt = Math.min(fs.statSync(nativeManifestPath).mtimeMs, fs.statSync(nativePackagePath).mtimeMs)
+  let latestSource = 0
+  function inspect(directory) {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      if (entry.name.startsWith('.') || entry.name === 'dist' || entry.name === 'node_modules') continue
+      const source = path.join(directory, entry.name)
+      if (entry.isDirectory()) inspect(source)
+      else latestSource = Math.max(latestSource, fs.statSync(source).mtimeMs)
+    }
+  }
+  inspect(appRoot)
+  if (!Number.isFinite(deployedAt) || deployedAt < latestSource) {
+    throw new Error('Simulator deployment is older than application sources. Redeploy with npm run dev first.')
+  }
+  return { appId: manifest.app.appId, version: manifest.app.version,
+    deployedAt: new Date(deployedAt).toISOString(), verifiedPackage: nativePackagePath }
 }
 
 export async function probePort(host, port, timeoutMs = 1000) {
@@ -255,6 +316,7 @@ export async function runDoctor(runtime, options) {
   const scrotExists = commandExists('scrot', runtime.runSync)
   const gnomeScreenshotExists = commandExists('gnome-screenshot', runtime.runSync)
   const grimExists = commandExists('grim', runtime.runSync)
+  const nativeScreenshots = env.ZEPP_SIMULATOR_SCREENSHOT_DRIVER === 'native'
   const missingLibraries = inspectSimulatorLibraries(options.simulatorPath, runtime.runSync)
 
   const lines = [
@@ -263,6 +325,7 @@ export async function runDoctor(runtime, options) {
     `bridge: ${bridgeOpen ? 'open' : 'closed'} (${options.bridgeHost}:${options.bridgePort})`,
     `display: ${env.WAYLAND_DISPLAY ? 'wayland' : env.DISPLAY ? 'x11' : 'missing'}`,
     `input: xdotool=${xdotoolExists ? 'ok' : 'missing'}, ydotool=${ydotoolExists ? 'ok' : 'missing'}`,
+    `native-screenshot: ${nativeScreenshots ? 'configured; firmware capture verifies service availability' : 'set ZEPP_SIMULATOR_SCREENSHOT_DRIVER=native to use firmware capture'}`,
     `screenshot: scrot=${scrotExists ? 'ok' : 'missing'}, gnome-screenshot=${gnomeScreenshotExists ? 'ok' : 'missing'}, grim=${grimExists ? 'ok' : 'missing'}`,
   ]
 
@@ -283,7 +346,7 @@ export async function runDoctor(runtime, options) {
   if (!xdotoolExists && !ydotoolExists) {
     lines.push('- install xdotool for X11 or ydotool for Wayland input automation')
   }
-  if (!scrotExists && !gnomeScreenshotExists && !grimExists) {
+  if (!nativeScreenshots && !scrotExists && !gnomeScreenshotExists && !grimExists) {
     lines.push('- install scrot, gnome-screenshot, or grim for screenshots')
   }
   if (env.WAYLAND_DISPLAY && !ydotoolExists) {
@@ -369,6 +432,7 @@ export function performInputAction(runtime, driver, args) {
 }
 
 export function tap(runtime, driver, point) {
+  if (driver === 'native') return nativePointerAction(runtime, 'tap', point)
   if (driver === 'xdotool') {
     performInputAction(runtime, driver, ['mousemove', String(point.x), String(point.y), 'click', '1'])
     return
@@ -378,6 +442,7 @@ export function tap(runtime, driver, point) {
 }
 
 export function swipe(runtime, driver, point, step) {
+  if (driver === 'native') return nativePointerAction(runtime, 'swipe', point, { ms: step.durationMs || 350, dx: step.dx, dy: step.dy })
   const targetX = point.x + step.dx
   const targetY = point.y + step.dy
   if (driver === 'xdotool') {
@@ -403,7 +468,24 @@ export function swipe(runtime, driver, point, step) {
   performInputAction(runtime, driver, ['mouseup', '0xC0'])
 }
 
+export async function hold(runtime, driver, point, ms) {
+  if (driver === 'native') return nativePointerAction(runtime, 'hold', point, { ms })
+  if (!Number.isFinite(ms) || ms <= 0 || ms > 10000) throw new Error('Hold duration must be between 1 and 10000 ms.')
+  const button = driver === 'xdotool' ? '1' : undefined
+  const moveArgs = driver === 'xdotool'
+    ? ['mousemove', String(point.x), String(point.y)]
+    : ['mousemove', '--absolute', String(point.x), String(point.y)]
+  performInputAction(runtime, driver, moveArgs)
+  performInputAction(runtime, driver, button ? ['mousedown', button] : ['click', '0x40'])
+  try {
+    await runtime.wait(ms)
+  } finally {
+    performInputAction(runtime, driver, button ? ['mouseup', button] : ['click', '0x80'])
+  }
+}
+
 export function pressKey(runtime, driver, key) {
+  if (driver === 'native') throw new Error('This native adapter supports pointer actions only; keyboard injection is not enabled.')
   if (driver === 'xdotool') {
     performInputAction(runtime, driver, ['key', key])
     return
@@ -424,12 +506,17 @@ export function pressKey(runtime, driver, key) {
   performInputAction(runtime, driver, ['key', keyCode, keyCode.replace(':1', ':0')])
 }
 
-export function focusWindow(runtime, titlePattern) {
-  runtime.runLogged('xdotool', ['search', '--name', titlePattern, 'windowactivate'])
+export function focusWindow(runtime, titlePattern, windowClass) {
+  if (runtime.env.ZEPP_SIMULATOR_QMP_SOCKET) return
+  runtime.runLogged('xdotool', ['search', '--onlyvisible', windowClass ? '--class' : '--name', windowClass || titlePattern, 'windowactivate'])
 }
 
 export function saveScreenshot(runtime, driver, calibration, outputFile) {
   fs.mkdirSync(path.dirname(outputFile), { recursive: true })
+  if (driver === 'native') {
+    runtime.runLogged(process.execPath, [path.join(runtime.repoRoot, 'scripts/simulator-native-screenshot.mjs'), outputFile], { env: runtime.env })
+    return
+  }
   if (driver === 'scrot') {
     runtime.runLogged('scrot', ['-a', formatAreaArgument(calibration), outputFile])
     return
@@ -441,11 +528,18 @@ export function saveScreenshot(runtime, driver, calibration, outputFile) {
   runtime.runLogged('gnome-screenshot', ['-f', outputFile])
 }
 
+function nativePointerAction(runtime, action, point, options = {}) {
+  runtime.runLogged(process.execPath, [path.join(runtime.repoRoot, 'scripts/simulator-native-input.mjs'), action, JSON.stringify({ point, options })], { env: runtime.env })
+}
+
 export async function executeScenario(runtime, options) {
   const { scenario } = loadScenario(runtime.repoRoot, options.scenarioPath)
-  const { calibration } = loadCalibration(runtime.repoRoot, options.calibrationPath)
+  const { calibration, calibrationPath } = loadCalibration(runtime.repoRoot, options.calibrationPath)
+  if (!options.dryRun && !options.manualInput && !runtime.env.ZEPP_SIMULATOR_QMP_SOCKET && calibrationPath === path.join(runtime.repoRoot, '.test/simulator/calibration.example.json')) {
+    throw new Error('Create calibration.local.json with the actual firmware screen bounds before running native input.')
+  }
   const inputDriver = !options.dryRun && scenario.requires?.includes('input')
-    ? chooseInputDriver(runtime.env)
+    ? options.manualInput ? 'manual' : chooseInputDriver(runtime.env)
     : undefined
   const screenshotDriver = !options.dryRun && scenario.requires?.includes('screenshot')
     ? chooseScreenshotDriver(runtime.env)
@@ -453,6 +547,9 @@ export async function executeScenario(runtime, options) {
   const outputDir = options.outputDir
     ? path.resolve(runtime.repoRoot, options.outputDir)
     : path.join(runtime.repoRoot, 'output', 'simulator', scenario.id)
+  const targetPoint = (name) => inputDriver === 'native'
+    ? resolveTargetPoint({ ...calibration, screen: { ...calibration.screen, x: 0, y: 0 } }, name)
+    : resolveTargetPoint(calibration, name)
 
   for (const step of scenario.steps) {
     runtime.log(`step:${step.action}`)
@@ -461,8 +558,18 @@ export async function executeScenario(runtime, options) {
       continue
     }
 
+    if (options.manualInput && ['tap', 'hold', 'swipe', 'key'].includes(step.action)) {
+      await runtime.confirm(step.instruction || `Native ${step.action}: ${step.target || step.key}${step.ms ? ` for ${step.ms} ms` : ''}`)
+      continue
+    }
+
     if (step.action === 'wait') {
-      await new Promise((resolve) => setTimeout(resolve, step.ms ?? 0))
+      await runtime.wait(step.ms ?? 0)
+      continue
+    }
+
+    if (step.action === 'verify-app') {
+      runtime.log(`deployed:${JSON.stringify(verifyDeployedApp(runtime.repoRoot, runtime.env))}`)
       continue
     }
 
@@ -472,7 +579,8 @@ export async function executeScenario(runtime, options) {
     }
 
     if (step.action === 'focus') {
-      focusWindow(runtime, step.title ?? calibration.deviceWindowTitle)
+      if (options.manualInput) continue
+      focusWindow(runtime, step.title ?? calibration.deviceWindowTitle, calibration.deviceWindowClass)
       continue
     }
 
@@ -482,12 +590,17 @@ export async function executeScenario(runtime, options) {
     }
 
     if (step.action === 'tap') {
-      tap(runtime, inputDriver, resolveTargetPoint(calibration, step.target))
+      tap(runtime, inputDriver, targetPoint(step.target))
       continue
     }
 
     if (step.action === 'swipe') {
-      swipe(runtime, inputDriver, resolveTargetPoint(calibration, step.target), step)
+      swipe(runtime, inputDriver, targetPoint(step.target), step)
+      continue
+    }
+
+    if (step.action === 'hold') {
+      await hold(runtime, inputDriver, targetPoint(step.target), step.ms)
       continue
     }
 
@@ -519,6 +632,13 @@ export async function executeScenario(runtime, options) {
     throw new Error(`Unsupported scenario action: ${step.action}`)
   }
 
+  if (!options.dryRun) {
+    fs.mkdirSync(outputDir, { recursive: true })
+    fs.writeFileSync(path.join(outputDir, 'execution.json'), JSON.stringify({
+      scenarioId: scenario.id, calibrationPath, inputDriver, screenshotDriver,
+      completedAt: new Date().toISOString(), disposition: 'Native screenshots and runtime logs require review before declaring validation passed.',
+    }, null, 2) + '\n')
+  }
   return { scenarioId: scenario.id, outputDir }
 }
 

@@ -13,3 +13,4 @@ backend/.tools/
 backend/.m2repo/
 backend/.m2home/
 .test/simulator/calibration.local.json
+sim-debug.log

@@ -1,22 +1,121 @@
 {
   "id": "gameplay-smoke",
-  "requires": ["simulator", "input", "screenshot"],
+  "description": "Parallax Pilot native runtime smoke. Start on the home screen, with default tilt settings. Review all saved native frames before declaring success.",
+  "requires": [
+    "simulator",
+    "input",
+    "screenshot"
+  ],
   "steps": [
-    { "action": "launch" },
-    { "action": "wait", "ms": 3000 },
-    { "action": "focus" },
-    { "action": "key", "key": "Home" },
-    { "action": "tap", "target": "tutorialStart" },
-    { "action": "swipe", "target": "boardCenter", "dx": -180, "dy": 0, "durationMs": 350 },
-    { "action": "tap", "target": "quickMenuMode" },
-    { "action": "tap", "target": "modeRound" },
-    { "action": "screenshot", "name": "round-board" },
-    { "action": "tap", "target": "quickMenuBoard" },
-    { "action": "tap", "target": "boardSquare" },
-    { "action": "screenshot", "name": "square-board" },
-    { "action": "tap", "target": "quickMenuSpeed" },
-    { "action": "tap", "target": "speedFast" },
-    { "action": "tap", "target": "quickMenuRecenter" },
-    { "action": "screenshot", "name": "recentered" }
+    {
+      "action": "connect",
+      "timeoutMs": 20000
+    },
+    {
+      "action": "verify-app"
+    },
+    {
+      "action": "focus"
+    },
+    {
+      "action": "screenshot",
+      "name": "01-home"
+    },
+    {
+      "action": "tap",
+      "target": "homeSettings",
+      "instruction": "Tap SETTINGS on the native home screen."
+    },
+    {
+      "action": "wait",
+      "ms": 400
+    },
+    {
+      "action": "screenshot",
+      "name": "02-settings-before"
+    },
+    {
+      "action": "tap",
+      "target": "controlMode",
+      "instruction": "Tap CONTROL once and confirm TOUCH is selected."
+    },
+    {
+      "action": "wait",
+      "ms": 400
+    },
+    {
+      "action": "screenshot",
+      "name": "03-settings-touch"
+    },
+    {
+      "action": "tap",
+      "target": "settingsPlay",
+      "instruction": "Tap PLAY on the native settings screen."
+    },
+    {
+      "action": "wait",
+      "ms": 1000
+    },
+    {
+      "action": "screenshot",
+      "name": "04-game-start"
+    },
+    {
+      "action": "hold",
+      "target": "gameUp",
+      "ms": 500,
+      "instruction": "Hold the upper half of the native playfield for 500 ms."
+    },
+    {
+      "action": "screenshot",
+      "name": "05-game-up"
+    },
+    {
+      "action": "hold",
+      "target": "gameDown",
+      "ms": 1000,
+      "instruction": "Hold the lower half of the native playfield for 1000 ms."
+    },
+    {
+      "action": "screenshot",
+      "name": "06-game-down"
+    },
+    {
+      "action": "wait",
+      "ms": 20000
+    },
+    {
+      "action": "screenshot",
+      "name": "07-progression"
+    },
+    {
+      "action": "wait",
+      "ms": 20000
+    },
+    {
+      "action": "screenshot",
+      "name": "08-late-run-or-results"
+    },
+    {
+      "action": "wait",
+      "ms": 20000
+    },
+    {
+      "action": "screenshot",
+      "name": "09-results"
+    },
+    {
+      "action": "tap",
+      "target": "resultsReplay",
+      "instruction": "Confirm the saved result is visible, then tap PLAY on the right. If still in gameplay, wait for death before confirming."
+    },
+    {
+      "action": "wait",
+      "ms": 1000
+    },
+    {
+      "action": "screenshot",
+      "name": "10-replay"
+    }
   ]
 }

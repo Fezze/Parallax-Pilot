@@ -1,15 +1,40 @@
 {
-  "deviceWindowTitle": "Device Simulator|Amazfit|Simulator",
-  "screen": { "x": 0, "y": 0, "w": 480, "h": 480 },
+  "deviceWindowTitle": "Zepp OS Simulator",
+  "deviceWindowClass": "Qemu-system-arm",
+  "screen": {
+    "x": 0,
+    "y": 0,
+    "w": 480,
+    "h": 480
+  },
   "targets": {
-    "boardCenter": { "x": 0.5, "y": 0.5 },
-    "tutorialStart": { "x": 0.5, "y": 0.82 },
-    "quickMenuMode": { "x": 0.5, "y": 0.52 },
-    "modeRound": { "x": 0.5, "y": 0.42 },
-    "quickMenuBoard": { "x": 0.5, "y": 0.62 },
-    "boardSquare": { "x": 0.5, "y": 0.54 },
-    "quickMenuSpeed": { "x": 0.5, "y": 0.72 },
-    "speedFast": { "x": 0.5, "y": 0.64 },
-    "quickMenuRecenter": { "x": 0.5, "y": 0.82 }
+    "homeStart": {
+      "x": 0.5,
+      "y": 0.405
+    },
+    "homeSettings": {
+      "x": 0.5,
+      "y": 0.56
+    },
+    "controlMode": {
+      "x": 0.5,
+      "y": 0.245
+    },
+    "settingsPlay": {
+      "x": 0.72,
+      "y": 0.925
+    },
+    "gameUp": {
+      "x": 0.5,
+      "y": 0.3
+    },
+    "gameDown": {
+      "x": 0.5,
+      "y": 0.7
+    },
+    "resultsReplay": {
+      "x": 0.72,
+      "y": 0.94
+    }
   }
 }
