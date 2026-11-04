@@ -1,3 +1,4 @@
+import { tiltProfile } from './tilt-fixtures.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { addAsteroidToCollisionGrid, calculateDifficulty } from '../zepp-app/shared/game-core.js'
@@ -22,7 +23,7 @@ async function withGame(options, run) {
   __resetDisplay()
   __resetStorage()
   if (options.square) __setDeviceInfo({ width: 390, height: 450, screenShape: 'square' })
-  __seedLocalStorage({ settings_v1: JSON.stringify({
+  __seedLocalStorage({ tilt_calibration_v1: JSON.stringify(tiltProfile(options.settings?.wristSide || 'left')), settings_v1: JSON.stringify({
     controlMode: 'touch', wristSide: 'left', timeScale: 1,
     spawnMultiplier: 1, tiltSensitivity: 1, ...options.settings,
   }) })

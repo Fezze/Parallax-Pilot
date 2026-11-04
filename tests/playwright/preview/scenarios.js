@@ -1,3 +1,4 @@
+import { tiltProfile } from '../../tilt-fixtures.js'
 const DEFAULT_LOCALE = 'en-US'
 
 async function loadAppConfig() {
@@ -343,7 +344,8 @@ function createTiltCalibrationScenario({
     pageModule: '/zepp-app/page/tilt-calibration/index.js',
     deviceInfo,
     localStorage: {},
-    expectedTexts: [
+    afterBuild: variant === 'failed' ? page => page.failCalibration() : undefined,
+    expectedTexts: variant === 'failed' ? [locale === 'pl-PL' ? 'KALIBRACJA NIEUKOŃCZONA' : 'CALIBRATION INCOMPLETE', locale === 'pl-PL' ? 'PONÓW' : 'RETRY'] : [
       t(locale, 'tiltCalibrationTitle'),
       t(locale, 'tiltCalibrationGuide'),
       t(locale, 'tiltCalibrationStep', { current: 1, total: 3 }),
@@ -437,6 +439,7 @@ function createGameScenario({
     pageModule: '/zepp-app/page/game/index.js',
     deviceInfo,
     localStorage: {
+      tilt_calibration_v1: JSON.stringify(tiltProfile(wristSide)),
       settings_v1: createSettings({
         controlMode,
         wristSide,
@@ -500,6 +503,14 @@ function scenariosForDevice(locale, deviceFamily) {
         expectedTexts: [t(locale, 'homeTitle'), t(locale, 'startRun'), t(locale, 'savedRuns', { count: 0 })],
       }),
     ],
+    ...['tilt', 'touch', 'swipe'].map(mode => [
+      `home-${key}-${mode}-ready-${locale}`,
+      { ...createHomeScenario({ locale, deviceInfo, variant: `${mode}-ready`, controlMode: mode,
+        wristSide: 'left', timeScale: 1, spawnMultiplier: 1, tiltSensitivity: 1, scoreCount: 0,
+        expectedTexts: [t(locale, 'startRun')] }),
+        localStorage: { settings_v1: createSettings({ controlMode: mode }),
+          tilt_calibration_v1: JSON.stringify(tiltProfile()) } },
+    ]),
     [
       `home-${key}-tuned-${locale}`,
       createHomeScenario({
@@ -514,7 +525,7 @@ function scenariosForDevice(locale, deviceFamily) {
         scoreCount: isRound ? 5 : 12,
         expectedTexts: isRound
           ? [
-              t(locale, 'homeSubtitle'),
+              locale === 'pl-PL' ? 'PRZESUWAJ W GÓRĘ / DÓŁ' : 'DRAG UP / DOWN TO MOVE',
               t(locale, 'homeMeta', { timeScale: 2, spawnMultiplier: 1.25 }),
               t(locale, 'savedRuns', { count: 5 }),
             ]
@@ -650,6 +661,10 @@ function scenariosForDevice(locale, deviceFamily) {
         deviceInfo,
         variant: 'default',
       }),
+    ],
+    [
+      `tilt-calibration-${key}-failed-${locale}`,
+      createTiltCalibrationScenario({ locale, deviceInfo, variant: 'failed' }),
     ],
     [
       `tilt-calibration-logs-${key}-${locale}`,

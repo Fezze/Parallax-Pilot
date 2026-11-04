@@ -8,7 +8,7 @@ import {
   TIME_SCALE_OPTIONS,
   WRIST_SIDES,
 } from './constants.js'
-import { sanitizeTiltCalibration } from './tilt-calibration.js'
+import { sanitizeTiltCalibration, sanitizeTiltCalibrationReport } from './tilt-calibration.js'
 
 function safeParse(rawValue, fallback) {
   if (rawValue == null) {
@@ -115,22 +115,21 @@ export function writeLastSession(storage, session) {
 
 export function readTiltCalibration(storage) {
   return sanitizeTiltCalibration(
-    readJson(storage, STORAGE_KEYS.TILT_CALIBRATION, null)
+    readJson(storage, STORAGE_KEYS.TILT_CALIBRATION, null), readSettings(storage).wristSide
   )
 }
 
 export function writeTiltCalibration(storage, calibration) {
-  return writeJson(
-    storage,
-    STORAGE_KEYS.TILT_CALIBRATION,
-    sanitizeTiltCalibration(calibration)
-  )
+  const profile = sanitizeTiltCalibration(calibration, readSettings(storage).wristSide)
+  // Failed attempts must never erase the last usable profile.
+  if (!profile) return readTiltCalibration(storage)
+  return writeJson(storage, STORAGE_KEYS.TILT_CALIBRATION, profile)
 }
 
 export function readTiltCalibrationReport(storage) {
-  return readJson(storage, STORAGE_KEYS.TILT_CALIBRATION_REPORT, null)
+  return sanitizeTiltCalibrationReport(readJson(storage, STORAGE_KEYS.TILT_CALIBRATION_REPORT, null))
 }
 
 export function writeTiltCalibrationReport(storage, report) {
-  return writeJson(storage, STORAGE_KEYS.TILT_CALIBRATION_REPORT, report)
+  return writeJson(storage, STORAGE_KEYS.TILT_CALIBRATION_REPORT, sanitizeTiltCalibrationReport(report))
 }

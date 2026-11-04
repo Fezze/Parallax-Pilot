@@ -1,3 +1,4 @@
+import { tiltProfile } from './tilt-fixtures.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
@@ -104,7 +105,7 @@ test('home screen renders simplified copy and routes from main actions', async (
   const texts = getTexts()
   assert.equal(__isStatusBarVisible(), false)
   assert.ok(texts.includes('PARALLAX PILOT'))
-  assert.ok(texts.includes('DODGE THE ASTEROIDS'))
+  assert.ok(texts.includes('DRAG UP / DOWN TO MOVE'))
   assert.ok(texts.includes('TIME 2x  SPAWN 1.25x'))
   assert.ok(texts.includes('1 RUNS SAVED'))
   assert.equal(texts.some((text) => text.includes('CROWN AVAILABLE')), false)
@@ -138,7 +139,7 @@ test('home screen renders Polish copy when the watch language is pl-PL', async (
   page.build()
 
   const texts = getTexts()
-  assert.ok(texts.includes('OMIJAJ ASTEROIDY'))
+  assert.ok(texts.includes('PRZESUWAJ W GÓRĘ / DÓŁ'))
   assert.ok(texts.includes('CZAS 2x  ILO\u015a\u0106 1.25x'))
   assert.ok(texts.includes('WYNIKI: 1'))
   assert.ok(findButton('START'))
@@ -231,15 +232,7 @@ test('settings screen shows calibration status when a tilt profile exists', asyn
       spawnMultiplier: 1,
       tiltSensitivity: 0.95,
     }),
-    tilt_calibration_v1: JSON.stringify({
-      offset: 0.2,
-      deadzone: 0.8,
-      negativeRange: 8,
-      positiveRange: 9,
-      responseExponent: 1.1,
-      noisePeak: 0.3,
-      timestamp: 1,
-    }),
+    tilt_calibration_v1: JSON.stringify(tiltProfile()),
   })
 
   const page = await loadPageDefinition('../zepp-app/page/settings/index.js')
@@ -839,6 +832,7 @@ test('results screen renders Polish copy when the watch language is pl-PL', asyn
 test('game screen renders without debug text widgets in the canvas HUD', async () => {
   resetEnv()
   __seedLocalStorage({
+    tilt_calibration_v1: JSON.stringify(tiltProfile()),
     settings_v1: JSON.stringify({
       controlMode: 'tilt',
       wristSide: 'left',
@@ -881,6 +875,7 @@ test('game square HUD uses rounded corner arc segments', async () => {
     keyNumber: 2,
   })
   __seedLocalStorage({
+    tilt_calibration_v1: JSON.stringify(tiltProfile()),
     settings_v1: JSON.stringify({
       controlMode: 'tilt',
       wristSide: 'left',
@@ -924,6 +919,7 @@ test('game square HUD uses rounded corner arc segments', async () => {
 test('game swipe input moves relatively and does not teleport on touch down', async () => {
   resetEnv()
   __seedLocalStorage({
+    tilt_calibration_v1: JSON.stringify(tiltProfile()),
     settings_v1: JSON.stringify({
       controlMode: 'swipe',
       wristSide: 'left',
@@ -969,6 +965,7 @@ test('game swipe input moves relatively and does not teleport on touch down', as
 test('game spawn catch-up is capped to avoid burst walls after a delayed frame', async () => {
   resetEnv()
   __seedLocalStorage({
+    tilt_calibration_v1: JSON.stringify(tiltProfile()),
     settings_v1: JSON.stringify({
       controlMode: 'tilt',
       wristSide: 'left',

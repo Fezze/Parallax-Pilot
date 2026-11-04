@@ -1,5 +1,5 @@
 import { Accelerometer, FREQ_MODE_NORMAL } from '@zos/sensor'
-import { replace, push } from '@zos/router'
+import { replace } from '@zos/router'
 import { align, createWidget, prop, setStatusBarVisible, widget } from '@zos/ui'
 import { resetPageBrightTime, setPageBrightTime } from '@zos/display'
 import { getDeviceInfo } from '@zos/device'
@@ -16,22 +16,19 @@ import {
   getMeanAbsoluteDeviation,
   getWindowRange,
   orientTiltY,
+  average,
+  CALIBRATION_SAMPLE_LIMIT,
+  CALIBRATION_STAGE_TIMEOUT_MS,
+  CALIBRATION_STABLE_RANGE,
+  CALIBRATION_SETTLE_RANGE,
 } from '../../shared/tilt-calibration.js'
 import { loadSettings, saveTiltCalibration, saveTiltCalibrationReport } from '../../shared/storage.js'
+import { createRoundButtonPair } from '../../shared/page-ui.js'
 import { t } from '../../shared/i18n.js'
 
 const SAMPLE_INTERVAL_MS = 60
 const BRIGHT_TIME_MS = 600000
 const STABILITY_WINDOW_SIZE = 10
-const CENTER_STABLE_RANGE = 18
-const CENTER_STABLE_DELTA = 4.8
-const CENTER_STABLE_DEVIATION = 5.4
-const SETTLE_RANGE = 16
-const SETTLE_DELTA = 4.2
-const SETTLE_DEVIATION = 4.8
-const STABILITY_SMOOTHING_ALPHA = 0.08
-const HOLD_DECAY_FACTOR_STILL = 0.35
-const HOLD_DECAY_FACTOR_SETTLE = 0.55
 
 function hideStatusBar() {
   try {
@@ -67,61 +64,18 @@ function setText(target, text) {
   } catch (_error) {}
 }
 
-function updateHoldProgress(currentMs, isStable, decayFactor) {
-  if (isStable) {
-    return currentMs + SAMPLE_INTERVAL_MS
-  }
-
-  return Math.max(0, currentMs - SAMPLE_INTERVAL_MS * decayFactor)
-}
-
 Page({
   onInit() {
-    this.stageIndex = -1
-    this.stageStartedAt = 0
-    this.stageHoldMs = 0
-    this.stagePhase = 'idle'
-    this.referenceY = 0
-    this.recentSamples = []
-    this.recentStableSamples = []
-    this.smoothedY = null
-    this.samplesByStage = Object.fromEntries(
-      TILT_CALIBRATION_STAGES.map((stage) => [stage.id, []])
-    )
-    this.stageDiagnostics = Object.fromEntries(
-      TILT_CALIBRATION_STAGES.map((stage) => [stage.id, {}])
-    )
+    this.destroyed = false
     this.finished = false
     this.accelerometer = null
-    this.wristSide = 'left'
-  },
-
-  ensureState() {
-    if (this.samplesByStage && this.stageDiagnostics) {
-      return
-    }
-
-    this.stageIndex = -1
-    this.stageStartedAt = 0
-    this.stageHoldMs = 0
-    this.stagePhase = 'idle'
-    this.referenceY = 0
-    this.recentSamples = []
-    this.recentStableSamples = []
-    this.smoothedY = null
-    this.samplesByStage = Object.fromEntries(
-      TILT_CALIBRATION_STAGES.map((stage) => [stage.id, []])
-    )
-    this.stageDiagnostics = Object.fromEntries(
-      TILT_CALIBRATION_STAGES.map((stage) => [stage.id, {}])
-    )
-    this.finished = false
-    this.accelerometer = null
-    this.wristSide = 'left'
+    this.loop = null
+    this.samplesByStage = {}
+    this.stageDiagnostics = {}
   },
 
   build() {
-    this.ensureState()
+    if (!this.samplesByStage) this.onInit()
     hideStatusBar()
     keepScreenAwake()
     const deviceInfo = getDeviceInfo()
@@ -221,24 +175,60 @@ Page({
     this.liveText = live
     this.debugText = debug
 
-    this.accelerometer = new Accelerometer()
-    this.accelerometer.setFreqMode(FREQ_MODE_NORMAL)
-    this.accelerometer.start()
+    createRoundButtonPair({
+      x: Math.round(width * 0.14), w: Math.round(width * 0.72),
+      y: deviceInfo.height - 68, h: 44,
+      left: { text: t('cancel'), textSize: 18, onClick: () => {
+        this.stopSampling()
+        replace({ url: ROUTES.SETTINGS })
+      } },
+      right: { text: t('retry'), textSize: 18, onClick: () => this.startAttempt() },
+    })
+    this.startAttempt()
+  },
 
-    this.beginStage(0)
-    this.loop = setInterval(() => this.tick(), SAMPLE_INTERVAL_MS)
+  stopSampling() {
+    if (this.loop != null) clearInterval(this.loop)
+    this.loop = null
+    if (this.accelerometer) this.accelerometer.stop()
+    this.accelerometer = null
   },
 
   onDestroy() {
+    this.destroyed = true
+    this.finished = true
+    this.stopSampling()
     restoreScreenTimeout()
-    if (this.loop) {
-      clearInterval(this.loop)
-      this.loop = null
+  },
+
+  startAttempt() {
+    if (this.destroyed) return
+    this.stopSampling()
+    this.finished = false
+    this.referenceY = 0
+    this.deadzone = 0
+    this.samplesByStage = Object.fromEntries(TILT_CALIBRATION_STAGES.map(stage => [stage.id, []]))
+    this.stageDiagnostics = {}
+    setText(this.guideText, t('tiltCalibrationGuide'))
+    try {
+      this.accelerometer = new Accelerometer()
+      this.accelerometer.setFreqMode(FREQ_MODE_NORMAL)
+      this.accelerometer.start()
+      this.beginStage(0)
+      this.loop = setInterval(() => this.tick(), SAMPLE_INTERVAL_MS)
+    } catch (_error) {
+      this.failCalibration()
     }
-    if (this.accelerometer) {
-      this.accelerometer.stop()
-      this.accelerometer = null
-    }
+  },
+
+  failCalibration() {
+    this.finished = true
+    this.stagePhase = 'failed'
+    this.stopSampling()
+    setText(this.instructionText, t('tiltCalibrationFailed'))
+    setText(this.timerText, t('tiltCalibrationRetryHint'))
+    setText(this.liveText, '')
+    setText(this.debugText, '')
   },
 
   beginStage(index) {
@@ -246,7 +236,7 @@ Page({
     this.stageStartedAt = Date.now()
     this.stageHoldMs = 0
     this.recentSamples = []
-    this.recentStableSamples = []
+    this.lastSampleAt = Date.now()
     const stage = TILT_CALIBRATION_STAGES[index]
     this.stagePhase = stage.mode === 'still' ? 'still' : 'move'
     this.stageDiagnostics[stage.id] = {
@@ -274,156 +264,95 @@ Page({
         : t('tiltCalibrationWaitingMove')
     )
     setText(this.liveText, t('tiltCalibrationLive', { value: '0.00' }))
-    setText(this.debugText, 'RNG 0.00  MOV 0.00  DEV 0.00')
+    setText(this.debugText, 'RNG 0.00  MOV 0.00')
   },
 
   tick() {
-    if (this.finished || !this.accelerometer) {
+    if (this.finished || !this.accelerometer) return
+    const now = Date.now()
+    if (now - this.stageStartedAt >= CALIBRATION_STAGE_TIMEOUT_MS) {
+      this.failCalibration()
       return
     }
-
-    const now = Date.now()
     const stage = TILT_CALIBRATION_STAGES[this.stageIndex]
-    const reading = this.accelerometer.getCurrent() || { y: 0 }
+    let reading
+    try { reading = this.accelerometer.getCurrent() } catch (_error) {
+      this.failCalibration()
+      return
+    }
+    const sampleMs = now - this.lastSampleAt
+    this.lastSampleAt = now
+    if (!Number.isFinite(reading?.y) || sampleMs <= 0 || sampleMs > SAMPLE_INTERVAL_MS * 3) {
+      this.recentSamples = []
+      this.samplesByStage[stage.id] = []
+      this.stageHoldMs = 0
+      return
+    }
     const orientedY = orientTiltY(reading.y, this.wristSide)
-    this.samplesByStage[stage.id].push(orientedY)
     this.recentSamples.push(orientedY)
-    if (this.recentSamples.length > STABILITY_WINDOW_SIZE) {
-      this.recentSamples.shift()
-    }
-    this.smoothedY =
-      this.smoothedY == null
-        ? orientedY
-        : this.smoothedY + (orientedY - this.smoothedY) * STABILITY_SMOOTHING_ALPHA
-    this.recentStableSamples.push(this.smoothedY)
-    if (this.recentStableSamples.length > STABILITY_WINDOW_SIZE) {
-      this.recentStableSamples.shift()
-    }
+    if (this.recentSamples.length > STABILITY_WINDOW_SIZE) this.recentSamples.shift()
     const debug = this.stageDiagnostics[stage.id]
     debug.samples += 1
+    const stableRange = getWindowRange(this.recentSamples)
+    const avgStepDelta = getAverageStepDelta(this.recentSamples)
+    const avgDeviation = getMeanAbsoluteDeviation(this.recentSamples)
+    debug.settleRange = Math.max(debug.settleRange, stableRange)
+    debug.avgStepDelta = Math.max(debug.avgStepDelta, avgStepDelta)
+    debug.avgDeviation = Math.max(debug.avgDeviation, avgDeviation)
+    setText(this.liveText, t('tiltCalibrationLive', { value: orientedY.toFixed(2) }))
+    setText(this.debugText, `RNG ${stableRange.toFixed(2)}  MOV ${avgStepDelta.toFixed(2)}`)
 
-    const roundedY = (Math.round(reading.y * 100) / 100).toFixed(2)
-    setText(
-      this.liveText,
-      t('tiltCalibrationLive', {
-        value: roundedY,
-      })
-    )
-    const stableRange = getWindowRange(this.recentStableSamples)
-    const avgStepDelta = getAverageStepDelta(this.recentStableSamples)
-    const avgDeviation = getMeanAbsoluteDeviation(this.recentStableSamples)
-    setText(
-      this.debugText,
-      `RNG ${stableRange.toFixed(2)}  MOV ${avgStepDelta.toFixed(2)}  DEV ${avgDeviation.toFixed(2)}`
-    )
-
-    if (stage.mode === 'still') {
-      const isStable =
-        this.recentStableSamples.length >= 4 &&
-        stableRange <= CENTER_STABLE_RANGE &&
-        avgStepDelta <= CENTER_STABLE_DELTA &&
-        avgDeviation <= CENTER_STABLE_DEVIATION
-
-      const nextHoldMs = updateHoldProgress(
-        this.stageHoldMs,
-        isStable,
-        HOLD_DECAY_FACTOR_STILL
-      )
-      if (!isStable && nextHoldMs < this.stageHoldMs) {
-        debug.resets += 1
-      }
-      this.stageHoldMs = nextHoldMs
-      debug.holdMs = this.stageHoldMs
-      debug.settleRange = Math.max(debug.settleRange, stableRange)
-      debug.avgStepDelta = Math.max(debug.avgStepDelta, avgStepDelta)
-      debug.avgDeviation = Math.max(debug.avgDeviation, avgDeviation)
-      setText(
-        this.timerText,
-        t('tiltCalibrationWaitingStill', {
-          current: (this.stageHoldMs / 1000).toFixed(1),
-          target: (stage.durationMs / 1000).toFixed(1),
-        })
-      )
-      if (this.stageHoldMs < stage.durationMs) {
-        return
-      }
-      this.referenceY = this.smoothedY ?? orientedY
-    } else {
-      const currentY = this.smoothedY ?? orientedY
-      const delta = getDirectionalDelta(currentY, this.referenceY, stage.direction)
+    const delta = getDirectionalDelta(orientedY, this.referenceY, stage.direction)
+    const entryThreshold = Math.max(CALIBRATION_STABLE_RANGE, this.deadzone * 3)
+    if (stage.mode === 'move') {
       debug.peakDelta = Math.max(debug.peakDelta, delta)
-
       if (this.stagePhase === 'move') {
-        setText(this.timerText, t('tiltCalibrationWaitingMove'))
-        if (delta < stage.entryThreshold) {
-          return
-        }
+        if (delta <= entryThreshold) return
         this.stagePhase = 'settle'
-        this.stageHoldMs = 0
-        this.recentStableSamples = [currentY]
+        this.recentSamples = [orientedY]
         debug.entryMs = now - this.stageStartedAt
-        debug.holdMs = this.stageHoldMs
-        return
-      }
-
-      const needsReset =
-        delta < stage.entryThreshold * 0.82 || stableRange > SETTLE_RANGE
-        || avgStepDelta > SETTLE_DELTA
-        || avgDeviation > SETTLE_DEVIATION
-
-      const nextHoldMs = updateHoldProgress(
-        this.stageHoldMs,
-        !needsReset,
-        HOLD_DECAY_FACTOR_SETTLE
-      )
-      if (needsReset && nextHoldMs < this.stageHoldMs) {
-        debug.resets += 1
-      }
-      this.stageHoldMs = nextHoldMs
-
-      debug.holdMs = this.stageHoldMs
-      debug.settleRange = Math.max(debug.settleRange, stableRange)
-      debug.avgStepDelta = Math.max(debug.avgStepDelta, avgStepDelta)
-      debug.avgDeviation = Math.max(debug.avgDeviation, avgDeviation)
-      setText(
-        this.timerText,
-        t('tiltCalibrationWaitingSettle', {
-          current: (this.stageHoldMs / 1000).toFixed(1),
-          target: (stage.durationMs / 1000).toFixed(1),
-        })
-      )
-
-      if (this.stageHoldMs < stage.durationMs) {
         return
       }
     }
-
-    if (this.stageIndex < TILT_CALIBRATION_STAGES.length - 1) {
-      this.beginStage(this.stageIndex + 1)
-      return
+    const isStable = this.recentSamples.length === STABILITY_WINDOW_SIZE &&
+      stableRange <= (stage.mode === 'still' ? CALIBRATION_STABLE_RANGE : CALIBRATION_SETTLE_RANGE) &&
+      avgStepDelta <= (stage.mode === 'still' ? 4.8 : 4.2) &&
+      avgDeviation <= (stage.mode === 'still' ? 5.4 : 4.8) &&
+      (stage.mode === 'still' || delta > entryThreshold)
+    if (!isStable) {
+      if (this.stageHoldMs > 0) debug.resets += 1
+      this.stageHoldMs = 0
+      this.samplesByStage[stage.id] = []
+    } else {
+      // Consecutive settled raw samples only; transition/waiting spikes cannot set gain.
+      this.stageHoldMs += Math.min(sampleMs, SAMPLE_INTERVAL_MS)
+      this.samplesByStage[stage.id].push(orientedY)
+      if (this.samplesByStage[stage.id].length > CALIBRATION_SAMPLE_LIMIT) this.samplesByStage[stage.id].shift()
     }
-
-    this.finishCalibration()
+    debug.holdMs = this.stageHoldMs
+    setText(this.timerText, t(stage.mode === 'still' ? 'tiltCalibrationWaitingStill' : 'tiltCalibrationWaitingSettle', {
+      current: (this.stageHoldMs / 1000).toFixed(1), target: (stage.durationMs / 1000).toFixed(1),
+    }))
+    if (this.stageHoldMs < stage.durationMs) return
+    if (stage.mode === 'still') {
+      this.referenceY = average(this.samplesByStage.center)
+      this.deadzone = Math.max(0.01, ...this.samplesByStage.center.map(value => Math.abs(value - this.referenceY) * 2.4))
+    }
+    if (this.stageIndex < TILT_CALIBRATION_STAGES.length - 1) this.beginStage(this.stageIndex + 1)
+    else this.finishCalibration()
   },
 
   finishCalibration() {
+    const report = buildTiltCalibrationReport(this.samplesByStage, this.stageDiagnostics, this.wristSide)
+    if (!report.profile || loadSettings().wristSide !== this.wristSide) {
+      this.failCalibration()
+      return
+    }
     this.finished = true
-    const report = buildTiltCalibrationReport(this.samplesByStage, this.stageDiagnostics)
+    this.stopSampling()
     saveTiltCalibration(report.profile)
-    saveTiltCalibrationReport(report)
-    setText(this.stepText, '')
+    if (FEATURE_FLAGS.tiltCalibrationLogs) saveTiltCalibrationReport(report)
     setText(this.instructionText, t('tiltCalibrationDone'))
-    setText(this.timerText, '')
-    setText(this.liveText, '')
-    setText(this.debugText, '')
-
-    setTimeout(() => {
-      if (FEATURE_FLAGS.tiltCalibrationLogs) {
-        push({ url: ROUTES.TILT_CALIBRATION_LOGS })
-        return
-      }
-
-      replace({ url: ROUTES.SETTINGS })
-    }, 250)
+    replace({ url: FEATURE_FLAGS.tiltCalibrationLogs ? ROUTES.TILT_CALIBRATION_LOGS : ROUTES.SETTINGS })
   },
 })

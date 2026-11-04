@@ -183,9 +183,9 @@ test('device helpers and score entry cover invalid and negative branches', () =>
 
 test('tilt calibration derives stable ranges and softens normalized input near center', () => {
   const report = buildTiltCalibrationReport({
-    center: [0.1, 0.2, 0.15, 0.18],
-    down: [-7.8, -8.1, -8.4],
-    up: [7.4, 7.8, 8.2],
+    center: Array.from({ length: 24 }, (_, i) => i % 2 ? 0.2 : -0.2),
+    down: Array(12).fill(100),
+    up: Array(12).fill(-180),
   })
 
   assert.ok(report.profile)

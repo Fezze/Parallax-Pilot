@@ -4,7 +4,7 @@ import { COLORS, ROUTES } from '../../shared/constants.js'
 import { sanitizeControlMode } from '../../shared/device.js'
 import { t } from '../../shared/i18n.js'
 import { createActionButton, createLabel, hideStatusBar } from '../../shared/page-ui.js'
-import { loadScores, loadSettings, saveSettings } from '../../shared/storage.js'
+import { loadScores, loadSettings, loadTiltCalibration, saveSettings } from '../../shared/storage.js'
 
 Page({
   build() {
@@ -24,6 +24,8 @@ Page({
       ...settings,
       controlMode: safeControlMode,
     }
+    const calibration = loadTiltCalibration()
+    const needsCalibration = safeControlMode === 'tilt' && !calibration
     const scores = loadScores()
     const { width, height } = deviceInfo
     const isRound = deviceInfo.screenShape === SCREEN_SHAPE_ROUND
@@ -52,9 +54,9 @@ Page({
       x: pad,
       y: subtitleY,
       w: fullWidth,
-      h: 26,
-      text: t('homeSubtitle'),
-      textSize: isRound ? 18 : 16,
+      h: 42,
+      text: t(safeControlMode === 'tilt' ? (needsCalibration ? 'hintTiltMissing' : 'hintTiltReady') : `hint_${safeControlMode}`),
+      textSize: 15,
       color: COLORS.textMuted,
     })
 
@@ -67,7 +69,7 @@ Page({
       normalColor: COLORS.accent,
       pressColor: 0xc9a900,
       textColor: COLORS.background,
-      onClick: () => push({ url: ROUTES.GAME }),
+      onClick: () => push({ url: needsCalibration ? ROUTES.TILT_CALIBRATION : ROUTES.GAME }),
     })
 
     createActionButton({

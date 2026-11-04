@@ -342,7 +342,7 @@ Page({
     this.baseControlSpeed =
       Math.min(this.viewport.width, this.viewport.height) *
       CONTROL_BASE_SPEED_FACTOR *
-      (this.tiltCalibration ? 1 : this.settings.tiltSensitivity)
+      (this.settings.controlMode === 'tilt' && this.tiltCalibration ? 1 : this.settings.tiltSensitivity)
     this.shipPoints = Array.from({ length: 5 }, () => ({ x: 0, y: 0 }))
     this.shipRect = createShipRect(
       this.viewport,
@@ -352,6 +352,10 @@ Page({
   },
 
   build() {
+    if (this.settings.controlMode === 'tilt' && !this.tiltCalibration) {
+      replace({ url: ROUTES.TILT_CALIBRATION })
+      return
+    }
     hideStatusBar()
     keepScreenAwake()
 
