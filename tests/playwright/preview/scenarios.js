@@ -1,3 +1,4 @@
+import { createShipRect } from '../../../zepp-app/shared/game-core.js'
 import { tiltProfile } from '../../tilt-fixtures.js'
 const DEFAULT_LOCALE = 'en-US'
 
@@ -458,6 +459,13 @@ function createGameScenario({
         asteroid.x = Math.round(page.viewport.width * (0.78 - index * 0.18))
         asteroid.y = Math.round(page.viewport.height * (0.24 + index * 0.22))
       })
+      if (variant.includes('limit-')) {
+        page.shipCenterY = variant.includes('top') ? -1000 : page.viewport.height + 1000
+        page.updateShip(0)
+        page.shipRect = createShipRect(page.viewport, page.shipCenterY, wristSide, page.shipRect)
+        page.hp = 12
+        page.displayedHp = 12
+      }
       page.drawFrame()
     },
   })
@@ -680,3 +688,11 @@ function scenariosForDevice(locale, deviceFamily) {
 export const previewScenarios = Object.fromEntries(
   ACTIVE_LOCALES.flatMap((locale) => DEVICE_FAMILIES.flatMap((deviceFamily) => scenariosForDevice(locale, deviceFamily)))
 )
+
+// Boundary screenshots cover the same supported locale/device/wrist matrix.
+for (const locale of ACTIVE_LOCALES) for (const { key, deviceInfo } of DEVICE_FAMILIES) {
+  for (const wristSide of ['left', 'right']) for (const edge of ['top', 'bottom']) {
+    const variant = `${wristSide}-limit-${edge}-low-hp`
+    previewScenarios[`game-${key}-${variant}-${locale}`] = createGameScenario({ locale, deviceInfo, wristSide, variant })
+  }
+}

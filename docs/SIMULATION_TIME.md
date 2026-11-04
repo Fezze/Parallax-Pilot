@@ -29,8 +29,9 @@ ordinary 16–200 ms callbacks, rather than replacing them with a large motion
 jump. The 250 ms admission limit covers the required 200 ms schedule with a
 small jitter allowance while keeping a hard work bound. These are correctness
 and interruption-policy choices, not measured optimal watch-performance values.
-This change does not replace R3's collision geometry/continuity work, including
-the existing grid omissions and potential tunneling at extreme late-run speeds.
+R3 adds conservative swept grid queries and continuous relative-motion collision
+against the visible arrow; see `COLLISION_GEOMETRY.md`. The 10 ms clock and its
+interruption/cooldown policies remain unchanged.
 
 ## Input and reproducibility
 

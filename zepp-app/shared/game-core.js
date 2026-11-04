@@ -37,27 +37,56 @@ export function createScoreEntry(survivedMs, settings, timestamp = Date.now()) {
   }
 }
 
-export function createShipRect(viewport, shipCenterY, wristSide) {
-  const minDimension = Math.min(viewport.width, viewport.height)
-  const shipHeight = Math.round(Math.max(18, minDimension * 0.055))
-  const shipWidth = Math.round(shipHeight * 1.45)
-  const travelDirection = resolveTravelDirection(wristSide)
-  const centerX = Math.round(
-    viewport.width * (travelDirection === 'right' ? 0.36 : 0.64)
-  )
-  const top = Math.round(
-    clamp(shipCenterY - shipHeight / 2, 14, viewport.height - shipHeight - 14)
-  )
-  const left = Math.round(centerX - shipWidth / 2)
+export const ROUND_HUD_MARGIN = 12
+export const HUD_STROKE_WIDTH = 8
+export const SHIP_STROKE_WIDTH = 3
+const SHIP_HUD_GAP = 3
 
-  return {
-    x: left,
-    y: top,
-    w: shipWidth,
-    h: shipHeight,
-    centerX: left + shipWidth / 2,
-    centerY: top + shipHeight / 2,
+function getShipDimensions(viewport, wristSide) {
+  const h = Math.round(Math.max(18, Math.min(viewport.width, viewport.height) * 0.055))
+  const w = Math.round(h * 1.45)
+  const centerX = Math.round(viewport.width * (wristSide === 'right' ? 0.64 : 0.36))
+  return { x: Math.round(centerX - w / 2), w, h }
+}
+
+export function getShipYLimits(viewport, wristSide) {
+  const { x, w, h } = getShipDimensions(viewport, wristSide)
+  let top = 14
+  if (viewport.isRound ?? viewport.width === viewport.height) {
+    const safeRadius = Math.min(viewport.width, viewport.height) / 2 -
+      ROUND_HUD_MARGIN - HUD_STROKE_WIDTH / 2 - SHIP_STROKE_WIDTH / 2 - SHIP_HUD_GAP
+    const dx = Math.max(Math.abs(x - viewport.width / 2), Math.abs(x + w - viewport.width / 2))
+    // Every arrow vertex (and its stroke) stays inside the HUD inner edge.
+    top = Math.ceil(viewport.height / 2 - Math.sqrt(Math.max(0, safeRadius * safeRadius - dx * dx)))
   }
+  return { min: top + h / 2, max: viewport.height - top - h / 2 }
+}
+
+export function updateShipPoints(points, rect, wristSide = rect.wristSide || 'left') {
+  const cy = rect.y + rect.h / 2
+  const right = wristSide !== 'right'
+  const nose = right ? rect.x + rect.w : rect.x
+  const tail = right ? rect.x : rect.x + rect.w
+  points[0].x = nose
+  points[0].y = cy
+  points[1].x = tail
+  points[1].y = rect.y
+  points[2].x = rect.x + rect.w * (right ? 0.28 : 0.72)
+  points[2].y = cy
+  points[3].x = tail
+  points[3].y = rect.y + rect.h
+  points[4].x = nose
+  points[4].y = cy
+  return points
+}
+
+export function createShipRect(viewport, shipCenterY, wristSide, rect = {}) {
+  const { x, w, h } = getShipDimensions(viewport, wristSide)
+  const limits = getShipYLimits(viewport, wristSide)
+  const y = Math.round(clamp(shipCenterY, limits.min, limits.max) - h / 2)
+  Object.assign(rect, { x, y, w, h, centerX: x + w / 2, centerY: y + h / 2, wristSide })
+  rect.points = updateShipPoints(rect.points || Array.from({ length: 5 }, () => ({ x: 0, y: 0 })), rect)
+  return rect
 }
 
 export function getSpawnIntervalMs(difficulty, spawnMultiplier) {
@@ -263,29 +292,15 @@ export function advanceAsteroidsInPlace(asteroids, deltaSeconds, viewport) {
   return asteroids
 }
 
-export function isAsteroidInCollisionBand(asteroid, shipRect, wristSide) {
-  if (asteroid.y + asteroid.radius < shipRect.y) {
-    return false
-  }
-
-  if (asteroid.y - asteroid.radius > shipRect.y + shipRect.h) {
-    return false
-  }
-
-  const travelDirection = resolveTravelDirection(wristSide)
-  if (travelDirection === 'right') {
-    if (asteroid.x + asteroid.radius < shipRect.x) {
-      return false
-    }
-
-    return asteroid.x - asteroid.radius <= shipRect.x + shipRect.w + ASTEROID_RADIUS_MAX
-  }
-
-  if (asteroid.x - asteroid.radius > shipRect.x + shipRect.w) {
-    return false
-  }
-
-  return asteroid.x + asteroid.radius >= shipRect.x - ASTEROID_RADIUS_MAX
+export function isAsteroidInCollisionBand(asteroid, shipRect, wristSide, previousShipRect = shipRect) {
+  const left = Math.min(shipRect.x, previousShipRect.x)
+  const right = Math.max(shipRect.x + shipRect.w, previousShipRect.x + previousShipRect.w)
+  const top = Math.min(shipRect.y, previousShipRect.y)
+  const bottom = Math.max(shipRect.y + shipRect.h, previousShipRect.y + previousShipRect.h)
+  const previousX = asteroid.previousX ?? asteroid.x
+  return asteroid.y + asteroid.radius >= top && asteroid.y - asteroid.radius <= bottom &&
+    Math.max(asteroid.x, previousX) + asteroid.radius >= left &&
+    Math.min(asteroid.x, previousX) - asteroid.radius <= right
 }
 
 export function createCollisionGrid(
@@ -365,17 +380,21 @@ export function advanceAsteroidsInCollisionGrid(
   asteroids,
   deltaSeconds,
   viewport,
-  grid
+  grid,
+  retainSwept = false
 ) {
   let writeIndex = 0
+  grid.maxDisplacement = 0
 
   for (let index = 0; index < asteroids.length; index += 1) {
     const asteroid = asteroids[index]
+    asteroid.previousX = asteroid.x
     asteroid.x += asteroid.vx * deltaSeconds
+    grid.maxDisplacement = Math.max(grid.maxDisplacement, Math.abs(asteroid.x - asteroid.previousX))
 
     if (
-      asteroid.x + asteroid.radius <= -24 ||
-      asteroid.x - asteroid.radius >= viewport.width + 24
+      (retainSwept ? Math.max(asteroid.x, asteroid.previousX) : asteroid.x) + asteroid.radius <= -24 ||
+      (retainSwept ? Math.min(asteroid.x, asteroid.previousX) : asteroid.x) - asteroid.radius >= viewport.width + 24
     ) {
       removeAsteroidFromCollisionGrid(asteroid, grid)
       continue
@@ -399,28 +418,18 @@ export function collectCollisionCandidatesFromGrid(
   grid,
   shipRect,
   wristSide,
-  candidates = []
+  candidates = [],
+  previousShipRect = shipRect
 ) {
   candidates.length = 0
 
-  const travelDirection = resolveTravelDirection(wristSide)
-  const minSlice = getCollisionSliceIndex(
-    travelDirection === 'right'
-      ? shipRect.x
-      : shipRect.x - ASTEROID_RADIUS_MAX,
-    grid
-  )
-  const maxSlice = getCollisionSliceIndex(
-    travelDirection === 'right'
-      ? shipRect.x + shipRect.w + ASTEROID_RADIUS_MAX
-      : shipRect.x + shipRect.w,
-    grid
-  )
-  const minBucket = getCollisionBucketIndex(shipRect.y - ASTEROID_RADIUS_MAX, grid)
-  const maxBucket = getCollisionBucketIndex(
-    shipRect.y + shipRect.h + ASTEROID_RADIUS_MAX,
-    grid
-  )
+  // Centers are indexed once: both sides need radius padding, including the
+  // trailing side. Swept centers can end beyond the static query rectangle.
+  const padding = ASTEROID_RADIUS_MAX + (grid.maxDisplacement || 0)
+  const minSlice = getCollisionSliceIndex(Math.min(shipRect.x, previousShipRect.x) - padding, grid)
+  const maxSlice = getCollisionSliceIndex(Math.max(shipRect.x + shipRect.w, previousShipRect.x + previousShipRect.w) + padding, grid)
+  const minBucket = getCollisionBucketIndex(Math.min(shipRect.y, previousShipRect.y) - ASTEROID_RADIUS_MAX, grid)
+  const maxBucket = getCollisionBucketIndex(Math.max(shipRect.y + shipRect.h, previousShipRect.y + previousShipRect.h) + ASTEROID_RADIUS_MAX, grid)
 
   for (let sliceIndex = minSlice; sliceIndex <= maxSlice; sliceIndex += 1) {
     const slice = grid.slices[sliceIndex]
@@ -428,7 +437,7 @@ export function collectCollisionCandidatesFromGrid(
       const bucket = slice[bucketIndex]
       for (let index = 0; index < bucket.length; index += 1) {
         const asteroid = bucket[index]
-        if (isAsteroidInCollisionBand(asteroid, shipRect, wristSide)) {
+        if (isAsteroidInCollisionBand(asteroid, shipRect, wristSide, previousShipRect)) {
           candidates.push(asteroid)
         }
       }
@@ -458,70 +467,74 @@ export function advanceAsteroidsAndCollectCollisionCandidates(
   return collectCollisionCandidatesFromGrid(grid, shipRect, wristSide, candidates)
 }
 
-function intersectionArea(leftRect, rightRect) {
-  const left = Math.max(leftRect.x, rightRect.x)
-  const top = Math.max(leftRect.y, rightRect.y)
-  const right = Math.min(leftRect.x + leftRect.w, rightRect.x + rightRect.w)
-  const bottom = Math.min(leftRect.y + leftRect.h, rightRect.y + rightRect.h)
-
-  if (right <= left || bottom <= top) {
-    return 0
-  }
-
-  return (right - left) * (bottom - top)
+function pointSegmentDistanceSquared(px, py, ax, ay, bx, by) {
+  const dx = bx - ax
+  const dy = by - ay
+  const lengthSquared = dx * dx + dy * dy
+  const t = lengthSquared ? clamp(((px - ax) * dx + (py - ay) * dy) / lengthSquared, 0, 1) : 0
+  const x = px - ax - t * dx
+  const y = py - ay - t * dy
+  return x * x + y * y
 }
 
-function getCircleRectOverlapRatio(shipRect, asteroid) {
-  const nearestX = clamp(
-    asteroid.x,
-    shipRect.x,
-    shipRect.x + shipRect.w
-  )
-  const nearestY = clamp(
-    asteroid.y,
-    shipRect.y,
-    shipRect.y + shipRect.h
-  )
-  const dx = asteroid.x - nearestX
-  const dy = asteroid.y - nearestY
-  const distanceSquared = dx * dx + dy * dy
-  const radiusSquared = asteroid.radius * asteroid.radius
-
-  if (distanceSquared > radiusSquared) {
-    return 0
+function segmentDistanceSquared(ax, ay, bx, by, cx, cy, dx, dy) {
+  const abx = bx - ax
+  const aby = by - ay
+  const cdx = dx - cx
+  const cdy = dy - cy
+  const determinant = abx * cdy - aby * cdx
+  if (determinant !== 0) {
+    const t = ((cx - ax) * cdy - (cy - ay) * cdx) / determinant
+    const u = ((cx - ax) * aby - (cy - ay) * abx) / determinant
+    if (t >= 0 && t <= 1 && u >= 0 && u <= 1) return 0
   }
+  return Math.min(
+    pointSegmentDistanceSquared(ax, ay, cx, cy, dx, dy),
+    pointSegmentDistanceSquared(bx, by, cx, cy, dx, dy),
+    pointSegmentDistanceSquared(cx, cy, ax, ay, bx, by),
+    pointSegmentDistanceSquared(dx, dy, ax, ay, bx, by)
+  )
+}
 
-  return clamp(1 - distanceSquared / radiusSquared, 0, 1)
+function isPointInsideShip(x, y, points) {
+  let inside = false
+  for (let i = 0; i < 4; i += 1) {
+    const a = points[i]
+    const b = points[i + 1]
+    if ((a.y > y) !== (b.y > y) && x < (b.x - a.x) * (y - a.y) / (b.y - a.y) + a.x) inside = !inside
+  }
+  return inside
 }
 
 export function calculateCollisionResult({
   shipRect,
+  previousShipRect = shipRect,
   asteroid,
   difficulty,
   now,
   cooldownMs = COLLISION_COOLDOWN_MS,
 }) {
-  if (now - asteroid.lastHitAt < cooldownMs) {
+  if (now - asteroid.lastHitAt < cooldownMs || !isAsteroidInCollisionBand(asteroid, shipRect, shipRect.wristSide, previousShipRect)) {
     return { hit: false, damage: 0, overlapRatio: 0 }
   }
-
-  const asteroidRect = {
-    x: asteroid.x - asteroid.radius,
-    y: asteroid.y - asteroid.radius,
-    w: asteroid.radius * 2,
-    h: asteroid.radius * 2,
+  const points = shipRect.points || updateShipPoints(Array.from({ length: 5 }, () => ({ x: 0, y: 0 })), shipRect)
+  // Translate the start of the circle path into the final ship's frame. The
+  // ship only translates, so this handles touch, tilt and swipe continuously.
+  const ax = (asteroid.previousX ?? asteroid.x) + shipRect.x - previousShipRect.x
+  const ay = asteroid.y + shipRect.y - previousShipRect.y
+  const bx = asteroid.x
+  const by = asteroid.y
+  let distanceSquared = 0
+  if (!isPointInsideShip(ax, ay, points) && !isPointInsideShip(bx, by, points)) {
+    distanceSquared = Infinity
+    for (let i = 0; i < 4; i += 1) {
+      const a = points[i]
+      const b = points[i + 1]
+      distanceSquared = Math.min(distanceSquared, segmentDistanceSquared(ax, ay, bx, by, a.x, a.y, b.x, b.y))
+    }
   }
-  if (intersectionArea(shipRect, asteroidRect) <= 0) {
-    return { hit: false, damage: 0, overlapRatio: 0 }
-  }
-  const overlapRatio = getCircleRectOverlapRatio(shipRect, asteroid)
-  if (overlapRatio <= 0) {
-    return { hit: false, damage: 0, overlapRatio: 0 }
-  }
-
-  return {
-    hit: true,
-    damage: getAsteroidDamage(asteroid.radius),
-    overlapRatio,
-  }
+  const overlapRatio = clamp(1 - distanceSquared / (asteroid.radius * asteroid.radius), 0, 1)
+  return overlapRatio > 0
+    ? { hit: true, damage: getAsteroidDamage(asteroid.radius), overlapRatio }
+    : { hit: false, damage: 0, overlapRatio: 0 }
 }

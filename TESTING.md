@@ -114,3 +114,14 @@ explicitly records unreliable automatic touch injection and startup-only smoke.
 A host lock must be unlocked by its user before manual interaction continues.
 Native capture requires Node.js 22+ and the installed simulator screenshot
 service. It does not capture the Electron shell as a substitute for firmware.
+
+### Collision and flight-envelope regression
+
+`tests/collision-geometry.test.js` compares the grid and silhouette against
+independent rectangle/triangle oracles and minimizes relative-motion distance
+to convex triangles for swept cases. `tests/game-simulation.test.js` also runs
+fast offscreen crossings, both wrists, swipe movement, and cooldown through the
+actual page. Run them with the full Node suite. The Playwright suite includes
+low-health upper/lower flight-limit screenshots for all five display families,
+both wrists and both locales. Inspect those frames alongside native simulator
+captures; browser geometry is not native rasterization evidence.

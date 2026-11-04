@@ -232,3 +232,52 @@ test('a paused interval can be inserted into a live run without changing subsequ
   }
   assert.deepEqual(results[1], results[0])
 })
+
+for (const wristSide of ['left', 'right']) {
+  test(`actual page catches a whole-playfield crossing before pruning (${wristSide})`, async () => {
+    await withGame({ settings: { wristSide } }, ({ page, tick }) => {
+      const asteroid = { id: 'extreme-crossing', x: wristSide === 'left' ? 470 : 10,
+        y: page.shipRect.centerY, radius: 7, vx: wristSide === 'left' ? -100000 : 100000, lastHitAt: -Infinity }
+      page.asteroids.push(asteroid)
+      addAsteroidToCollisionGrid(asteroid, page.collisionGrid)
+      tick(10)
+      assert.equal(page.hp, 93)
+      assert.equal(asteroid.lastHitAt, 10)
+      tick(20)
+      assert.equal(page.hp, 93, 'one crossing produces one damage charge')
+      assert.equal(page.asteroids.length, 0, 'exited object removed on following step')
+    })
+  })
+  test(`actual swipe motion crosses a stationary asteroid and clamps to the visible envelope (${wristSide})`, async () => {
+    await withGame({ settings: { controlMode: 'swipe', wristSide } }, ({ page, canvas, tick }) => {
+      const asteroid = { id: 'swipe-crossing', x: page.shipRect.centerX, y: 140, radius: 7, vx: 0, lastHitAt: -Infinity }
+      page.asteroids.push(asteroid)
+      addAsteroidToCollisionGrid(asteroid, page.collisionGrid)
+      canvas.__emit('CLICK_DOWN', { y: 240 })
+      canvas.__emit('MOVE', { y: -1000 })
+      tick(10)
+      assert.equal(page.hp, 93)
+      assert.equal(page.shipCenterY, page.shipYLimits.min)
+      assert.equal(page.shipRect.centerY, page.shipCenterY)
+      canvas.__emit('MOVE', { y: 2000 })
+      tick(20)
+      assert.equal(page.hp, 93, 'cooldown blocks a second sweep through the same contact')
+      assert.equal(page.shipCenterY, page.shipYLimits.max)
+      assert.equal(page.shipRect.centerY, page.shipCenterY)
+    })
+  })
+}
+
+for (const difficulty of [166, 500, 1000]) {
+  test(`actual page detects reachable late-run speeds at difficulty ${difficulty}`, async () => {
+    await withGame({}, ({ page, tick }) => {
+      const asteroid = { id: 'late-speed', x: page.shipRect.x + page.shipRect.w + 10,
+        y: page.shipRect.centerY, radius: 18, vx: -(96 + difficulty * 9 + 28), lastHitAt: -Infinity }
+      page.asteroids.push(asteroid)
+      addAsteroidToCollisionGrid(asteroid, page.collisionGrid)
+      tick(200)
+      assert.equal(page.hp, 87)
+      assert.ok(asteroid.lastHitAt > 0)
+    })
+  })
+}

@@ -36,6 +36,10 @@ import {
   createScoreEntry,
   createShipRect,
   getSpawnIntervalMs,
+  getShipYLimits,
+  ROUND_HUD_MARGIN,
+  HUD_STROKE_WIDTH,
+  SHIP_STROKE_WIDTH,
 } from '../../shared/game-core.js'
 import { sanitizeControlMode } from '../../shared/device.js'
 import { advanceSimulationClock, createSimulationClock } from '../../shared/simulation-clock.js'
@@ -43,17 +47,12 @@ import { normalizeTiltInput } from '../../shared/tilt-calibration.js'
 import { appendScore, loadSettings, loadTiltCalibration, saveLastSession, saveSettings } from '../../shared/storage.js'
 
 const FRAME_INTERVAL_MS = 16
-const SHIP_BOUNDARY = 20
 const SQUARE_SPAWN_INTERVAL_FACTOR = 0.84
 const GAME_BRIGHT_TIME_MS = 600000
 const MAX_SPAWNS_PER_TICK = 2
 const CONTROL_BASE_SPEED_FACTOR = 0.46
 const SQUARE_HUD_CORNER_RADIUS = 36
 const HUD_DISPLAY_HP_SPEED = 72
-
-function clampShipY(value, viewportHeight) {
-  return clamp(value, SHIP_BOUNDARY, viewportHeight - SHIP_BOUNDARY)
-}
 
 function moveTowards(current, target, maxDelta) {
   if (current === target) {
@@ -65,34 +64,6 @@ function moveTowards(current, target, maxDelta) {
   }
 
   return current + Math.sign(target - current) * maxDelta
-}
-
-function updateShipPoints(points, shipRect, wristSide) {
-  if (wristSide === 'left') {
-    points[0].x = shipRect.x + shipRect.w
-    points[0].y = shipRect.centerY
-    points[1].x = shipRect.x
-    points[1].y = shipRect.y
-    points[2].x = shipRect.x + shipRect.w * 0.28
-    points[2].y = shipRect.centerY
-    points[3].x = shipRect.x
-    points[3].y = shipRect.y + shipRect.h
-    points[4].x = shipRect.x + shipRect.w
-    points[4].y = shipRect.centerY
-    return points
-  }
-
-  points[0].x = shipRect.x
-  points[0].y = shipRect.centerY
-  points[1].x = shipRect.x + shipRect.w
-  points[1].y = shipRect.y
-  points[2].x = shipRect.x + shipRect.w * 0.72
-  points[2].y = shipRect.centerY
-  points[3].x = shipRect.x + shipRect.w
-  points[3].y = shipRect.y + shipRect.h
-  points[4].x = shipRect.x
-  points[4].y = shipRect.centerY
-  return points
 }
 
 function hideStatusBar() {
@@ -144,7 +115,7 @@ function drawHudLineSegment(canvas, segment, length, color) {
 }
 
 function drawSquareHud(canvas, viewport, hpRatio) {
-  const thickness = 8
+  const thickness = HUD_STROKE_WIDTH
   const inset = thickness / 2
   const radius = SQUARE_HUD_CORNER_RADIUS
   const left = inset
@@ -251,10 +222,10 @@ function drawSquareHud(canvas, viewport, hpRatio) {
 }
 
 function drawRoundHud(canvas, viewport, hpRatio) {
-  const margin = 12
+  const margin = ROUND_HUD_MARGIN
   canvas.setPaint({
     color: COLORS.hudInactive,
-    line_width: 8,
+    line_width: HUD_STROKE_WIDTH,
   })
   canvas.strokeArc({
     center_x: viewport.width / 2,
@@ -279,7 +250,7 @@ function drawRoundHud(canvas, viewport, hpRatio) {
 function drawOutlineShip(canvas, shipPoints) {
   canvas.setPaint({
     color: COLORS.ship,
-    line_width: 3,
+    line_width: SHIP_STROKE_WIDTH,
   })
 
   for (let index = 0; index < shipPoints.length - 1; index += 1) {
@@ -313,11 +284,13 @@ Page({
     this.viewport = {
       width: deviceInfo.width,
       height: deviceInfo.height,
+      isRound: deviceInfo.screenShape === SCREEN_SHAPE_ROUND,
     }
     this.viewportHalfHeight = this.viewport.height / 2
     this.settings = settings
     this.tiltCalibration = loadTiltCalibration()
     this.collisionSliceWidth = COLLISION_SLICE_WIDTH
+    this.shipYLimits = getShipYLimits(this.viewport, settings.wristSide)
     this.shipCenterY = deviceInfo.height / 2
     this.touchDirection = 0
     this.pointerDown = false
@@ -343,7 +316,7 @@ Page({
       Math.min(this.viewport.width, this.viewport.height) *
       CONTROL_BASE_SPEED_FACTOR *
       (this.settings.controlMode === 'tilt' && this.tiltCalibration ? 1 : this.settings.tiltSensitivity)
-    this.shipPoints = Array.from({ length: 5 }, () => ({ x: 0, y: 0 }))
+    this.nextShipRect = {}
     this.shipRect = createShipRect(
       this.viewport,
       this.shipCenterY,
@@ -484,7 +457,7 @@ Page({
       )
     }
 
-    this.shipCenterY = clampShipY(this.shipCenterY, this.viewport.height)
+    this.shipCenterY = clamp(this.shipCenterY, this.shipYLimits.min, this.shipYLimits.max)
   },
 
   spawnAsteroids(now, shipRect, difficulty) {
@@ -532,13 +505,14 @@ Page({
     }
   },
 
-  handleCollisions(now, shipRect, difficulty) {
+  handleCollisions(now, shipRect, difficulty, previousShipRect = shipRect) {
     let didDamage = false
 
     for (let index = 0; index < this.collisionCandidates.length; index += 1) {
       const asteroid = this.collisionCandidates[index]
       const collision = calculateCollisionResult({
         shipRect,
+        previousShipRect,
         asteroid,
         difficulty,
         now,
@@ -590,13 +564,16 @@ Page({
   },
 
   stepSimulation(deltaSeconds, now) {
+    const previousShipRect = this.shipRect
     this.updateShip(deltaSeconds)
 
     const shipRect = createShipRect(
       this.viewport,
       this.shipCenterY,
-      this.settings.wristSide
+      this.settings.wristSide,
+      this.nextShipRect
     )
+    this.nextShipRect = previousShipRect
     this.shipRect = shipRect
     const difficulty = calculateDifficulty(
       now,
@@ -608,15 +585,17 @@ Page({
       this.asteroids,
       deltaSeconds,
       this.viewport,
-      this.collisionGrid
+      this.collisionGrid,
+      true
     )
     collectCollisionCandidatesFromGrid(
       this.collisionGrid,
       shipRect,
       this.settings.wristSide,
-      this.collisionCandidates
+      this.collisionCandidates,
+      previousShipRect
     )
-    this.handleCollisions(now, shipRect, difficulty)
+    this.handleCollisions(now, shipRect, difficulty, previousShipRect)
     this.displayedHp = moveTowards(
       this.displayedHp,
       this.hp,
@@ -656,7 +635,7 @@ Page({
 
     drawOutlineShip(
       this.canvas,
-      updateShipPoints(this.shipPoints, shipRect, this.settings.wristSide)
+      shipRect.points
     )
 
     const hpRatio = this.displayedHp / HP_MAX
