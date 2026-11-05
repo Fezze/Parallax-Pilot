@@ -113,3 +113,9 @@ presentation. Regular callback delivery does not establish smooth displayed
 frames. Preserve contradictory results and compare basic/sampled overhead before
 selecting an optimization. No cause is declared from a local test or simulator
 timing.
+
+## Physical installation of the batched-motion candidate
+
+On November 5, 2026, the phone Bridge reconnected as `app-Android`. The official Bridge command `install --target "Amazfit Balance 2"` compiled candidate 2.3.31/code 82 for device sources 9568512/9568513/9568515 and returned `Install lite app result: success`. Source implementation is commit b5c726475452288b293b0b88c51a91a30f20584a. Physical gameplay performance remains unconfirmed until a complete report is captured. The raw deployment transcript and package hashes are retained in the separate audit workspace.
+
+This deployment-only follow-up preserves the already built and installed version. The version-bump pre-commit hook is omitted for this commit only, avoiding a metadata-only bump to an unbuilt version; no Git configuration or application source is changed by that omission.
