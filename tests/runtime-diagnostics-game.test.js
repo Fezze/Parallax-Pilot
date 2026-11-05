@@ -38,7 +38,12 @@ async function game(run, runIndex = 0) {
 
 function observer(overrides = {}) {
   return { enabled: true, pointer() {}, beginFrame() {}, markUpdate() {}, endFrame() {},
-    beginStep() { return false }, markStepPhase() {}, endStep() {}, requestFinish() {}, ...overrides }
+    beginStep() { return false }, markStepPhase() {}, endStep() {}, recordSkippedSteps() {}, requestFinish() {}, ...overrides }
+}
+
+function possibleContact(page) {
+  page.asteroids.push({ id: 'diagnostic-contact', x: page.shipRect.centerX, y: page.shipRect.centerY,
+    radius: 6, vx: 0, lastHitAt: -Infinity })
 }
 
 test('diagnostic overhead does not change the timestamp admitted by the actual game', async () => {
@@ -54,6 +59,7 @@ test('diagnostic overhead does not change the timestamp admitted by the actual g
 
 test('all actual world-step phases are connected in order and final frame timing follows drawing', async () => {
   await game(({ page, at }) => {
+    possibleContact(page)
     const events = []
     const original = page.runtimeDiagnostics
     page.runtimeDiagnostics = observer({
@@ -88,6 +94,7 @@ test('raw pointer counters include MOVE callbacks rejected by the game filters',
 
 test('natural finish and synchronous destruction defer reporting until the terminal callback ends', async () => {
   await game(({ page, logs, at }) => {
+    possibleContact(page)
     const reports = () => logs.filter(line => line.startsWith('PP_DIAG ') || line.startsWith('PP_METRIC '))
     page.stepSimulation = function () {
       this.finishRun()

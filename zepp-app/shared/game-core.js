@@ -119,6 +119,49 @@ export function getSpawnIntervalMs(difficulty, spawnMultiplier) {
   return 1180 / (0.92 + difficulty * spawnMultiplier * 0.11)
 }
 
+export const SQUARE_SPAWN_INTERVAL_FACTOR = 0.84
+
+// Return the first canonical instant satisfying the existing spawn predicate.
+// A caller retaining spawn debt must still clamp this to its next unprocessed
+// quantum: the old loop can already be due again after a capped spawn burst.
+export function getNextSpawnQuantum(lastSpawnAt, timeScale, spawnMultiplier, isRound, stepMs = 10) {
+  if (!Number.isFinite(lastSpawnAt) || lastSpawnAt < 0 ||
+      !Number.isFinite(timeScale) || timeScale < 0 ||
+      !Number.isFinite(spawnMultiplier) || spawnMultiplier < 0 ||
+      !Number.isFinite(stepMs) || stepMs <= 0) return Infinity
+  const numerator = 1180 * (isRound ? 1 : SQUARE_SPAWN_INTERVAL_FACTOR)
+  const slope = 0.0000605 * spawnMultiplier * timeScale
+  const coefficient = 0.92 + 0.11 * spawnMultiplier + slope * lastSpawnAt
+  // Stable positive root of slope*d*d + coefficient*d - numerator = 0.
+  const delay = 2 * numerator / (coefficient + Math.sqrt(coefficient * coefficient + 4 * slope * numerator))
+  let dueAt = Math.ceil((lastSpawnAt + delay) / stepMs) * stepMs
+  if (!Number.isFinite(dueAt)) return Infinity
+  const factor = isRound ? 1 : SQUARE_SPAWN_INTERVAL_FACTOR
+  // Algebraic grouping and floating-point ties can move the root by an ulp.
+  // Verify adjacent lattice points using the exact existing predicate.
+  while (dueAt >= stepMs && dueAt - stepMs < dueAt && dueAt - stepMs - lastSpawnAt >=
+      getSpawnIntervalMs(calculateDifficulty(dueAt - stepMs, timeScale), spawnMultiplier) * factor) {
+    dueAt -= stepMs
+  }
+  while (dueAt - lastSpawnAt < getSpawnIntervalMs(calculateDifficulty(dueAt, timeScale), spawnMultiplier) * factor) {
+    if (dueAt + stepMs === dueAt) return Infinity
+    dueAt += stepMs
+  }
+  return dueAt
+}
+
+// Keep repeated addition bit-for-bit identical to touch control, without
+// reconstructing geometry or dispatching the entire world on every quantum.
+export function advanceControlScalar(centerY, velocityY, stepCount, minY, maxY, stepMs = 10) {
+  const increment = velocityY * (stepMs / 1000)
+  for (let index = 0; index < stepCount; index += 1) {
+    const next = clamp(centerY + increment, minY, maxY)
+    if (next === centerY) return next
+    centerY = next
+  }
+  return centerY
+}
+
 function getAsteroidSpeed(difficulty, randomUnit = Math.random()) {
   return 96 + difficulty * 9 + randomUnit * 28
 }
@@ -458,6 +501,91 @@ export function getAsteroidXAt(asteroid, atMs) {
 
 export function getRenderAsteroidXAt(asteroid, atMs) {
   return getAsteroidXAt(asteroid, atMs)
+}
+
+// Conservative event window for one constant-control segment. Only the caller's
+// canonical narrow phase decides actual contact. A swipe target applies in the
+// first quantum and stays fixed thereafter; input reversals start a new call.
+export function getCollisionQuantumWindow(
+  asteroid,
+  geometry,
+  fromMs,
+  throughMs,
+  startCenterY,
+  velocityY,
+  out = {},
+  stepMs = 10,
+  instantCenterY
+) {
+  if (asteroid.motionRemoved || throughMs < fromMs + stepMs) return null
+  anchorAsteroidMotion(asteroid, fromMs)
+  const duration = throughMs - fromMs
+  const fromX = getAsteroidXAt(asteroid, fromMs)
+  const throughX = getAsteroidXAt(asteroid, throughMs)
+  const left = geometry.x - asteroid.radius
+  const right = geometry.x + geometry.w + asteroid.radius
+  if (Math.max(fromX, throughX) < left || Math.min(fromX, throughX) > right) return null
+
+  let xFirst = fromMs + stepMs
+  let xLast = throughMs
+  if (asteroid.vx !== 0) {
+    const speed = asteroid.vx / 1000
+    const atLeft = (left - fromX) / speed
+    const atRight = (right - fromX) / speed
+    const enter = Math.max(0, Math.min(duration, Math.min(atLeft, atRight)))
+    const exit = Math.max(0, Math.min(duration, Math.max(atLeft, atRight)))
+    // One extra quantum on either side covers division ties and endpoint
+    // inclusion, including a crossing ending exactly on a lattice boundary.
+    xFirst = Math.max(xFirst, fromMs + Math.floor(enter / stepMs) * stepMs)
+    xLast = Math.min(xLast, fromMs + (Math.floor(exit / stepMs) + 2) * stepMs)
+  }
+
+  const limits = geometry.limits
+  const start = clamp(startCenterY, limits.min, limits.max)
+  const quanta = Math.ceil(duration / stepMs)
+  const roundingPadding = 1 + Number.EPSILON * (quanta + 2) *
+    Math.max(1, Math.abs(startCenterY), Math.abs(limits.min), Math.abs(limits.max), Math.abs(velocityY * duration / 1000)) * 4
+  const halfHeight = geometry.h / 2 + roundingPadding
+  const lowCenter = asteroid.y - asteroid.radius - halfHeight
+  const highCenter = asteroid.y + asteroid.radius + halfHeight
+  let firstMs = xFirst
+  let lastMs = xLast
+
+  if (instantCenterY !== undefined && instantCenterY !== null) {
+    const target = clamp(instantCenterY, limits.min, limits.max)
+    if (target < lowCenter || target > highCenter) {
+      // The target itself is clear, but the first swept move can cross the
+      // entire playfield. Do not replace that chord with the target endpoint.
+      if (Math.max(start, target) < lowCenter || Math.min(start, target) > highCenter ||
+          xFirst > fromMs + stepMs) return null
+      firstMs = fromMs + stepMs
+      lastMs = firstMs
+    }
+  } else {
+    const end = clamp(startCenterY + velocityY * (duration / 1000), limits.min, limits.max)
+    if (Math.max(start, end) < lowCenter || Math.min(start, end) > highCenter) return null
+    if (velocityY !== 0) {
+      const speed = velocityY / 1000
+      let enter = 0
+      let exit = duration
+      if (velocityY > 0) {
+        if (start < lowCenter) enter = (lowCenter - startCenterY) / speed
+        if (end > highCenter) exit = (highCenter - startCenterY) / speed
+      } else {
+        if (start > highCenter) enter = (highCenter - startCenterY) / speed
+        if (end < lowCenter) exit = (lowCenter - startCenterY) / speed
+      }
+      enter = Math.max(0, Math.min(duration, enter))
+      exit = Math.max(0, Math.min(duration, exit))
+      firstMs = Math.max(firstMs, fromMs + Math.floor(enter / stepMs) * stepMs)
+      lastMs = Math.min(lastMs, fromMs + (Math.floor(exit / stepMs) + 2) * stepMs)
+    }
+  }
+
+  if (firstMs > lastMs) return null
+  out.firstMs = firstMs
+  out.lastMs = lastMs
+  return out
 }
 
 // Bring the shared array/grid up to a canonical instant only when a caller

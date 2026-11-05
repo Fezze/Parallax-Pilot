@@ -245,7 +245,7 @@ function assembleCompact(runId, chunks) {
     else if (kind === 'phase') putIndexed(kind, data, PHASE_NAMES.length, 5)
     else if (kind === 'group') putIndexed(kind, data, GROUP_NAMES.length, 8)
     else if (kind === 'work' || kind === 'calibration' || kind === 'terminal') {
-      const expected = { work: data.length === 11 ? 11 : 8, calibration: 7, terminal: 6 }[kind]
+      const expected = { work: [8, 11, 13].includes(data.length) ? data.length : 8, calibration: 7, terminal: 6 }[kind]
       validateTuple(data, expected, kind, kind === 'calibration' ? [1, 3] : [])
       if (records.has(kind)) throw new Error(`Duplicate ${kind} record`)
       records.set(kind, data)
@@ -280,7 +280,8 @@ function assembleCompact(runId, chunks) {
     steady: histograms,
     work: { stepCount: work[0], stepsSum: work[1], stepsMax: work[2], objectVisitsSum: work[3], candidatesSum: work[4],
       asteroidsMax: work[5], zeroStepFrames: work[6], pausedFrameCount: work[7],
-      fullMaterializations: work[8], fullAsteroidVisits: work[9], sensorReads: work[10] },
+      fullMaterializations: work[8], fullAsteroidVisits: work[9], sensorReads: work[10],
+      skippedQuanta: work[11], eventQuanta: work[12] },
     sampling: { names: PHASE_NAMES, steady: phaseSummaries },
     groups: groupSummaries,
     calibration: { reads: calibration[0], spanMs: calibration[1], zeroDeltas: calibration[2],
@@ -288,7 +289,8 @@ function assembleCompact(runId, chunks) {
     terminal: { callbackCount: terminal[0], callbackSum: terminal[1], callbackMax: terminal[2],
       updateSum: terminal[3], drawSubmissionSum: terminal[4], stepsSum: terminal[5] },
     trace: { columns: TRACE_COLUMNS, rows: pairs.map(row => row.slice()) },
-    caveats: ['Compact export contains selected aggregates and at most four paired trace rows; it does not include full histograms or the full trace.']
+    caveats: ['Compact export contains selected aggregates and at most four paired trace rows; it does not include full histograms or the full trace.',
+      ...(work.length >= 13 ? ['Phase samples describe executed canonical steps; skipped logical quanta produce no phase samples or object/candidate visits.'] : [])]
   }
 }
 

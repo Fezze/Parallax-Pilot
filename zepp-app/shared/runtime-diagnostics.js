@@ -32,6 +32,18 @@ function add(hist, value) {
   if (value > hist.max) hist.max = value
 }
 
+function addScalar(hist, value) {
+  if (!Number.isFinite(value) || value < 0) {
+    hist.invalid += 1
+    return
+  }
+  // Compact work summaries export zero-step and nonzero-pause frame counts.
+  if (value === 0) hist.counts[0] += 1
+  hist.count += 1
+  hist.sum += value
+  if (value > hist.max) hist.max = value
+}
+
 function metrics() {
   const result = {}
   for (let i = 0; i < METRICS.length; i += 1) result[METRICS[i]] = histogram()
@@ -44,7 +56,7 @@ function phaseMetrics() {
   return result
 }
 
-function mergeAndClear(target, source) {
+function mergeAndClear(target, source, scalarOnly = false) {
   for (let i = 0; i < source.length; i += 1) {
     const from = source[i]
     const to = target[i]
@@ -52,7 +64,8 @@ function mergeAndClear(target, source) {
     to.sum += from.sum
     to.invalid += from.invalid
     if (from.max > to.max) to.max = from.max
-    for (let bin = 0; bin < from.counts.length; bin += 1) {
+    const binCount = scalarOnly ? 1 : from.counts.length
+    for (let bin = 0; bin < binCount; bin += 1) {
       to.counts[bin] += from.counts[bin]
       from.counts[bin] = 0
     }
@@ -90,7 +103,8 @@ function compactRecords(report) {
   record('work', [steady.steps.count, steady.steps.sum, steady.steps.max,
     steady.objectVisits.sum, steady.candidates.sum, steady.asteroids.max,
     steady.steps.counts[0], steady.pausedMs.count - steady.pausedMs.counts[0],
-    meta.fullMaterializations || 0, meta.fullAsteroidVisits || 0, meta.sensorReads || 0])
+    meta.fullMaterializations || 0, meta.fullAsteroidVisits || 0, meta.sensorReads || 0,
+    meta.skippedQuanta || 0, meta.eventQuanta || 0])
   for (let index = 0; index < PHASES.length; index += 1) {
     const hist = report.sampling.steady[index]
     record('phase', [index, hist.count, hist.sum, hist.max, hist.invalid])
@@ -126,6 +140,7 @@ function compactRecords(report) {
 export class RuntimeDiagnostics {
   constructor(meta, { now = () => Date.now(), emit = line => console.log(line) } = {}) {
     this.meta = meta
+    this.compactExport = meta.compactExport === true
     this.now = now
     this.emit = emit
     this.enabled = true
@@ -133,6 +148,7 @@ export class RuntimeDiagnostics {
     this.reason = ''
     this.frameCount = 0
     this.stepCount = 0
+    this.executedStepCount = 0
     this.sampleCount = 0
     this.sampleEvery = Number.isFinite(meta.phaseSampleEvery) ? meta.phaseSampleEvery : 13
     if (this.sampleEvery < 1) this.sampleEvery = 0
@@ -257,9 +273,11 @@ export class RuntimeDiagnostics {
   beginStep(asteroidCount) {
     if (!this.enabled || !this.active) return false
     this.stepCount += 1
+    this.executedStepCount += 1
     this.frameSteps += 1
     this.frameVisits += asteroidCount
-    this.sampleActive = this.sampleEvery > 0 && (this.stepCount - 1) % this.sampleEvery === 0
+    const samplingStep = this.compactExport ? this.executedStepCount : this.stepCount
+    this.sampleActive = this.sampleEvery > 0 && (samplingStep - 1) % this.sampleEvery === 0
     if (!this.sampleActive) return false
     this.sampleCount += 1
     this.frameSamples += 1
@@ -270,6 +288,14 @@ export class RuntimeDiagnostics {
     this.nextPhase = 0
     for (let i = 0; i < PHASES.length; i += 1) this.sampleDurations[i] = NaN
     return true
+  }
+
+  recordSkippedSteps(count) {
+    if (!this.enabled || !this.active || !Number.isFinite(count) || count <= 0 || Math.floor(count) !== count) return
+    // Skips affect logical work totals only. Compact phase sampling follows
+    // executed canonical steps, so analytic spans cannot hide event costs.
+    this.stepCount += count
+    this.frameSteps += count
   }
 
   markStepPhase(index) {
@@ -289,11 +315,12 @@ export class RuntimeDiagnostics {
     const at = this.now()
     this.observe(at)
     const valid = !this.sampleInvalid && this.nextPhase === PHASES.length
+    const accumulate = this.compactExport ? addScalar : add
     for (let i = 0; i < PHASES.length; i += 1) {
-      add(this.framePhases[i], valid ? this.sampleDurations[i] : NaN)
+      accumulate(this.framePhases[i], valid ? this.sampleDurations[i] : NaN)
     }
-    add(this.framePhases[6], valid ? at - this.sampleStart : NaN)
-    add(this.framePhases[7], valid ? at - this.phaseAt : NaN)
+    accumulate(this.framePhases[6], valid ? at - this.sampleStart : NaN)
+    accumulate(this.framePhases[7], valid ? at - this.phaseAt : NaN)
     this.sampleActive = false
   }
 
@@ -324,12 +351,14 @@ export class RuntimeDiagnostics {
     values[14] = this.frameAsteroids
     const target = terminal ? this.terminal : this.steady
     const group = this.groups[this.group]
+    const accumulateWork = this.compactExport ? addScalar : add
+    const accumulateTiming = this.compactExport && terminal ? addScalar : add
     // Bulk count bookkeeping occurs before the final wall-clock read.
     for (let i = 7; i < METRICS.length; i += 1) {
-      add(target[METRICS[i]], values[i])
-      if (!terminal) add(group[METRICS[i]], values[i])
+      accumulateWork(target[METRICS[i]], values[i])
+      if (!terminal) accumulateWork(group[METRICS[i]], values[i])
     }
-    if (this.frameSamples > 0) mergeAndClear(terminal ? this.terminalPhases : this.phases, this.framePhases)
+    if (this.frameSamples > 0) mergeAndClear(terminal ? this.terminalPhases : this.phases, this.framePhases, this.compactExport)
     const slot = this.frameCount % TRACE_LIMIT
     this.trace[0][slot] = this.frameCount + 1
     this.trace[1][slot] = this.frameAt - this.startedAt
@@ -355,8 +384,8 @@ export class RuntimeDiagnostics {
       values[2] = NaN
     }
     for (let i = 0; i < 7; i += 1) {
-      add(target[METRICS[i]], values[i])
-      if (!terminal) add(group[METRICS[i]], values[i])
+      accumulateTiming(target[METRICS[i]], values[i])
+      if (!terminal) accumulateWork(group[METRICS[i]], values[i])
       this.trace[i + 4][slot] = values[i]
     }
     this.previousArrival = this.frameAt
@@ -413,6 +442,7 @@ export class RuntimeDiagnostics {
       ]
     }
     if (this.meta.compactExport === true) {
+      report.caveats.push('Phase sampling follows executed canonical steps, independently of logical step totals; analytically skipped quanta have no phase sample or object/candidate visits.')
       const records = compactRecords(report)
       for (let part = 0; part < records.length; part += 1) {
         const entry = records[part]

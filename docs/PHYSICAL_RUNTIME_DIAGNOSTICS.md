@@ -1,4 +1,4 @@
-# Physical runtime diagnostics and batching: 2.3.31
+# Physical runtime diagnostics and event segments: 2.3.32
 
 Version 2.3.29 observed the former full-world simulation architecture. Version
 2.3.31 batches distant asteroid motion and adds separate interpolated display
@@ -27,7 +27,7 @@ benchmark; a zero calibration duration does not mean the reads are free.
 A dedicated local key, runtime_diagnostic_run_v1, alternates successive game
 sessions between basic frame timing and sampled step-phase timing. This does not
 modify game settings or scores. Odd run indices collect frame observations;
-even indices additionally sample one in thirteen world steps. The mode and game
+even indices additionally sample one in thirteen executed canonical event steps in compact mode. Logical skipped quanta remain included in total step counts but generate no phase samples or object/candidate visits. Legacy full-report mode retains its logical-step sampling cadence. The mode and game
 settings appear in PP_DIAG_START before the game clock is created.
 Counter writes reuse the same cached LocalStorage instance as scores. If storage
 fails, modePersisted is false and sampled timing is selected explicitly rather
@@ -119,3 +119,13 @@ timing.
 On November 5, 2026, the phone Bridge reconnected as `app-Android`. The official Bridge command `install --target "Amazfit Balance 2"` compiled candidate 2.3.31/code 82 for device sources 9568512/9568513/9568515 and returned `Install lite app result: success`. Source implementation is commit b5c726475452288b293b0b88c51a91a30f20584a. Physical gameplay performance remains unconfirmed until a complete report is captured. The raw deployment transcript and package hashes are retained in the separate audit workspace.
 
 This deployment-only follow-up preserves the already built and installed version. The version-bump pre-commit hook is omitted for this commit only, avoiding a metadata-only bump to an unbuilt version; no Git configuration or application source is changed by that omission.
+
+## Complete physical evidence and the 2.3.32 correction
+
+Both 2.3.31 reports were complete and show persistent slow motion: basic run5 advanced9,200ms in30,140ms wall; sampled run6 advanced9,270ms in30,102ms wall. Sampled per-step control/geometry/difficulty averaged7.18ms before the remaining stages. Distant-object batching was therefore insufficient and is not recorded as a successful physical fix.
+
+Candidate2.3.32 skips full dispatch for touch/swipe quanta outside conservative collision windows and exact spawn/input boundaries. It preserves repeated scalar additions, canonical fatal time and the final two render poses. Tilt retains original per-quantum sensor sampling, while unchanged geometry and scheduled spawning avoid redundant work. The compact work record now appends skippedQuanta and eventQuanta after its original11 fields; the decoder accepts legacy8/11-field records too.
+
+Compact accumulation retains bins only for the seven steady timing metrics whose p95 bounds are exported. Group/work/terminal fields use scalar aggregates and exact zero counters. Phase sampling follows executed events rather than skipped logical indices. Some final observer writes still follow the completion timestamp, so residual gaps must not be attributed solely to the OS or timer.
+
+Candidate2.3.32 native validation used Zepp Simulator2.1.1, Balance2 firmware1.1.0/API4.2/source9568512. Both swipe and held touch moved the ship in both directions, advanced the world, ended naturally and saved scores. Two complete compact reports were decoded with both sampling modes, zero paused time and no candidate runtime exception matches. Their logical totals1487/1612 equal skipped1228/1347 plus executed259/265. Host correctness validation passed193 Node cases and96 actual-page comparisons against2.3.31 (31,056 state pairs, zero difference). Two browser assertions were updated from four full dispatches to four logical/skipped quanta and zero full dispatches; all four affected timing cases passed after the initial305 other cases had passed. These results do not establish physical watch speed.

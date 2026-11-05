@@ -55,3 +55,7 @@ fast crossings, swipe crossings, cooldown and control clamping. Browser images
 cover both flight limits at low HP across the locale/device/wrist matrix.
 Native screenshots establish actual simulator rasterization separately; none
 of this measures physical-watch FPS, CPU, energy or sensor feel.
+
+## Event-window exclusion
+
+Within one touch/swipe input segment, fixed horizontal velocity and clamped vertical control bound the canonical endpoints that could contact the ship. Windows include rounding and sweep padding, so false positives cost work but cannot omit a valid canonical collision. Instant swipes include the first old-to-target sweep. Input reversals restart the window from the exact repeated-add scalar state; actual births rebuild remaining windows. Potential contact quanta still use the existing swept arrow/circle narrow phase, cooldown and fatal-score rules. Empty collision windows may skip full world dispatch; they do not enlarge or simplify hit geometry.

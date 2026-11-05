@@ -430,7 +430,8 @@ function compactReport(h) {
 test('compact export preserves summary measurements and bounded representative callback pairs', () => {
   const metadata = { version: '2.3.30', deviceSource: 9568513, runIndex: 2,
     phaseSampleEvery: 1, controlMode: 'touch', wristSide: 'right', timeScale: 1.5,
-    spawnMultiplier: 1.25, width: 480, height: 480, modePersisted: true }
+    spawnMultiplier: 1.25, width: 480, height: 480, modePersisted: true,
+    fullMaterializations: 144, fullAsteroidVisits: 536, sensorReads: 0, skippedQuanta: 820, eventQuanta: 100 }
   const full = harness(metadata)
   const compact = harness({ ...metadata, compactExport: true })
   for (const h of [full, compact]) {
@@ -459,7 +460,7 @@ test('compact export preserves summary measurements and bounded representative c
   })
   assert.equal(metrics[0].d[5], null, 'p95 overflow has no finite upper bound')
   assert.equal(metrics[3].d[5], 25)
-  assert.deepEqual(one('work'), [5, 1, 1, 7, 3, 7, 4, 0, 0, 0, 0])
+  assert.deepEqual(one('work'), [5, 1, 1, 7, 3, 7, 4, 0, 144, 536, 0, 820, 100])
   const phases = records.filter(record => record.k === 'phase')
   assert.equal(phases.length, 6)
   phases.forEach((record, index) => assert.deepEqual(record.d, [index, 1, index + 1, index + 1, 0]))
@@ -488,13 +489,16 @@ test('compact records stay native-sized for all supported control, wrist and spe
     for (const timeScale of TIME_SCALE_OPTIONS) for (const spawnMultiplier of SPAWN_MULTIPLIER_OPTIONS) {
       const h = harness({ compactExport: true, version: '2.3.30', deviceSource: 9568513,
         runIndex: 12345, phaseSampleEvery: 13, controlMode, wristSide, timeScale,
-        spawnMultiplier, width: 480, height: 480, modePersisted: false })
+        spawnMultiplier, width: 480, height: 480, modePersisted: false,
+        fullMaterializations: 144, fullAsteroidVisits: 536, sensorReads: 920,
+        skippedQuanta: 820, eventQuanta: 100 })
       h.diag.runId = '1762358400000-12345'
       emptyFrame(h, 30000)
       const records = compactReport(h)
       assert.equal(records.length, 22)
       assert.equal(records.filter(record => record.k === 'pair').length, 1)
       assert.equal(records.find(record => record.k === 'metric' && record.d[0] === 0).d[5], null)
+      assert.deepEqual(records.find(record => record.k === 'work').d.slice(8), [144, 536, 920, 820, 100])
     }
   }
 })
@@ -507,4 +511,120 @@ test('compact export escapes Unicode and deduplicates latest and largest-gap row
   const records = compactReport(h)
   assert.equal(records.find(record => record.k === 'meta').d[1], 'Ω')
   assert.equal(records.filter(record => record.k === 'pair').length, 2)
+})
+
+test('skipped logical quanta preserve work totals while compact phases follow executed steps', () => {
+  const full = harness({ phaseSampleEvery: 3 })
+  const compact = harness({ phaseSampleEvery: 3, compactExport: true })
+  for (const h of [full, compact]) {
+    const initialReads = h.reads()
+    h.diag.recordSkippedSteps(10)
+    assert.equal(h.diag.stepCount, 0, 'inactive skips are ignored')
+    h.set(10)
+    h.diag.beginFrame(10, h.clock, false, 7)
+    for (const invalid of [0, -1, NaN, Infinity, 1.5]) h.diag.recordSkippedSteps(invalid)
+    assert.equal(h.diag.stepCount, 0)
+    h.diag.recordSkippedSteps(3)
+    assert.equal(h.reads(), initialReads, 'skipping makes no clock observations')
+    assert.equal(h.diag.sampleCount, 0)
+    assert.equal(sampleStep(h), true, 'the first executed compact step and logical legacy step 4 are sampled')
+    h.diag.recordSkippedSteps(2)
+    assert.equal(sampleStep(h), h === full, 'compact execution 2 is unsampled; legacy logical step 7 is sampled')
+    h.clock.elapsedMs = 70
+    h.diag.markUpdate(h.now())
+    h.diag.endFrame(h.now(), h.clock)
+    h.set(500)
+    h.diag.beginFrame(500, h.clock, false, 7)
+    h.clock.pausedMs = 430
+    h.diag.markUpdate(500)
+    h.diag.endFrame(500, h.clock)
+    h.set(510)
+    h.diag.beginFrame(510, h.clock, true, 7)
+    h.diag.recordSkippedSteps(3)
+    h.clock.elapsedMs = 100
+    h.diag.markUpdate(510)
+    h.diag.endFrame(510, h.clock, true)
+    h.diag.recordSkippedSteps(10)
+    assert.equal(h.diag.stepCount, 10, 'disabled skips are ignored')
+    assert.equal(h.diag.sampleCount, h === full ? 2 : 1, 'compact samples are independent of skipped logical quanta')
+    assert.equal(h.diag.executedStepCount, 2)
+  }
+  const expected = report(full)
+  const records = compactReport(compact)
+  assert.equal(expected.steps, 10)
+  assert.equal(expected.clock.elapsedMs, 100)
+  assert.deepEqual(expected.trace.rows.map(row => row[expected.trace.columns.indexOf('steps')]), [7, 0, 3])
+  assert.deepEqual(records.find(record => record.k === 'clock').d.slice(1, 6), [3, 10, 100, 430, 0])
+  assert.deepEqual(records.find(record => record.k === 'work').d, [2, 7, 7, 14, 6, 7, 1, 1, 0, 0, 0, 0, 0])
+  assert.deepEqual(records.find(record => record.k === 'terminal').d, [1, 0, 0, 0, 0, 3])
+  for (const name of Object.keys(full.diag.steady)) {
+    for (const collection of ['steady', 'terminal']) {
+      for (const field of ['count', 'sum', 'max', 'invalid']) {
+        assert.equal(compact.diag[collection][name][field], full.diag[collection][name][field], `${collection}.${name}.${field}`)
+      }
+    }
+    full.diag.groups.forEach((group, index) => {
+      for (const field of ['count', 'sum', 'max', 'invalid']) assert.equal(compact.diag.groups[index][name][field], group[name][field])
+    })
+  }
+  records.filter(record => record.k === 'phase').forEach((record, index) => {
+    assert.deepEqual(record.d, [index, 1, index + 1, index + 1, 0])
+  })
+  assert.deepEqual(compact.diag.steady.callbackMs.counts, full.diag.steady.callbackMs.counts, 'timing p95 retains full bins')
+  assert.equal(full.diag.steady.steps.counts.reduce((sum, count) => sum + count, 0), 2, 'legacy work bins remain complete')
+  assert.equal(compact.diag.steady.steps.counts[0], 1, 'compact work retains exact zero counts')
+  assert.equal(compact.diag.steady.steps.counts.slice(1).reduce((sum, count) => sum + count, 0), 0, 'compact work skips positive bin scans')
+  assert.equal(compact.diag.groups[0].callbackMs.counts.slice(1).reduce((sum, count) => sum + count, 0), 0)
+  assert.equal(compact.diag.phases[0].counts.slice(1).reduce((sum, count) => sum + count, 0), 0)
+})
+
+test('compact scalar accumulation preserves invalid observations without creating zero counts', () => {
+  const full = harness()
+  const compact = harness({ compactExport: true })
+  for (const h of [full, compact]) {
+    h.set(10)
+    h.diag.beginFrame(10, h.clock, false, 0)
+    h.clock.elapsedMs = NaN
+    h.clock.pausedMs = NaN
+    h.diag.markUpdate(10)
+    h.diag.endFrame(10, h.clock)
+    h.diag.requestFinish('invalid-clock')
+  }
+  for (const name of ['elapsedMs', 'pausedMs', 'admittedMs']) {
+    for (const target of [compact.diag.steady, compact.diag.groups[0]]) {
+      assert.equal(target[name].invalid, 1)
+      assert.equal(target[name].count, 0)
+      assert.equal(target[name].counts[0], 0)
+    }
+  }
+  const records = compactReport(compact)
+  assert.equal(records.find(record => record.k === 'work').d[7], 0)
+  assert.deepEqual(compact.diag.steady.pausedMs, full.diag.steady.pausedMs)
+})
+
+test('compact phase cadence samples rare canonical events even when logical indices all miss modulo 13', () => {
+  const h = harness({ compactExport: true, phaseSampleEvery: 13 })
+  h.set(10)
+  h.diag.beginFrame(10, h.clock, false, 7)
+  const sampledEvents = []
+  for (let executed = 1; executed <= 14; executed += 1) {
+    const reads = h.reads()
+    h.diag.recordSkippedSteps(12)
+    assert.equal(h.reads(), reads)
+    assert.equal(h.diag.stepCount % 13, 12, 'legacy logical cadence would miss every event after incrementing stepCount')
+    if (sampleStep(h, [0, 0, 0, 0, 0, 0])) sampledEvents.push(executed)
+  }
+  h.clock.elapsedMs = 1820
+  h.diag.markUpdate(10)
+  h.diag.endFrame(10, h.clock)
+  h.diag.requestFinish('event-cadence')
+  assert.deepEqual(sampledEvents, [1, 14])
+  assert.equal(h.diag.stepCount, 182)
+  assert.equal(h.diag.executedStepCount, 14)
+  assert.equal(h.diag.sampleCount, 2)
+  const records = compactReport(h)
+  assert.equal(records.find(record => record.k === 'clock').d[2], 182)
+  assert.deepEqual(records.find(record => record.k === 'work').d.slice(0, 8), [1, 182, 182, 98, 42, 7, 0, 0])
+  records.filter(record => record.k === 'phase').forEach((record, index) => assert.deepEqual(record.d, [index, 2, 0, 0, 0]))
+  assert.equal(records.find(record => record.k === 'pair').d[7], 182)
 })

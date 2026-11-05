@@ -1,7 +1,7 @@
 import { tiltProfile } from './tilt-fixtures.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { addAsteroidToCollisionGrid, calculateDifficulty, createShipGeometry, createShipRect } from '../zepp-app/shared/game-core.js'
+import { addAsteroidToCollisionGrid, calculateCollisionResult, calculateDifficulty, createShipGeometry, createShipRect } from '../zepp-app/shared/game-core.js'
 import { __resetDeviceInfo, __setDeviceInfo } from './mocks/zos/device.mjs'
 import { __getRouterCalls, __resetRouter } from './mocks/zos/router.mjs'
 import { __getCanvasWidgets, __resetUI } from './mocks/zos/ui.mjs'
@@ -13,6 +13,67 @@ import { __readLocalStorage, __readSessionStorage, __resetStorage, __seedLocalSt
 const EPOCH = 1700000000000
 let importId = 0
 const schedules = [[16], [33], [50], [100], [200], [7, 211, 38, 149, 3, 249, 52]]
+
+test('an empty idle block advances logical time without world dispatch or unchanged geometry writes', async () => {
+  await withGame({}, ({ page, tick }) => {
+    let writes = 0
+    for (const rect of [page.shipRect, page.nextShipRect]) for (const point of rect.points) {
+      let y = point.y
+      Object.defineProperty(point, 'y', { get: () => y, set: value => { writes += 1; y = value } })
+    }
+    tick(200)
+    assert.equal(page.simulationClock.elapsedMs, 200)
+    assert.equal(page.diagnosticMetadata.skippedQuanta, 20)
+    assert.equal(page.diagnosticMetadata.eventQuanta, 0)
+    assert.equal(page.runtimeDiagnostics.stepCount, 20)
+    assert.equal(writes, 0)
+    assert.equal(page.shipCenterY, 240)
+  })
+})
+
+test('the first stationary segment synchronizes presentation buffers and preserves the next movement sweep', async () => {
+  await withGame({}, ({ page, canvas, at, tick }) => {
+    at(1); canvas.__emit('CLICK_DOWN', { y: 100 }); tick(100)
+    const stoppedAt = page.shipCenterY
+    at(101); canvas.__emit('CLICK_UP'); tick(200)
+    assert.equal(page.shipCenterY, stoppedAt)
+    assert.deepEqual(page.nextShipRect.points, page.shipRect.points)
+    assert.notEqual(page.nextShipRect.points, page.shipRect.points)
+    const oldY = page.shipRect.y
+    at(201); canvas.__emit('CLICK_DOWN', { y: 400 }); tick(216)
+    assert.equal(page.nextShipRect.y, oldY)
+    assert.ok(page.shipRect.y > oldY)
+    assert.equal(page.simulationClock.pendingMs, 6)
+  })
+})
+
+test('event batching stops on the same fatal contact quantum as a complete canonical sweep', async () => {
+  for (const wristSide of ['left', 'right']) await withGame({ settings: { wristSide } }, ({ page, tick }) => {
+    const direction = wristSide === 'left' ? -1 : 1
+    const asteroid = { id: 'fatal-sweep', x: page.shipRect.centerX - direction * 80,
+      y: page.shipRect.centerY, radius: 12, vx: direction * 1000, lastHitAt: -Infinity }
+    const startX = asteroid.x
+    let fatalAt
+    for (let age = 10; age <= 200; age += 10) {
+      const collision = calculateCollisionResult({ shipRect: page.shipRect, asteroid: {
+        ...asteroid, previousX: startX + asteroid.vx * (age - 10) / 1000,
+        x: startX + asteroid.vx * age / 1000,
+      }, now: age, difficulty: calculateDifficulty(age, 1) })
+      if (collision.hit) { fatalAt = age; break }
+    }
+    assert.ok(fatalAt > 10 && fatalAt < 200)
+    page.hp = 1
+    page.asteroids.push(asteroid)
+    addAsteroidToCollisionGrid(asteroid, page.collisionGrid)
+    tick(200)
+    assert.equal(page.finished, true)
+    assert.equal(page.simulationClock.elapsedMs, fatalAt)
+    assert.equal(page.simulationClock.pendingMs, 0)
+    assert.equal(savedEntry().survivedMs, fatalAt)
+    assert.ok(page.diagnosticMetadata.skippedQuanta > 0)
+    assert.equal(page.diagnosticMetadata.skippedQuanta + page.diagnosticMetadata.eventQuanta, fatalAt / 10)
+  })
+})
 
 test('distant asteroid motion is materialized once instead of once per catch-up step', async () => {
   await withGame({}, ({ page, tick }) => {
@@ -68,7 +129,9 @@ test('pointer handlers never run the world; a short held input is preserved unti
     assert.equal(page.simulationClock.elapsedMs,0)
     assert.equal(page.shipCenterY,initial)
     tick(200)
-    assert.equal(updates,20)
+    assert.equal(updates,0, 'input boundaries preserve the held interval without twenty full world dispatches')
+    assert.equal(page.simulationClock.elapsedMs,200)
+    assert.equal(page.diagnosticMetadata.skippedQuanta,20)
     assert.ok(Math.abs(page.shipCenterY-(initial-page.baseControlSpeed*.02))<1e-9)
     assert.equal(page.pointerDown,false)
     assert.equal(page.pointerInput.events.length,0)

@@ -26,12 +26,14 @@ for (const shape of ['round', 'square']) {
         now=1000035;listeners.get('CLICK_UP')()
         const stepsInHandlers=steps
         now=1000040;game.tick()
-        return{stepsInHandlers,steps,squareRoots,age:game.simulationClock.elapsedMs,
+        return{stepsInHandlers,steps,squareRoots,logicalSteps:game.runtimeDiagnostics.stepCount,skippedQuanta:game.diagnosticMetadata.skippedQuanta,age:game.simulationClock.elapsedMs,
           displacement:initial-game.shipCenterY,expected:game.baseControlSpeed*.02,pending:game.pointerInput.events.length}
       }finally{Date.now=originalNow;Math.sqrt=originalSqrt}
     })
     expect(result.stepsInHandlers).toBe(0)
-    expect(result.steps).toBe(4)
+    expect(result.steps).toBe(0)
+    expect(result.logicalSteps).toBe(4)
+    expect(result.skippedQuanta).toBe(4)
     expect(result.squareRoots).toBe(0)
     expect(result.age).toBe(40)
     expect(result.displacement).toBeCloseTo(result.expected,10)

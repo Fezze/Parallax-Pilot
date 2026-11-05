@@ -84,3 +84,11 @@ damage with extra HP to expose progression; a separate normal-HP replay checks
 natural game over. Browser tests exercise the page with mocked Zepp APIs and
 the existing screenshot matrix remains applicable. Neither browser tests nor
 builds establish physical watch FPS, CPU use, energy cost or sensor feel.
+
+## Canonical event segments
+
+The clock can admit one block of whole10ms quanta with the same carry, rollback and250ms pause rules. The page processes touch/swipe input segments at exact spawn/contact boundaries and advances quiet intervals using repeated scalar control additions. No physics event is moved to a presentation boundary. Newborns receive their first movement quantum immediately; a fatal event stops the block and clears pending time.
+
+An unchanged ship pose no longer rewrites five vertices every quantum. Quiet segments preserve separate previous/current canonical rectangles and the final two HP values, including the first stationary quantum after movement and the first jump of a swipe. Tilt retains per-quantum reads because sensor traces are part of its existing control contract; geometry caching and scheduled spawning still apply.
+
+The next spawn quantum is solved from the current difficulty/interval equation, then checked at adjacent lattice points using the original predicate. Retained debt schedules at the next unprocessed quantum. Collision windows conservatively include both spatial rounding and the preceding sweep; only the existing10ms narrow phase determines damage. Logical steps include quiet quanta, while eventQuanta/skippedQuanta expose how much full dispatch was avoided.

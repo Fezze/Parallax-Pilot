@@ -183,10 +183,11 @@ test('the real compact exporter round-trips boolean metadata, first-frame null t
   const lines = []
   let now = 1000
   const diagnostic = new RuntimeDiagnostics({
-    compactExport: true, version: '2.3.31', deviceSource: 9568513, runIndex: 1,
+    compactExport: true, version: '2.3.32', deviceSource: 9568513, runIndex: 1,
     phaseSampleEvery: 0, controlMode: 'touch', wristSide: 'left',
     timeScale: 1, spawnMultiplier: 1.1, width: 480, height: 480,
     modePersisted: true, fullMaterializations: 2, fullAsteroidVisits: 8, sensorReads: 0,
+    skippedQuanta: 20, eventQuanta: 2,
   }, { now: () => now, emit: line => lines.push(line) })
   const clock = { elapsedMs: 0, pausedMs: 0, pendingMs: 0 }
   diagnostic.beginFrame(now, clock, false, 4)
@@ -204,5 +205,8 @@ test('the real compact exporter round-trips boolean metadata, first-frame null t
   assert.equal(decoded.meta.deviceSource, 9568513)
   assert.equal(decoded.work.fullMaterializations, 2)
   assert.equal(decoded.work.fullAsteroidVisits, 8)
+  assert.equal(decoded.work.skippedQuanta, 20)
+  assert.equal(decoded.work.eventQuanta, 2)
+  assert.match(decoded.caveats[1], /skipped logical quanta produce no phase samples/)
   assert.equal(decoded.trace.rows[0][2], null)
 })
