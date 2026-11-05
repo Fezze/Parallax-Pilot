@@ -34,15 +34,16 @@ import {
   createCollisionGrid,
   createAsteroid,
   createScoreEntry,
+  createShipGeometry,
   createShipRect,
   getSpawnIntervalMs,
-  getShipYLimits,
   ROUND_HUD_MARGIN,
   HUD_STROKE_WIDTH,
   SHIP_STROKE_WIDTH,
 } from '../../shared/game-core.js'
 import { sanitizeControlMode } from '../../shared/device.js'
-import { advanceSimulationClock, createSimulationClock } from '../../shared/simulation-clock.js'
+import { advanceSimulationClock, createSimulationClock, MAX_SIMULATION_GAP_MS } from '../../shared/simulation-clock.js'
+import { createPointerInputQueue, enqueuePointerInput } from '../../shared/pointer-input.js'
 import { normalizeTiltInput } from '../../shared/tilt-calibration.js'
 import { appendScore, loadSettings, loadTiltCalibration, saveLastSession, saveSettings } from '../../shared/storage.js'
 
@@ -290,10 +291,12 @@ Page({
     this.settings = settings
     this.tiltCalibration = loadTiltCalibration()
     this.collisionSliceWidth = COLLISION_SLICE_WIDTH
-    this.shipYLimits = getShipYLimits(this.viewport, settings.wristSide)
+    this.shipGeometry = createShipGeometry(this.viewport, settings.wristSide)
+    this.shipYLimits = this.shipGeometry.limits
     this.shipCenterY = deviceInfo.height / 2
     this.touchDirection = 0
     this.pointerDown = false
+    this.pointerInput = createPointerInputQueue()
     this.swipeStartTouchY = null
     this.swipeCurrentTouchY = null
     this.swipeStartShipY = this.shipCenterY
@@ -310,6 +313,11 @@ Page({
     this.lastSpawnAt = 0
     this.lastDamageAt = -Infinity
     this.finished = false
+    this.destroyed = false
+    this.simulationUpdate = (deltaSeconds, elapsedMs) => {
+      this.stepSimulation(deltaSeconds, elapsedMs)
+      return !this.finished && !this.destroyed
+    }
     this.accelerometer = null
     this.vibrator = new Vibrator()
     this.baseControlSpeed =
@@ -320,8 +328,11 @@ Page({
     this.shipRect = createShipRect(
       this.viewport,
       this.shipCenterY,
-      this.settings.wristSide
+      this.settings.wristSide,
+      {},
+      this.shipGeometry
     )
+    createShipRect(this.viewport, this.shipCenterY, this.settings.wristSide, this.nextShipRect, this.shipGeometry)
   },
 
   build() {
@@ -350,6 +361,8 @@ Page({
   },
 
   onDestroy() {
+    this.destroyed = true
+    this.pointerInput.events.length = 0
     restoreScreenTimeout()
 
     if (this.loop) {
@@ -366,7 +379,31 @@ Page({
   },
 
   bindCanvasEvents() {
-    const beginPointerInput = (y) => {
+    const record = (kind, y) => {
+      if (this.finished || this.destroyed) return
+      enqueuePointerInput(this.pointerInput, kind, y, Date.now(), this.simulationClock)
+    }
+    this.canvas.addEventListener(event.CLICK_DOWN, info => record('down', info.y))
+    this.canvas.addEventListener(event.CLICK_UP, () => record('up'))
+    this.canvas.addEventListener(event.MOVE, info => {
+      if (!this.pointerInput.down) return
+      if (this.settings.controlMode === 'touch' &&
+          (info.y < this.viewportHalfHeight) === (this.pointerInput.y < this.viewportHalfHeight)) return
+      record('move', info.y)
+    })
+  },
+
+  applyPointerInput(input) {
+    if (input.kind === 'up') {
+      this.pointerDown = false
+      this.touchDirection = 0
+      this.swipeStartTouchY = null
+      this.swipeCurrentTouchY = null
+      return
+    }
+    const y = input.y
+    if (input.kind === 'down') {
+      this.pointerDown = true
       if (this.settings.controlMode === 'touch') {
         this.touchDirection = y < this.viewportHalfHeight ? -1 : 1
       }
@@ -376,9 +413,7 @@ Page({
         this.swipeCurrentTouchY = y
         this.swipeStartShipY = this.shipCenterY
       }
-    }
-
-    const updatePointerInput = (y) => {
+    } else {
       if (this.settings.controlMode === 'touch') {
         this.touchDirection = y < this.viewportHalfHeight ? -1 : 1
       }
@@ -390,29 +425,6 @@ Page({
         this.swipeCurrentTouchY = y
       }
     }
-
-    this.canvas.addEventListener(event.CLICK_DOWN, (info) => {
-      this.advanceSimulation(Date.now())
-      if (this.finished) return
-      this.pointerDown = true
-      beginPointerInput(info.y)
-    })
-    this.canvas.addEventListener(event.CLICK_UP, () => {
-      this.advanceSimulation(Date.now())
-      this.pointerDown = false
-      this.touchDirection = 0
-      this.swipeStartTouchY = null
-      this.swipeCurrentTouchY = null
-    })
-    this.canvas.addEventListener(event.MOVE, (info) => {
-      if (!this.pointerDown) {
-        return
-      }
-
-      this.advanceSimulation(Date.now())
-      if (this.finished) return
-      updatePointerInput(info.y)
-    })
   },
 
   bindGestureEvents() {
@@ -553,14 +565,25 @@ Page({
   },
 
   advanceSimulation(now) {
-    if (this.finished) {
+    if (this.finished || this.destroyed) {
       return
     }
-
-    advanceSimulationClock(this.simulationClock, now, (deltaSeconds, elapsedMs) => {
-      this.stepSimulation(deltaSeconds, elapsedMs)
-      return !this.finished
-    })
+    const clock = this.simulationClock
+    const events = this.pointerInput.events
+    // Only the presentation owner admits elapsed time. A burst of touch events
+    // must not turn a paused frame gap into repeated simulation catch-up.
+    if (now - clock.lastFrameAt > MAX_SIMULATION_GAP_MS) {
+      advanceSimulationClock(clock, now, this.simulationUpdate)
+      for (let index = 0; index < events.length; index++) this.applyPointerInput(events[index])
+    } else {
+      for (let index = 0; index < events.length; index++) {
+        advanceSimulationClock(clock, Math.min(now, events[index].at), this.simulationUpdate)
+        if (this.finished || this.destroyed) break
+        this.applyPointerInput(events[index])
+      }
+      if (!this.finished && !this.destroyed) advanceSimulationClock(clock, now, this.simulationUpdate)
+    }
+    events.length = 0
   },
 
   stepSimulation(deltaSeconds, now) {
@@ -571,7 +594,8 @@ Page({
       this.viewport,
       this.shipCenterY,
       this.settings.wristSide,
-      this.nextShipRect
+      this.nextShipRect,
+      this.shipGeometry
     )
     this.nextShipRect = previousShipRect
     this.shipRect = shipRect
@@ -604,10 +628,10 @@ Page({
   },
 
   tick() {
-    if (this.finished) return
+    if (this.finished || this.destroyed) return
     this.advanceSimulation(Date.now())
     // Collision handling may have navigated away during catch-up.
-    if (!this.finished) this.drawFrame()
+    if (!this.finished && !this.destroyed) this.drawFrame()
   },
 
   drawFrame(shipRect = this.shipRect) {

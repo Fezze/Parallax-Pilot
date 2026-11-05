@@ -50,6 +50,12 @@ function getShipDimensions(viewport, wristSide) {
 }
 
 export function getShipYLimits(viewport, wristSide) {
+  return createShipGeometry(viewport, wristSide).limits
+}
+
+// Device size and wrist do not change during a run. Keep this work, including
+// circular safe-area math, out of the fixed-step simulation hot path.
+export function createShipGeometry(viewport, wristSide) {
   const { x, w, h } = getShipDimensions(viewport, wristSide)
   let top = 14
   if (viewport.isRound ?? viewport.width === viewport.height) {
@@ -59,7 +65,7 @@ export function getShipYLimits(viewport, wristSide) {
     // Every arrow vertex (and its stroke) stays inside the HUD inner edge.
     top = Math.ceil(viewport.height / 2 - Math.sqrt(Math.max(0, safeRadius * safeRadius - dx * dx)))
   }
-  return { min: top + h / 2, max: viewport.height - top - h / 2 }
+  return { x, w, h, wristSide, limits: { min: top + h / 2, max: viewport.height - top - h / 2 } }
 }
 
 export function updateShipPoints(points, rect, wristSide = rect.wristSide || 'left') {
@@ -80,11 +86,16 @@ export function updateShipPoints(points, rect, wristSide = rect.wristSide || 'le
   return points
 }
 
-export function createShipRect(viewport, shipCenterY, wristSide, rect = {}) {
-  const { x, w, h } = getShipDimensions(viewport, wristSide)
-  const limits = getShipYLimits(viewport, wristSide)
+export function createShipRect(viewport, shipCenterY, wristSide, rect = {}, geometry = createShipGeometry(viewport, wristSide)) {
+  const { x, w, h, limits } = geometry
   const y = Math.round(clamp(shipCenterY, limits.min, limits.max) - h / 2)
-  Object.assign(rect, { x, y, w, h, centerX: x + w / 2, centerY: y + h / 2, wristSide })
+  rect.x = x
+  rect.y = y
+  rect.w = w
+  rect.h = h
+  rect.centerX = x + w / 2
+  rect.centerY = y + h / 2
+  rect.wristSide = wristSide
   rect.points = updateShipPoints(rect.points || Array.from({ length: 5 }, () => ({ x: 0, y: 0 })), rect)
   return rect
 }

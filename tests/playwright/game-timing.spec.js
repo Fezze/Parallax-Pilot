@@ -2,6 +2,41 @@ import { test, expect } from '@playwright/test'
 import { previewScenarios } from './preview/scenarios.js'
 
 for (const shape of ['round', 'square']) {
+  test(`dense pointer input records state without stepping or recomputing static geometry (${shape})`, async ({ page }) => {
+    const [scenario] = Object.entries(previewScenarios).find(([,value])=>value.pageName==='game'&&value.shape===shape)
+    await page.goto(`/tests/playwright/preview/index.html?scenario=${scenario}`)
+    await expect(page.locator('#status')).toHaveText('ready')
+    const result=await page.evaluate(()=>{
+      const game=globalThis.__previewPageDefinition
+      const originalNow=Date.now, originalSqrt=Math.sqrt
+      let now=1000000
+      Date.now=()=>now
+      try{
+        game.onInit();game.settings.controlMode='touch'
+        const listeners=new Map()
+        game.canvas.addEventListener=(name,handler)=>listeners.set(name,handler)
+        game.bindCanvasEvents()
+        let steps=0,squareRoots=0
+        const step=game.stepSimulation
+        game.stepSimulation=function(...args){steps++;return step.apply(this,args)}
+        Math.sqrt=(...args)=>{squareRoots++;return originalSqrt(...args)}
+        const initial=game.shipCenterY
+        now+=13;listeners.get('CLICK_DOWN')({y:100})
+        for(let i=0;i<1000;i++)listeners.get('MOVE')({y:101})
+        now=1000035;listeners.get('CLICK_UP')()
+        const stepsInHandlers=steps
+        now=1000040;game.tick()
+        return{stepsInHandlers,steps,squareRoots,age:game.simulationClock.elapsedMs,
+          displacement:initial-game.shipCenterY,expected:game.baseControlSpeed*.02,pending:game.pointerInput.events.length}
+      }finally{Date.now=originalNow;Math.sqrt=originalSqrt}
+    })
+    expect(result.stepsInHandlers).toBe(0)
+    expect(result.steps).toBe(4)
+    expect(result.squareRoots).toBe(0)
+    expect(result.age).toBe(40)
+    expect(result.displacement).toBeCloseTo(result.expected,10)
+    expect(result.pending).toBe(0)
+  })
   test(`game timing stays consistent through delayed callbacks and a stall (${shape})`, async ({ page }) => {
     const [scenario] = Object.entries(previewScenarios).find(([, value]) => value.pageName === 'game' && value.shape === shape)
     const results = []

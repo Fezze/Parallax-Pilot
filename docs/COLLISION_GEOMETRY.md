@@ -32,6 +32,12 @@ clear of the 8 px HUD stroke. HUD and ship stroke constants are shared with
 the renderer. Flight positions are intentionally narrower than the former
 20 px center margin on round screens.
 
+Dimensions and the circular safe envelope are computed once per game page and
+passed to the two reused ship rectangles. Fixed updates change coordinates and
+existing point buffers without rebuilding static geometry, square roots or
+temporary dimension/limit/assignment objects. The public helper still computes
+geometry by default for callers without a page-owned cache.
+
 The oracle tests use independent triangle containment and projected edge
 geometry, including all radii, both wrists, all five display families, cell
 edges, moving/pruned scenes and relative-motion paths. Actual-page tests cover

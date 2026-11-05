@@ -1,7 +1,7 @@
 import { tiltProfile } from './tilt-fixtures.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { addAsteroidToCollisionGrid, calculateDifficulty } from '../zepp-app/shared/game-core.js'
+import { addAsteroidToCollisionGrid, calculateDifficulty, createShipGeometry, createShipRect } from '../zepp-app/shared/game-core.js'
 import { __resetDeviceInfo, __setDeviceInfo } from './mocks/zos/device.mjs'
 import { __getRouterCalls, __resetRouter } from './mocks/zos/router.mjs'
 import { __getCanvasWidgets, __resetUI } from './mocks/zos/ui.mjs'
@@ -13,6 +13,89 @@ import { __readLocalStorage, __readSessionStorage, __resetStorage, __seedLocalSt
 const EPOCH = 1700000000000
 let importId = 0
 const schedules = [[16], [33], [50], [100], [200], [7, 211, 38, 149, 3, 249, 52]]
+
+test('pointer handlers never run the world; a short held input is preserved until presentation', async () => {
+  await withGame({}, ({page,canvas,at,tick})=>{
+    const initial=page.shipCenterY
+    let updates=0
+    const originalUpdate=page.stepSimulation
+    page.stepSimulation=function(...args){updates++;return originalUpdate.apply(this,args)}
+    at(135);canvas.__emit('CLICK_DOWN',{y:100})
+    for(let ms=136;ms<155;ms++){at(ms);canvas.__emit('MOVE',{y:101})}
+    at(155);canvas.__emit('CLICK_UP')
+    assert.equal(updates,0)
+    assert.equal(page.simulationClock.elapsedMs,0)
+    assert.equal(page.shipCenterY,initial)
+    tick(200)
+    assert.equal(updates,20)
+    assert.ok(Math.abs(page.shipCenterY-(initial-page.baseControlSpeed*.02))<1e-9)
+    assert.equal(page.pointerDown,false)
+    assert.equal(page.pointerInput.events.length,0)
+  })
+})
+
+test('dense input cannot admit time during a stalled presentation or change the pause policy', async () => {
+  for(const mode of ['touch','swipe']) await withGame({settings:{controlMode:mode}},({page,canvas,at,tick})=>{
+    const initial=world(page)
+    at(1);canvas.__emit('CLICK_DOWN',{y:100})
+    for(let ms=2;ms<=999;ms++){at(ms);canvas.__emit('MOVE',{y:100+ms%100})}
+    assert.equal(page.simulationClock.elapsedMs,0)
+    assert.ok(page.pointerInput.events.length<=2)
+    tick(1000)
+    assert.equal(page.simulationClock.pausedMs,1000)
+    assert.deepEqual(world(page),initial)
+    tick(1010)
+    assert.equal(page.simulationClock.elapsedMs,10)
+    assert.notEqual(page.shipCenterY,initial.shipY)
+  })
+})
+
+test('cached ship geometry matches all viewport and wrist bounds without per-step square roots or allocation helpers', () => {
+  for(const [width,height]of [[416,416],[454,454],[466,466],[480,480],[390,450]])for(const wrist of ['left','right']){
+    const viewport={width,height}
+    const geometry=createShipGeometry(viewport,wrist)
+    const rect=createShipRect(viewport,0,wrist,{},geometry)
+    const points=rect.points
+    for(const y of [-100,20,height/2,height-20,height+100]){
+      const expected=createShipRect(viewport,y,wrist)
+      const originalSqrt=Math.sqrt,originalAssign=Object.assign,originalFrom=Array.from
+      Math.sqrt=()=>{throw new Error('static geometry recomputed')}
+      Object.assign=()=>{throw new Error('temporary rectangle object copied')}
+      Array.from=()=>{throw new Error('point array reallocated')}
+      try{createShipRect(viewport,y,wrist,rect,geometry)}finally{Math.sqrt=originalSqrt;Object.assign=originalAssign;Array.from=originalFrom}
+      assert.deepEqual(rect,expected)
+      assert.equal(rect.points,points)
+    }
+  }
+})
+
+test('the actual game hot path reuses geometry and a stable update callback', async () => {
+  await withGame({},({page,canvas,at,tick})=>{
+    const originalSqrt=Math.sqrt, originalAssign=Object.assign, originalFrom=Array.from
+    const callback=page.simulationUpdate
+    Math.sqrt=()=>{throw new Error('static circular limits in game step')}
+    Object.assign=()=>{throw new Error('temporary shape in game step')}
+    Array.from=()=>{throw new Error('new shape points in game step')}
+    try{
+      at(5);canvas.__emit('CLICK_DOWN',{y:100})
+      for(let ms=16;ms<=240;ms+=16)tick(ms)
+    }finally{Math.sqrt=originalSqrt;Object.assign=originalAssign;Array.from=originalFrom}
+    assert.equal(page.simulationClock.elapsedMs,240)
+    assert.equal(page.simulationUpdate,callback)
+    assert.ok(page.shipCenterY<page.viewport.height/2)
+  })
+})
+
+test('a paused/released pointer and delayed callbacks cannot restart a destroyed game', async () => {
+  await withGame({},({page,canvas,at,tick})=>{
+    at(100);canvas.__emit('CLICK_DOWN',{y:100})
+    page.onDestroy()
+    at(200);canvas.__emit('MOVE',{y:300});canvas.__emit('CLICK_UP')
+    page.tick()
+    assert.equal(page.simulationClock.elapsedMs,0)
+    assert.equal(page.pointerInput.events.length,0)
+  })
+})
 
 async function withGame(options, run) {
   __resetDeviceInfo()

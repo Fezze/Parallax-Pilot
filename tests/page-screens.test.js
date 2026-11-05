@@ -1015,6 +1015,9 @@ test('game swipe input moves relatively and does not teleport on touch down', as
 
   const originalSetInterval = globalThis.setInterval
   const originalClearInterval = globalThis.clearInterval
+  const originalNow = Date.now
+  let now = 1000000
+  Date.now = () => now
   globalThis.setInterval = () => 1
   globalThis.clearInterval = () => {}
 
@@ -1031,7 +1034,7 @@ test('game swipe input moves relatively and does not teleport on touch down', as
 
     canvas.__emit('MOVE', { y: 140 })
     assert.equal(page.shipCenterY, initialCenterY)
-    page.simulationClock.lastFrameAt = Date.now() - 16
+    now += 16
     page.tick()
     assert.equal(page.shipCenterY, initialCenterY + 60)
 
@@ -1043,6 +1046,7 @@ test('game swipe input moves relatively and does not teleport on touch down', as
   } finally {
     globalThis.setInterval = originalSetInterval
     globalThis.clearInterval = originalClearInterval
+    Date.now = originalNow
   }
 })
 

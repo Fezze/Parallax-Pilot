@@ -35,8 +35,15 @@ interruption/cooldown policies remain unchanged.
 
 ## Input and reproducibility
 
-Pointer down/move/up advances pending time before changing the current input.
-Thus a release between timer callbacks does not erase the preceding held input.
+Pointer down/move/up records timestamped commands without advancing the world.
+The presentation callback consumes those commands in time order, advancing the
+same fixed simulation steps before each effective input change. Thus a release
+between timer callbacks does not erase the preceding held input, while a burst
+of pointer events cannot run collision/spawn work inside the input handlers.
+The frame owner alone decides whether a gap is admitted or paused; active
+touch cannot bypass the 250 ms interruption policy. Commands within one
+simulation quantum are folded to their final pointer state/swipe anchor in a
+bounded reusable pool. Long waiting gaps retain only the final state and anchor.
 Tilt uses the existing sensor's current reading at each simulation step. The
 app cannot reconstruct physical sensor changes that were never delivered; the
 equivalence contract is for the same supplied input and random traces.
