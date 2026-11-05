@@ -63,6 +63,66 @@ function mergeAndClear(target, source) {
   }
 }
 
+// Export-only summaries: all selection and allocation happens after measurement.
+function compactRecords(report) {
+  const records = []
+  const record = (kind, data) => records.push({ k: kind, d: data })
+  const meta = report.meta
+  record('meta', [2, meta.version, meta.deviceSource, meta.runIndex, report.sampling.every,
+    meta.controlMode, meta.wristSide, meta.timeScale, meta.spawnMultiplier,
+    meta.width, meta.height, meta.modePersisted])
+  record('clock', [report.wallMs, report.frames, report.steps, report.clock.elapsedMs,
+    report.clock.pausedMs, report.clock.pendingMs, report.reason])
+  for (let index = 0; index < 7; index += 1) {
+    const hist = report.steady[METRICS[index]]
+    let p95 = null
+    let cumulative = 0
+    for (let bin = 0; hist.count && bin < BINS.length; bin += 1) {
+      cumulative += hist.counts[bin]
+      if (cumulative >= Math.ceil(hist.count * 0.95)) {
+        p95 = BINS[bin]
+        break
+      }
+    }
+    record('metric', [index, hist.count, hist.sum, hist.max, hist.invalid, p95])
+  }
+  const steady = report.steady
+  record('work', [steady.steps.count, steady.steps.sum, steady.steps.max,
+    steady.objectVisits.sum, steady.candidates.sum, steady.asteroids.max,
+    steady.steps.counts[0], steady.pausedMs.count - steady.pausedMs.counts[0],
+    meta.fullMaterializations || 0, meta.fullAsteroidVisits || 0, meta.sensorReads || 0])
+  for (let index = 0; index < PHASES.length; index += 1) {
+    const hist = report.sampling.steady[index]
+    record('phase', [index, hist.count, hist.sum, hist.max, hist.invalid])
+  }
+  for (let index = 0; index < report.groups.length; index += 1) {
+    const group = report.groups[index]
+    record('group', [index, group.callbackMs.count, group.gapMs.count, group.gapMs.sum,
+      group.gapMs.max, group.updateMs.sum, group.drawSubmissionMs.sum, group.callbackMs.sum])
+  }
+  const calibration = report.calibration
+  record('calibration', [calibration.reads, calibration.spanMs, calibration.zeroDeltas,
+    calibration.minPositiveMs, calibration.rollbacks, calibration.invalidReads,
+    report.anomalies.invalidFrames])
+  const rows = report.trace.rows
+  const selected = rows.slice(-2)
+  const gapColumn = TRACE_COLUMNS.indexOf('gapMs')
+  const largest = rows.filter(row => Number.isFinite(row[gapColumn]))
+    .sort((left, right) => right[gapColumn] - left[gapColumn] || right[0] - left[0]).slice(0, 2)
+  for (let index = 0; index < largest.length; index += 1) {
+    if (selected.indexOf(largest[index]) < 0) selected.push(largest[index])
+  }
+  const pairColumns = ['frame', 'atMs', 'gapMs', 'previousCallbackMs', 'callbackMs',
+    'updateMs', 'drawSubmissionMs', 'steps', 'pausedMs'].map(name => TRACE_COLUMNS.indexOf(name))
+  for (let index = 0; index < selected.length; index += 1) {
+    record('pair', pairColumns.map(column => selected[index][column]))
+  }
+  const terminal = report.terminal
+  record('terminal', [terminal.callbackMs.count, terminal.callbackMs.sum, terminal.callbackMs.max,
+    terminal.updateMs.sum, terminal.drawSubmissionMs.sum, terminal.steps.sum])
+  return records
+}
+
 export class RuntimeDiagnostics {
   constructor(meta, { now = () => Date.now(), emit = line => console.log(line) } = {}) {
     this.meta = meta
@@ -348,9 +408,19 @@ export class RuntimeDiagnostics {
         'Draw timing measures widget submission, not display completion or GPU work.',
         'Callback timing includes bulk diagnostics bookkeeping; final timing histogram/scalar writes and report emission are outside that measurement.',
         'Report emission occurs after the final measured frame; instrumentation disables before emitting and allocates no timer.',
-        'Object visits count asteroids at step entry, not measured loop iterations; candidate count is supplied by the caller.',
+        'Object visits count the caller-supplied per-step work set, not CPU instructions; candidate count is supplied by the caller.',
         'Clock rollback invalidates affected wall timings without changing simulation time; null trace values denote invalid or unavailable measurements.'
       ]
+    }
+    if (this.meta.compactExport === true) {
+      const records = compactRecords(report)
+      for (let part = 0; part < records.length; part += 1) {
+        const entry = records[part]
+        const data = JSON.stringify({ r: this.runId, p: part + 1, t: records.length, k: entry.k, d: entry.d })
+          .replace(/[\u007f-\uffff]/g, character => `\\u${(`0000${character.charCodeAt(0).toString(16)}`).slice(-4)}`)
+        this.emit(`PP_METRIC ${data}`)
+      }
+      return
     }
     // Native SBEngine transport truncates long console messages. Escape Unicode
     // before chunking so the limit applies equally to ASCII bytes and characters.

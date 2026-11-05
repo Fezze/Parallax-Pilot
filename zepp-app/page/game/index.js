@@ -26,17 +26,22 @@ import {
 } from '../../shared/constants.js'
 import {
   addAsteroidToCollisionGrid,
-  advanceAsteroidsInCollisionGrid,
+  advanceFrameCollisionCandidates,
+  anchorAsteroidMotion,
   calculateCollisionResult,
   calculateDifficulty,
   clamp,
-  collectCollisionCandidatesFromGrid,
+  collectFrameCollisionCandidates,
+  collectCollisionCandidatesFromList,
   createCollisionGrid,
   createAsteroid,
   createScoreEntry,
   createShipGeometry,
   createShipRect,
   getSpawnIntervalMs,
+  getAsteroidXAt,
+  interpolateShipRect,
+  materializeAsteroidsAt,
   ROUND_HUD_MARGIN,
   HUD_STROKE_WIDTH,
   SHIP_STROKE_WIDTH,
@@ -56,7 +61,7 @@ const CONTROL_BASE_SPEED_FACTOR = 0.46
 const SQUARE_HUD_CORNER_RADIUS = 36
 const HUD_DISPLAY_HP_SPEED = 72
 // Temporary physical-watch diagnostic build; this does not change game timing.
-const DIAGNOSTIC_VERSION = '2.3.29'
+const DIAGNOSTIC_VERSION = '2.3.31'
 
 function moveTowards(current, target, maxDelta) {
   if (current === target) {
@@ -305,6 +310,8 @@ Page({
     this.swipeStartShipY = this.shipCenterY
     this.asteroids = []
     this.collisionCandidates = []
+    this.frameCollisionCandidates = []
+    this.simulationFrameActive = false
     this.collisionGrid = createCollisionGrid(
       this.viewport,
       this.collisionSliceWidth
@@ -312,11 +319,12 @@ Page({
     this.asteroidSeed = 0
     this.hp = HP_MAX
     this.displayedHp = HP_MAX
+    this.previousDisplayedHp = HP_MAX
     const diagnosticSession = advanceRuntimeDiagnosticRun()
     const diagnosticRun = diagnosticSession.index
     this.diagnosticMetadata = {
       version: DIAGNOSTIC_VERSION,
-      baselineCommit: '9f3d63e',
+      baselineCommit: '6b20e3b',
       runIndex: diagnosticRun,
       phaseSampleEvery: diagnosticSession.persisted && diagnosticRun % 2 ? 0 : 13,
       modePersisted: diagnosticSession.persisted,
@@ -332,6 +340,10 @@ Page({
       maxAdmittedGapMs: MAX_SIMULATION_GAP_MS,
       vibrations: 0,
       callbackErrors: 0,
+      compactExport: true,
+      fullMaterializations: 0,
+      fullAsteroidVisits: 0,
+      sensorReads: 0,
     }
     this.runtimeDiagnostics = new RuntimeDiagnostics(this.diagnosticMetadata)
     // Startup logging and clock calibration happen before the game's clock.
@@ -361,6 +373,7 @@ Page({
       this.shipGeometry
     )
     createShipRect(this.viewport, this.shipCenterY, this.settings.wristSide, this.nextShipRect, this.shipGeometry)
+    this.renderShipRect = createShipRect(this.viewport, this.shipCenterY, this.settings.wristSide, {}, this.shipGeometry)
   },
 
   build() {
@@ -479,12 +492,8 @@ Page({
 
   updateShip(deltaSeconds) {
     if (this.settings.controlMode === 'tilt' && this.accelerometer) {
-      const current = this.accelerometer.getCurrent() || { y: 0 }
-      const normalized = normalizeTiltInput(
-        current.y,
-        this.tiltCalibration,
-        this.settings.wristSide
-      )
+      this.diagnosticMetadata.sensorReads += 1
+      const normalized = normalizeTiltInput(this.accelerometer.getCurrent()?.y || 0, this.tiltCalibration, this.settings.wristSide)
       this.shipCenterY += normalized * this.baseControlSpeed * deltaSeconds
     }
 
@@ -520,6 +529,14 @@ Page({
       return
     }
 
+    // Spawning precedes movement in the canonical step: placement sees the
+    // preceding quantum, then newborns receive their first 10 ms movement.
+    if (this.simulationFrameActive) {
+      this.diagnosticMetadata.fullMaterializations += 1
+      this.diagnosticMetadata.fullAsteroidVisits += this.asteroids.length
+      materializeAsteroidsAt(this.asteroids, now - SIMULATION_STEP_MS, this.viewport, this.collisionGrid, SIMULATION_STEP_MS)
+    }
+
     const rawSpawnCount = Math.floor(elapsedSinceSpawn / spawnInterval)
     const spawnCount = Math.min(
       MAX_SPAWNS_PER_TICK,
@@ -546,8 +563,12 @@ Page({
       // A newly spawned asteroid has never damaged the ship. Zero is now a
       // real simulation instant rather than an epoch-time sentinel.
       asteroid.lastHitAt = -Infinity
+      anchorAsteroidMotion(asteroid, this.simulationFrameActive ? now - SIMULATION_STEP_MS : this.simulationClock.elapsedMs)
       this.asteroids.push(asteroid)
       addAsteroidToCollisionGrid(asteroid, this.collisionGrid)
+      // Newborns can cross the ship during a long/high-difficulty frame.
+      // Keeping them in this small list is conservative at every speed.
+      this.frameCollisionCandidates.push(asteroid)
     }
   },
 
@@ -606,24 +627,38 @@ Page({
     }
     const clock = this.simulationClock
     const events = this.pointerInput.events
+    const gap = Math.max(0, now - clock.lastFrameAt)
+    const throughMs = gap > MAX_SIMULATION_GAP_MS ? clock.elapsedMs :
+      clock.elapsedMs + Math.floor((clock.pendingMs + gap) / SIMULATION_STEP_MS) * SIMULATION_STEP_MS
+    collectFrameCollisionCandidates(this.asteroids, this.shipRect, clock.elapsedMs, throughMs, this.frameCollisionCandidates)
+    this.simulationFrameActive = true
     // Only the presentation owner admits elapsed time. A burst of touch events
     // must not turn a paused frame gap into repeated simulation catch-up.
-    if (now - clock.lastFrameAt > MAX_SIMULATION_GAP_MS) {
-      advanceSimulationClock(clock, now, this.simulationUpdate)
-      for (let index = 0; index < events.length; index++) this.applyPointerInput(events[index])
-    } else {
-      for (let index = 0; index < events.length; index++) {
-        advanceSimulationClock(clock, Math.min(now, events[index].at), this.simulationUpdate)
-        if (this.finished || this.destroyed) break
-        this.applyPointerInput(events[index])
+    try {
+      if (now - clock.lastFrameAt > MAX_SIMULATION_GAP_MS) {
+        advanceSimulationClock(clock, now, this.simulationUpdate)
+        for (let index = 0; index < events.length; index++) this.applyPointerInput(events[index])
+      } else {
+        for (let index = 0; index < events.length; index++) {
+          advanceSimulationClock(clock, Math.min(now, events[index].at), this.simulationUpdate)
+          if (this.finished || this.destroyed) break
+          this.applyPointerInput(events[index])
+        }
+        if (!this.finished && !this.destroyed) advanceSimulationClock(clock, now, this.simulationUpdate)
       }
-      if (!this.finished && !this.destroyed) advanceSimulationClock(clock, now, this.simulationUpdate)
+    } finally {
+      // Full list/grid work occurs once per callback (plus actual spawn events).
+      // Damage, cooldown and score still use the original 10 ms step instants.
+      this.diagnosticMetadata.fullMaterializations += 1
+      this.diagnosticMetadata.fullAsteroidVisits += this.asteroids.length
+      materializeAsteroidsAt(this.asteroids, clock.elapsedMs, this.viewport, this.collisionGrid, SIMULATION_STEP_MS)
+      this.simulationFrameActive = false
+      events.length = 0
     }
-    events.length = 0
   },
 
   stepSimulation(deltaSeconds, now) {
-    const sampled = this.runtimeDiagnostics.beginStep(this.asteroids.length)
+    const sampled = this.runtimeDiagnostics.beginStep(this.frameCollisionCandidates.length)
     const previousShipRect = this.shipRect
     this.updateShip(deltaSeconds)
 
@@ -644,16 +679,10 @@ Page({
 
     this.spawnAsteroids(now, shipRect, difficulty)
     if (sampled) this.runtimeDiagnostics.markStepPhase(1)
-    advanceAsteroidsInCollisionGrid(
-      this.asteroids,
-      deltaSeconds,
-      this.viewport,
-      this.collisionGrid,
-      true
-    )
+    advanceFrameCollisionCandidates(this.frameCollisionCandidates, now, SIMULATION_STEP_MS)
     if (sampled) this.runtimeDiagnostics.markStepPhase(2)
-    collectCollisionCandidatesFromGrid(
-      this.collisionGrid,
+    collectCollisionCandidatesFromList(
+      this.frameCollisionCandidates,
       shipRect,
       this.settings.wristSide,
       this.collisionCandidates,
@@ -662,6 +691,7 @@ Page({
     if (sampled) this.runtimeDiagnostics.markStepPhase(3)
     this.handleCollisions(now, shipRect, difficulty, previousShipRect)
     if (sampled) this.runtimeDiagnostics.markStepPhase(4)
+    this.previousDisplayedHp = this.displayedHp
     this.displayedHp = moveTowards(
       this.displayedHp,
       this.hp,
@@ -695,7 +725,13 @@ Page({
     }
   },
 
-  drawFrame(shipRect = this.shipRect) {
+  drawFrame(shipRect) {
+    const interpolate = !shipRect && this.simulationClock.elapsedMs > 0
+    const alpha = this.simulationClock.pendingMs / SIMULATION_STEP_MS
+    if (!shipRect) shipRect = interpolate
+      ? interpolateShipRect(this.nextShipRect, this.shipRect, alpha, this.renderShipRect)
+      : this.shipRect
+    const renderAtMs = interpolate ? this.simulationClock.elapsedMs - SIMULATION_STEP_MS + this.simulationClock.pendingMs : this.simulationClock.elapsedMs
     this.canvas.drawRect({
       x1: 0,
       y1: 0,
@@ -711,7 +747,7 @@ Page({
     for (let index = 0; index < this.asteroids.length; index += 1) {
       const asteroid = this.asteroids[index]
       this.canvas.strokeCircle({
-        center_x: asteroid.x,
+        center_x: interpolate ? getAsteroidXAt(asteroid, renderAtMs) : asteroid.x,
         center_y: asteroid.y,
         radius: asteroid.radius,
         color: COLORS.asteroid,
@@ -723,7 +759,8 @@ Page({
       shipRect.points
     )
 
-    const hpRatio = this.displayedHp / HP_MAX
+    const renderedHp = interpolate ? this.previousDisplayedHp + (this.displayedHp - this.previousDisplayedHp) * alpha : this.displayedHp
+    const hpRatio = renderedHp / HP_MAX
     if (this.deviceInfo.screenShape === SCREEN_SHAPE_ROUND) {
       drawRoundHud(this.canvas, this.viewport, hpRatio)
     } else {

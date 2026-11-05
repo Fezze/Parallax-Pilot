@@ -14,6 +14,47 @@ const EPOCH = 1700000000000
 let importId = 0
 const schedules = [[16], [33], [50], [100], [200], [7, 211, 38, 149, 3, 249, 52]]
 
+test('distant asteroid motion is materialized once instead of once per catch-up step', async () => {
+  await withGame({}, ({ page, tick }) => {
+    let x = 460
+    let writes = 0
+    const asteroid = { id: 'distant', y: 100, radius: 7, vx: -100, lastHitAt: -Infinity }
+    Object.defineProperty(asteroid, 'x', {
+      enumerable: true, get() { return x }, set(value) { writes += 1; x = value },
+    })
+    page.asteroids.push(asteroid)
+    addAsteroidToCollisionGrid(asteroid, page.collisionGrid)
+    tick(200)
+    assert.equal(page.simulationClock.elapsedMs, 200)
+    assert.equal(page.frameCollisionCandidates.length, 0)
+    assert.equal(writes, 1, 'twenty canonical steps must not perform twenty distant-position writes')
+    assert.equal(asteroid.x, 440)
+    assert.equal(page.diagnosticMetadata.fullMaterializations, 1)
+    assert.equal(page.diagnosticMetadata.fullAsteroidVisits, 1)
+  })
+})
+
+test('presentation interpolates fractional ship and asteroid positions without changing collision state', async () => {
+  await withGame({}, ({ page, canvas, at, tick }) => {
+    const asteroid = { id: 'render', x: 460, y: 100, radius: 7, vx: -100, lastHitAt: -Infinity }
+    page.asteroids.push(asteroid)
+    addAsteroidToCollisionGrid(asteroid, page.collisionGrid)
+    at(1); canvas.__emit('CLICK_DOWN', { y: 100 })
+    tick(16)
+    const worldShip = structuredClone(page.shipRect)
+    const worldAsteroid = asteroid.x
+    const expectedY = page.nextShipRect.centerY + (page.shipRect.centerY - page.nextShipRect.centerY) * 0.6
+    const lines = canvas.__getDrawCalls().filter(call => call.method === 'drawLine')
+    assert.ok(Math.abs(lines.at(-4).args.y1 - expectedY) < 1e-9)
+    assert.equal(canvas.__getDrawCalls().filter(call => call.method === 'strokeCircle').at(-1).args.center_x, 459.4)
+    assert.equal(worldAsteroid, 459)
+    assert.deepEqual(page.shipRect, worldShip)
+    assert.equal(asteroid.x, worldAsteroid)
+    assert.equal(page.simulationClock.elapsedMs, 10)
+    assert.equal(page.simulationClock.pendingMs, 6)
+  })
+})
+
 test('pointer handlers never run the world; a short held input is preserved until presentation', async () => {
   await withGame({}, ({page,canvas,at,tick})=>{
     const initial=page.shipCenterY
@@ -144,7 +185,10 @@ function world(page) {
     difficulty: calculateDifficulty(page.simulationClock.elapsedMs, page.settings.timeScale),
     hp: page.hp, displayedHp: page.displayedHp, spawned: page.asteroidSeed,
     lastSpawnAt: page.lastSpawnAt, lastDamageAt: page.lastDamageAt,
-    asteroids: page.asteroids, finished: page.finished })
+    // Grid slots are acceleration-structure bookkeeping, not world state.
+    // Their ordering may depend on materialization batching; geometry, motion
+    // anchors, damage/cooldowns and actual membership are checked separately.
+    asteroids: page.asteroids.map(({ gridSliceIndex, gridBucketIndex, gridSlotIndex, ...physical }) => physical), finished: page.finished })
 }
 
 async function replay(schedule, options = {}) {

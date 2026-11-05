@@ -1,9 +1,12 @@
-# Physical runtime diagnostics: temporary 2.3.29 build
+# Physical runtime diagnostics and batching: 2.3.31
 
-This build observes the current 2.3.28 simulation architecture. It does not change
-the requested 16 ms timer, 10 ms simulation quantum, collision geometry, input
-commands, scoring, visual detail or the 250 ms interruption policy. Diagnostics
-must be removed or disabled before the ordinary release following this study.
+Version 2.3.29 observed the former full-world simulation architecture. Version
+2.3.31 batches distant asteroid motion and adds separate interpolated display
+state, while preserving the requested 16 ms timer, canonical 10 ms simulation,
+collision geometry, input commands, damage/scoring timeline and visual detail.
+The 250 ms interruption policy is still observed, rather than silently removed.
+Diagnostics must be removed or disabled before the ordinary release following
+this study. See SIMULATION_TIME.md for batching and presentation assumptions.
 
 ## Actual target and evidence limits
 
@@ -45,8 +48,13 @@ of observed wall time; after that the observer stops collecting. Reporting can
 delay the results screen or the following callback, which is outside the recorded
 window. There is no extra polling/report timer.
 Each console envelope is at most 160 ASCII characters because native SBEngine
-truncated longer messages during verification. Histogram bounds are stored once
-in histogramBins; incomplete reports must never be treated as valid samples.
+truncated longer messages during verification. The physical bridge then retained
+only the first 30 messages from long synchronous exports. Compact PP_METRIC
+reports therefore use at most 25 independently numbered records. They contain
+the important aggregates, phase summaries, work counters and up to four paired
+trace rows; they do not contain the full histograms or all 64 stored rows.
+The legacy full export remains available to tests. Incomplete reports must
+never be treated as valid complete samples.
 
 ## Recorded observations
 
@@ -61,7 +69,8 @@ in histogramBins; incomplete reports must never be treated as valid samples.
 - Actual world-step count, admitted/elapsed/pending simulation time and paused
   milliseconds. A normal zero-step callback differs from a discarded >250 ms
   interval.
-- Asteroid visits, candidate counts, pointer events and idle/held/moving groups.
+- Per-step candidate-set size, full materialization/object-visit counts, sensor
+  reads, contact candidates, pointer events and idle/held/moving groups.
   Raw MOVE callbacks are counted before the game's input filters. A short
   down/up sequence is classified as input even if released by the next frame.
 - Sampled control/geometry/difficulty, spawning, movement/grid, candidate
@@ -87,7 +96,7 @@ reporting until that callback returns through its measurement boundary.
    well as timings instead of assuming identical random scenes.
 3. Let the run end naturally or wait for the 30-second diagnostic window. Preserve
    the original Bridge transcript, including errors and PP_DIAG_START metadata.
-4. Decode PP_DIAG chunks with scripts/decode-runtime-diagnostics.mjs. Incomplete
+4. Decode PP_METRIC records with scripts/decode-runtime-diagnostics.mjs. Incomplete
    or conflicting chunks are not complete results. Preserve parsed JSON and the
    ordered trace CSV alongside the original logs.
 5. Film visible motion and input externally if presentation and callback results

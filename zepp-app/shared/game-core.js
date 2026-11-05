@@ -100,6 +100,21 @@ export function createShipRect(viewport, shipCenterY, wristSide, rect = {}, geom
   return rect
 }
 
+// Presentation owns this rectangle. Never round or write interpolated values
+// back into the canonical collision rectangles.
+export function interpolateShipRect(previous, current, alpha, target = {}) {
+  const amount = clamp(alpha, 0, 1)
+  target.x = previous.x + (current.x - previous.x) * amount
+  target.y = previous.y + (current.y - previous.y) * amount
+  target.w = previous.w + (current.w - previous.w) * amount
+  target.h = previous.h + (current.h - previous.h) * amount
+  target.centerX = target.x + target.w / 2
+  target.centerY = target.y + target.h / 2
+  target.wristSide = current.wristSide
+  target.points = updateShipPoints(target.points || Array.from({ length: 5 }, () => ({ x: 0, y: 0 })), target)
+  return target
+}
+
 export function getSpawnIntervalMs(difficulty, spawnMultiplier) {
   return 1180 / (0.92 + difficulty * spawnMultiplier * 0.11)
 }
@@ -423,6 +438,115 @@ export function advanceAsteroidsInCollisionGrid(
 
   asteroids.length = writeIndex
   return asteroids
+}
+
+// Velocity never changes after birth. Keeping the original anchor avoids
+// accumulating frame-dependent rounding error when materialization is sparse.
+export function anchorAsteroidMotion(asteroid, atMs) {
+  if (asteroid.motionBaseAt === undefined) {
+    asteroid.motionBaseX = asteroid.x
+    asteroid.motionBaseAt = atMs
+  }
+  return asteroid
+}
+
+export function getAsteroidXAt(asteroid, atMs) {
+  return asteroid.motionBaseAt === undefined
+    ? asteroid.x
+    : asteroid.motionBaseX + asteroid.vx * ((atMs - asteroid.motionBaseAt) / 1000)
+}
+
+export function getRenderAsteroidXAt(asteroid, atMs) {
+  return getAsteroidXAt(asteroid, atMs)
+}
+
+// Bring the shared array/grid up to a canonical instant only when a caller
+// needs the complete scene (spawning or presentation). previousX always means
+// the immediately preceding quantum, not the last materialization instant.
+export function materializeAsteroidsAt(asteroids, atMs, viewport, grid, stepMs = 10) {
+  let writeIndex = 0
+  if (grid) grid.maxDisplacement = 0
+
+  for (let index = 0; index < asteroids.length; index += 1) {
+    const asteroid = asteroids[index]
+    if (asteroid.motionRemoved) continue
+    anchorAsteroidMotion(asteroid, atMs)
+    asteroid.previousX = getAsteroidXAt(asteroid, atMs - stepMs)
+    asteroid.x = getAsteroidXAt(asteroid, atMs)
+
+    if (
+      Math.max(asteroid.x, asteroid.previousX) + asteroid.radius <= -24 ||
+      Math.min(asteroid.x, asteroid.previousX) - asteroid.radius >= viewport.width + 24
+    ) {
+      if (grid) {
+        // Objects pruned in an earlier skipped quantum were not visited by
+        // the old loop at this instant. Only a final-quantum exit contributes.
+        const beforePreviousX = getAsteroidXAt(asteroid, atMs - stepMs * 2)
+        if (Math.max(asteroid.previousX, beforePreviousX) + asteroid.radius > -24 &&
+            Math.min(asteroid.previousX, beforePreviousX) - asteroid.radius < viewport.width + 24) {
+          grid.maxDisplacement = Math.max(grid.maxDisplacement, Math.abs(asteroid.x - asteroid.previousX))
+        }
+        removeAsteroidFromCollisionGrid(asteroid, grid)
+      }
+      asteroid.motionRemoved = true
+      continue
+    }
+
+    if (grid) {
+      grid.maxDisplacement = Math.max(grid.maxDisplacement, Math.abs(asteroid.x - asteroid.previousX))
+      const nextSlice = getCollisionSliceIndex(asteroid.x, grid)
+      const nextBucket = getCollisionBucketIndex(asteroid.y, grid)
+      if (nextSlice !== asteroid.gridSliceIndex || nextBucket !== asteroid.gridBucketIndex) {
+        if (asteroid.gridSliceIndex >= 0) removeAsteroidFromCollisionGrid(asteroid, grid)
+        addAsteroidToCollisionGrid(asteroid, grid)
+      }
+    }
+    asteroids[writeIndex] = asteroid
+    writeIndex += 1
+  }
+
+  asteroids.length = writeIndex
+  return asteroids
+}
+
+// Ship x/width and asteroid velocity are fixed during a run. A whole-frame
+// horizontal sweep is therefore conservative even when input reverses ship y
+// or the ship clamps at either vertical boundary within the frame.
+export function collectFrameCollisionCandidates(asteroids, shipRect, fromMs, throughMs, out = []) {
+  out.length = 0
+  for (let index = 0; index < asteroids.length; index += 1) {
+    const asteroid = asteroids[index]
+    if (asteroid.motionRemoved) continue
+    anchorAsteroidMotion(asteroid, fromMs)
+    const fromX = getAsteroidXAt(asteroid, fromMs)
+    const throughX = getAsteroidXAt(asteroid, throughMs)
+    if (Math.max(fromX, throughX) + asteroid.radius >= shipRect.x &&
+        Math.min(fromX, throughX) - asteroid.radius <= shipRect.x + shipRect.w) {
+      out.push(asteroid)
+    }
+  }
+  return out
+}
+
+export function advanceFrameCollisionCandidates(candidates, nowMs, stepMs = 10) {
+  for (let index = 0; index < candidates.length; index += 1) {
+    const asteroid = candidates[index]
+    if (asteroid.motionRemoved) continue
+    asteroid.previousX = getAsteroidXAt(asteroid, nowMs - stepMs)
+    asteroid.x = getAsteroidXAt(asteroid, nowMs)
+  }
+  return candidates
+}
+
+export function collectCollisionCandidatesFromList(candidates, shipRect, wristSide, out = [], previousShipRect = shipRect) {
+  out.length = 0
+  for (let index = 0; index < candidates.length; index += 1) {
+    const asteroid = candidates[index]
+    if (!asteroid.motionRemoved && isAsteroidInCollisionBand(asteroid, shipRect, wristSide, previousShipRect)) {
+      out.push(asteroid)
+    }
+  }
+  return out
 }
 
 export function collectCollisionCandidatesFromGrid(

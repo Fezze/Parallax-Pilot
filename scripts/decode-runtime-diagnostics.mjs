@@ -3,6 +3,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const MARKER = 'PP_DIAG '
+const METRIC_MARKER = 'PP_METRIC '
 const MAX_SCAN_DEPTH = 12
 const MAX_SCAN_NODES = 20000
 const MAX_CHUNK_PARTS = 100000
@@ -40,17 +41,19 @@ function decodeJsonAt(text, start) {
   return null
 }
 
-function markerPayloads(text) {
-  const found = []
+function scanMarkerPayloads(text, receiveLegacy, receiveCompact) {
   let from = 0
   while (from < text.length) {
-    const at = text.indexOf(MARKER, from)
-    if (at < 0) break
-    const parsed = decodeJsonAt(text, at + MARKER.length)
-    if (parsed) found.push(parsed.value)
-    from = at + MARKER.length
+    const legacyAt = text.indexOf(MARKER, from)
+    const compactAt = text.indexOf(METRIC_MARKER, from)
+    if (legacyAt < 0 && compactAt < 0) break
+    const isCompact = compactAt >= 0 && (legacyAt < 0 || compactAt < legacyAt)
+    const at = isCompact ? compactAt : legacyAt
+    const marker = isCompact ? METRIC_MARKER : MARKER
+    const parsed = decodeJsonAt(text, at + marker.length)
+    if (parsed) (isCompact ? receiveCompact : receiveLegacy)(parsed.value)
+    from = at + marker.length
   }
-  return found
 }
 
 /** Decode complete reports from console, ANSI-decorated, or nested JSON-RPC logs. */
@@ -64,7 +67,27 @@ export function decodeDiagnostics(text) {
     errors.push({ runId, message })
   }
 
-  function receive(chunk) {
+  function stateFor(runId, format, total) {
+    const key = String(runId)
+    let state = partsByRun.get(key)
+    if (!state) {
+      state = { format, total, chunks: new Map(), conflict: false }
+      partsByRun.set(key, state)
+    }
+    if (state.format !== format) {
+      if (!state.conflict) recordError('Conflicting diagnostic formats for run', key)
+      state.conflict = true
+      return null
+    }
+    if (state.total !== total) {
+      if (!state.conflict) recordError('Conflicting total for run', key)
+      state.conflict = true
+      return null
+    }
+    return state
+  }
+
+  function receiveLegacy(chunk) {
     if (!chunk || typeof chunk !== 'object' || Array.isArray(chunk)) return
     const { runId, part, total, data } = chunk
     if ((typeof runId !== 'string' && typeof runId !== 'number') || String(runId).length === 0 ||
@@ -74,16 +97,8 @@ export function decodeDiagnostics(text) {
       return
     }
     const key = String(runId)
-    let state = partsByRun.get(key)
-    if (!state) {
-      state = { total, chunks: new Map(), conflict: false }
-      partsByRun.set(key, state)
-    }
-    if (state.total !== total) {
-      if (!state.conflict) recordError('Conflicting total for run', key)
-      state.conflict = true
-      return
-    }
+    const state = stateFor(runId, 'legacy', total)
+    if (!state) return
     const prior = state.chunks.get(part)
     if (prior !== undefined && prior !== data) {
       if (!state.conflict) recordError(`Conflicting data for part ${part}`, key)
@@ -93,6 +108,32 @@ export function decodeDiagnostics(text) {
     if (prior === undefined) state.chunks.set(part, data)
   }
 
+  function receiveCompact(chunk) {
+    if (!chunk || typeof chunk !== 'object' || Array.isArray(chunk)) return
+    const { r: runId, p: part, t: total, k: kind, d: data } = chunk
+    if ((typeof runId !== 'string' && typeof runId !== 'number') || String(runId).length === 0 ||
+        !Number.isInteger(part) || !Number.isInteger(total) || total < 1 || total > MAX_CHUNK_PARTS ||
+        part < 1 || part > total || typeof kind !== 'string' || !Array.isArray(data)) {
+      recordError('Invalid compact diagnostic record', runId ?? null)
+      if ((typeof runId === 'string' || typeof runId === 'number') && String(runId).length > 0 &&
+          Number.isInteger(total) && total > 0 && total <= MAX_CHUNK_PARTS) {
+        const state = stateFor(runId, 'compact', total)
+        if (state) state.conflict = true
+      }
+      return
+    }
+    const state = stateFor(runId, 'compact', total)
+    if (!state) return
+    const encoded = JSON.stringify({ kind, data })
+    const prior = state.chunks.get(part)
+    if (prior !== undefined && prior.encoded !== encoded) {
+      if (!state.conflict) recordError(`Conflicting compact record ${part}`, String(runId))
+      state.conflict = true
+      return
+    }
+    if (prior === undefined) state.chunks.set(part, { kind, data, encoded })
+  }
+
   function visit(value, depth = 0) {
     nodes += 1
     if (nodes > MAX_SCAN_NODES) {
@@ -100,7 +141,7 @@ export function decodeDiagnostics(text) {
       return
     }
     if (typeof value === 'string') {
-      for (const payload of markerPayloads(value)) receive(payload)
+      scanMarkerPayloads(value, receiveLegacy, receiveCompact)
       if (depth < MAX_SCAN_DEPTH) {
         // Bridge transcripts often prefix or suffix a JSON-RPC object with log text.
         // Parse complete object spans so escaped message strings can be inspected
@@ -136,6 +177,14 @@ export function decodeDiagnostics(text) {
       incomplete.push({ runId, received: state.chunks.size, total: state.total, missing })
       continue
     }
+    if (state.format === 'compact') {
+      try {
+        reports.push(assembleCompact(runId, state.chunks))
+      } catch (error) {
+        recordError(`Invalid compact report: ${error.message}`, runId)
+      }
+      continue
+    }
     const data = Array.from({ length: state.total }, (_, i) => state.chunks.get(i + 1)).join('')
     try {
       const report = JSON.parse(data)
@@ -146,6 +195,101 @@ export function decodeDiagnostics(text) {
     }
   }
   return { reports, incomplete, errors }
+}
+
+const METRIC_NAMES = ['gapMs', 'previousCallbackMs', 'residualMs', 'callbackMs', 'updateMs', 'drawSubmissionMs', 'bookkeepingMs']
+const PHASE_NAMES = ['controlGeometryDifficulty', 'spawn', 'moveGrid', 'candidates', 'collisionDamage', 'hud']
+const GROUP_NAMES = ['idle', 'heldOrTransition', 'moving']
+const TRACE_COLUMNS = ['frame', 'atMs', 'gapMs', 'previousCallbackMs', 'callbackMs', 'updateMs', 'drawSubmissionMs', 'steps', 'pausedMs']
+
+function isFiniteNumber(value) { return typeof value === 'number' && Number.isFinite(value) }
+
+function requireRecord(records, kind) {
+  if (!records.has(kind)) throw new Error(`Missing required ${kind} record`)
+  return records.get(kind)
+}
+
+function validateTuple(tuple, length, label, nullable = []) {
+  if (!Array.isArray(tuple) || tuple.length !== length) throw new Error(`Invalid ${label} record length`)
+  for (let i = 0; i < tuple.length; i += 1) {
+    if (nullable.includes(i) && tuple[i] === null) continue
+    if (label === 'meta' && i === 11 && typeof tuple[i] === 'boolean') continue
+    if (typeof tuple[i] !== 'string' && !isFiniteNumber(tuple[i])) throw new Error(`Invalid ${label} value at ${i}`)
+  }
+}
+
+function assembleCompact(runId, chunks) {
+  const records = new Map()
+  const pairs = []
+  const putIndexed = (kind, data, limit, length) => {
+    validateTuple(data, length, kind, kind === 'metric' ? [5] : [])
+    const index = data[0]
+    if (!Number.isInteger(index) || index < 0 || index >= limit) throw new Error(`Out-of-range ${kind} index`)
+    const key = `${kind}:${index}`
+    if (records.has(key)) throw new Error(`Duplicate ${kind} index ${index}`)
+    records.set(key, data)
+  }
+  for (let part = 1; part <= chunks.size; part += 1) {
+    const record = chunks.get(part)
+    if (!record) throw new Error(`Missing compact record ${part}`)
+    const { kind, data } = record
+    if (kind === 'meta') {
+      validateTuple(data, 12, kind, [2])
+      if (records.has(kind)) throw new Error('Duplicate meta record')
+      records.set(kind, data)
+    } else if (kind === 'clock') {
+      validateTuple(data, 7, kind, [0])
+      if (records.has(kind)) throw new Error('Duplicate clock record')
+      records.set(kind, data)
+    } else if (kind === 'metric') putIndexed(kind, data, METRIC_NAMES.length, 6)
+    else if (kind === 'phase') putIndexed(kind, data, PHASE_NAMES.length, 5)
+    else if (kind === 'group') putIndexed(kind, data, GROUP_NAMES.length, 8)
+    else if (kind === 'work' || kind === 'calibration' || kind === 'terminal') {
+      const expected = { work: data.length === 11 ? 11 : 8, calibration: 7, terminal: 6 }[kind]
+      validateTuple(data, expected, kind, kind === 'calibration' ? [1, 3] : [])
+      if (records.has(kind)) throw new Error(`Duplicate ${kind} record`)
+      records.set(kind, data)
+    } else if (kind === 'pair') {
+      validateTuple(data, 9, kind, [1, 2, 3, 4, 5, 6])
+      if (pairs.length >= 4) throw new Error('Too many pair records')
+      pairs.push(data)
+    } else throw new Error(`Unknown compact record kind ${kind}`)
+  }
+  const meta = requireRecord(records, 'meta')
+  if (meta[0] !== 2) throw new Error('Unsupported compact schema version')
+  const clock = requireRecord(records, 'clock')
+  const work = requireRecord(records, 'work')
+  const calibration = requireRecord(records, 'calibration')
+  const terminal = requireRecord(records, 'terminal')
+  const metrics = METRIC_NAMES.map((_, index) => requireRecord(records, `metric:${index}`))
+  const phases = PHASE_NAMES.map((_, index) => requireRecord(records, `phase:${index}`))
+  const groups = GROUP_NAMES.map((_, index) => requireRecord(records, `group:${index}`))
+  const histograms = Object.fromEntries(metrics.map((row, index) => [METRIC_NAMES[index],
+    { count: row[1], sum: row[2], max: row[3], invalid: row[4], p95UpperBin: row[5] }]))
+  const phaseSummaries = phases.map(row => ({ count: row[1], sum: row[2], max: row[3], invalid: row[4] }))
+  const mean = (sum, count) => count > 0 ? sum / count : null
+  const groupSummaries = groups.map(row => ({ name: GROUP_NAMES[row[0]], callbackCount: row[1], gapCount: row[2],
+    gapSum: row[3], gapMean: mean(row[3], row[2]), gapMax: row[4], updateSum: row[5],
+    updateMean: mean(row[5], row[1]), drawSubmissionSum: row[6], drawSubmissionMean: mean(row[6], row[1]),
+    callbackSum: row[7], callbackMean: mean(row[7], row[1]) }))
+  return {
+    schema: 2, runId, meta: { version: meta[1], deviceSource: meta[2], runIndex: meta[3], phaseSampleEvery: meta[4],
+      controlMode: meta[5], wristSide: meta[6], timeScale: meta[7], spawnMultiplier: meta[8],
+      width: meta[9], height: meta[10], modePersisted: meta[11] },
+    clock: { wallMs: clock[0], frames: clock[1], steps: clock[2], elapsedMs: clock[3], pausedMs: clock[4], pendingMs: clock[5], reason: clock[6] },
+    steady: histograms,
+    work: { stepCount: work[0], stepsSum: work[1], stepsMax: work[2], objectVisitsSum: work[3], candidatesSum: work[4],
+      asteroidsMax: work[5], zeroStepFrames: work[6], pausedFrameCount: work[7],
+      fullMaterializations: work[8], fullAsteroidVisits: work[9], sensorReads: work[10] },
+    sampling: { names: PHASE_NAMES, steady: phaseSummaries },
+    groups: groupSummaries,
+    calibration: { reads: calibration[0], spanMs: calibration[1], zeroDeltas: calibration[2],
+      minPositiveMs: calibration[3], rollbacks: calibration[4], invalidReads: calibration[5], invalidFrames: calibration[6] },
+    terminal: { callbackCount: terminal[0], callbackSum: terminal[1], callbackMax: terminal[2],
+      updateSum: terminal[3], drawSubmissionSum: terminal[4], stepsSum: terminal[5] },
+    trace: { columns: TRACE_COLUMNS, rows: pairs.map(row => row.slice()) },
+    caveats: ['Compact export contains selected aggregates and at most four paired trace rows; it does not include full histograms or the full trace.']
+  }
 }
 
 function safeFilePart(value) {
@@ -184,8 +328,9 @@ function reportSummary(report) {
     }
     if (Object.keys(scopeTiming).length) timings[scope] = scopeTiming
   }
-  return { runId: report.runId ?? null, frames: report.frames ?? null, steps: report.steps ?? null,
-    observedClock: report.clock ? { elapsedMs: report.clock.observedElapsedMs, pausedMs: report.clock.observedPausedMs } : null,
+  return { runId: report.runId ?? null, frames: report.frames ?? report.clock?.frames ?? null, steps: report.steps ?? report.clock?.steps ?? null,
+    observedClock: report.clock ? { elapsedMs: report.clock.observedElapsedMs ?? report.clock.elapsedMs,
+      pausedMs: report.clock.observedPausedMs ?? report.clock.pausedMs } : null,
     timings }
 }
 

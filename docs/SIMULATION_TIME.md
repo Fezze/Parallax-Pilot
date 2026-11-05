@@ -6,6 +6,29 @@ The presentation timer still requests a frame every 16 ms and draws once per
 callback, regardless of how many simulation steps were needed. No new native
 API or dependency is required (manifest v3, target API 4.0, minimum API 3.6).
 
+## Batched world work and presentation
+
+The 10 ms timeline does not require a full asteroid-array/grid update on every
+quantum. Asteroids retain an immutable birth position/time and constant velocity.
+Each callback selects a conservative horizontal sweep set once. Only that set
+is advanced and tested against the ship at the original canonical instants;
+vertical input reversals and clamping cannot escape this horizontal selection.
+The complete scene is materialized once after the callback and immediately
+before an actual spawn. Spawning sees the preceding quantum, then the newborn
+receives its first 10 ms movement, preserving the original operation order.
+Grid slot ordering is bookkeeping; independent membership/contact tests cover it.
+
+The renderer interpolates the previous/current canonical ship and health state,
+and evaluates asteroid positions at the same presentation instant. This adds
+at most one simulation quantum of presentation delay and removes alternating
+10/20 ms displayed motion under regular 16 ms callbacks. Floating render points
+never feed back into collision geometry, control positions, damage or scoring.
+Static preview callers can still draw an explicitly supplied ship rectangle.
+
+Analytic positions avoid callback-dependent accumulation error. Comparison with
+the former repeated additions uses subpixel floating-point tolerance; canonical
+contact/cooldown/fatal-step events remain tested independently.
+
 ## Delays and interruptions
 
 - Positive callback gaps up to and including 250 ms are fully accumulated. Each

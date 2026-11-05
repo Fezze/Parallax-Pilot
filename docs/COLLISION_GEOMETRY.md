@@ -24,6 +24,16 @@ pruning boundary are removed normally. Grid entries and two ship point buffers
 are reused. The existing per-asteroid 260 ms simulation-age cooldown and
 size-based damage remain unchanged. Multiple distinct asteroids can each hit.
 
+The game selects possible horizontal crossings once over the whole callback
+interval, with no vertical rejection at that stage. Potential contacts still
+replay every original 10 ms ship/circle sweep, including direction reversals,
+clamping, cooldown and the first fatal step. Distant constant-velocity objects
+are evaluated analytically instead of repeatedly traversing the full grid.
+Spawning and end-of-callback materialization refresh the complete indexed scene;
+pruning uses the final canonical quantum rather than the whole skipped interval.
+Display interpolation uses a separate reusable rectangle and cannot move a
+collision vertex or change the contact timeline.
+
 Round flight limits keep the entire bounding rectangle inside the HUD inner
 radius, with another 1.5 px for the ship stroke and a 3 px visible gap. Bounds
 are rounded inward and applied to tilt, touch and swipe control positions as

@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { RuntimeDiagnostics } from '../zepp-app/shared/runtime-diagnostics.js'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -19,6 +20,29 @@ function linesFor(value, runId = 'r-1', size = 17) {
   const pieces = []
   for (let i = 0; i < data.length; i += size) pieces.push(data.slice(i, i + size))
   return pieces.map((piece, i) => `PP_DIAG ${JSON.stringify({ runId, part: i + 1, total: pieces.length, data: piece })}`)
+}
+
+function compactRecords() {
+  return [
+    ['meta', [2, '2.3.28', 'native', 1, 13, 'motion', 'left', 1, 1, 390, 450, 1]],
+    ['clock', [1250, 12, 36, 400, 850, 0, 'watch']],
+    ...[[0, 12, 120, 30, 0, 25], [1, 11, 110, 28, 0, 25], [2, 11, 10, 3, 0, 2],
+      [3, 12, 240, 40, 0, 50], [4, 12, 180, 35, 0, 50], [5, 12, 30, 8, 0, 12],
+      [6, 12, 2, 1, 0, 2]].map(row => ['metric', row]),
+    ['work', [12, 36, 5, 90, 20, 9, 1, 2]],
+    ...[[0, 3, 8, 5, 0], [1, 3, 9, 6, 0], [2, 3, 10, 6, 0],
+      [3, 3, 12, 7, 0], [4, 3, 15, 8, 0], [5, 3, 5, 3, 0]].map(row => ['phase', row]),
+    ...[[0, 4, 4, 30, 12, 80, 15, 120], [1, 4, 4, 31, 13, 82, 16, 124],
+      [2, 4, 4, 29, 11, 78, 14, 116]].map(row => ['group', row]),
+    ['calibration', [64, 63, 63, null, 0, 0, 0]],
+    ['terminal', [1, 12, 12, 5, 2, 3]],
+    ['pair', [10, 100, 20, 18, 25, 15, 2, 3, 0]],
+    ['pair', [11, 125, 25, 25, 30, 16, 3, 4, 0]]
+  ]
+}
+
+function compactLines(records, runId = 'compact-run') {
+  return records.map(([kind, data], index) => `PP_METRIC ${JSON.stringify({ r: runId, p: index + 1, t: records.length, k: kind, d: data })}`)
 }
 
 test('decodes plain and ANSI-decorated chunks with out-of-order delivery and duplicates', () => {
@@ -83,4 +107,102 @@ test('writes safe filenames, numeric trace CSV, and observed timing summaries', 
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
+})
+
+test('decodes compact records mixed with legacy reports inside escaped bridge output', () => {
+  const compact = compactLines(compactRecords())
+  const legacy = linesFor(report, 'legacy-run', 41)
+  const ordered = [compact.at(-1), compact[0], compact[0], ...compact.slice(1, -1), ...legacy]
+  const wrapper = JSON.stringify({ method: 'log', params: { message: ordered.join('\n') } })
+  const result = decodeDiagnostics(`bridge ${wrapper}`)
+  assert.deepEqual(result.errors, [])
+  assert.deepEqual(result.incomplete, [])
+  assert.equal(result.reports.length, 2)
+  const compactReport = result.reports[0]
+  assert.equal(compactReport.schema, 2)
+  assert.deepEqual(compactReport.meta, { version: '2.3.28', deviceSource: 'native', runIndex: 1,
+    phaseSampleEvery: 13, controlMode: 'motion', wristSide: 'left', timeScale: 1,
+    spawnMultiplier: 1, width: 390, height: 450, modePersisted: 1 })
+  assert.deepEqual(compactReport.steady.gapMs, { count: 12, sum: 120, max: 30, invalid: 0, p95UpperBin: 25 })
+  assert.equal(compactReport.work.pausedFrameCount, 2)
+  assert.equal(compactReport.sampling.steady[0].sum, 8)
+  assert.equal(compactReport.groups[2].callbackSum, 116)
+  assert.equal(compactReport.groups[2].callbackMean, 29)
+  assert.equal(compactReport.groups[2].gapMean, 7.25)
+  assert.deepEqual(compactReport.trace.columns,
+    ['frame', 'atMs', 'gapMs', 'previousCallbackMs', 'callbackMs', 'updateMs', 'drawSubmissionMs', 'steps', 'pausedMs'])
+  assert.deepEqual(compactReport.trace.rows, [[10, 100, 20, 18, 25, 15, 2, 3, 0], [11, 125, 25, 25, 30, 16, 3, 4, 0]])
+  assert.equal('bins' in compactReport.steady.gapMs, false)
+  assert.match(compactReport.caveats[0], /does not include full histograms/)
+  assert.equal(result.reports[1].schema, 1)
+})
+
+test('keeps compact streams incomplete when chunks or required record kinds are missing', () => {
+  const lines = compactLines(compactRecords(), 'compact-missing')
+  const missingPart = decodeDiagnostics(lines.filter((_, index) => index !== 3).join('\n'))
+  assert.equal(missingPart.reports.length, 0)
+  assert.deepEqual(missingPart.incomplete[0], { runId: 'compact-missing', received: lines.length - 1,
+    total: lines.length, missing: [4] })
+
+  const noPhase = compactRecords().filter(([kind]) => kind !== 'phase')
+  const missingRequired = decodeDiagnostics(compactLines(noPhase, 'no-required-phase').join('\n'))
+  assert.equal(missingRequired.reports.length, 0)
+  assert.match(missingRequired.errors[0].message, /Missing required phase:0/)
+})
+
+test('rejects compact conflicting chunks, totals, and invalid kind indexes without producing reports', () => {
+  const lines = compactLines(compactRecords(), 'compact-conflict')
+  const first = JSON.parse(lines[0].slice('PP_METRIC '.length))
+  const altered = `PP_METRIC ${JSON.stringify({ ...first, d: [...first.d.slice(0, -1), 0] })}`
+  const conflict = decodeDiagnostics(`${lines.join('\n')}\n${altered}`)
+  assert.equal(conflict.reports.length, 0)
+  assert.match(conflict.errors[0].message, /Conflicting compact record/)
+
+  const changedTotal = `PP_METRIC ${JSON.stringify({ ...first, t: first.t + 1 })}`
+  const totalConflict = decodeDiagnostics(`${lines.join('\n')}\n${changedTotal}`)
+  assert.equal(totalConflict.reports.length, 0)
+  assert.match(totalConflict.errors[0].message, /Conflicting total/)
+
+  const invalidRecords = compactRecords()
+  invalidRecords[2] = ['metric', [7, 1, 0, 0, 0, null]]
+  const invalidIndex = decodeDiagnostics(compactLines(invalidRecords, 'bad-index').join('\n'))
+  assert.equal(invalidIndex.reports.length, 0)
+  assert.match(invalidIndex.errors[0].message, /Out-of-range metric index/)
+})
+
+test('compact trace exports only the paired numeric measurements', () => {
+  const [line] = compactLines(compactRecords())
+  const allLines = compactLines(compactRecords())
+  const result = decodeDiagnostics(allLines.join('\n'))
+  assert.equal(line.startsWith('PP_METRIC '), true)
+  assert.equal(traceCsv(result.reports[0]),
+    'frame,atMs,gapMs,previousCallbackMs,callbackMs,updateMs,drawSubmissionMs,steps,pausedMs\n10,100,20,18,25,15,2,3,0\n11,125,25,25,30,16,3,4,0\n')
+})
+
+test('the real compact exporter round-trips boolean metadata, first-frame null timings and batching counts', () => {
+  const lines = []
+  let now = 1000
+  const diagnostic = new RuntimeDiagnostics({
+    compactExport: true, version: '2.3.31', deviceSource: 9568513, runIndex: 1,
+    phaseSampleEvery: 0, controlMode: 'touch', wristSide: 'left',
+    timeScale: 1, spawnMultiplier: 1.1, width: 480, height: 480,
+    modePersisted: true, fullMaterializations: 2, fullAsteroidVisits: 8, sensorReads: 0,
+  }, { now: () => now, emit: line => lines.push(line) })
+  const clock = { elapsedMs: 0, pausedMs: 0, pendingMs: 0 }
+  diagnostic.beginFrame(now, clock, false, 4)
+  now += 2; diagnostic.markUpdate(now)
+  now += 3; diagnostic.endFrame(now, clock)
+  diagnostic.requestFinish('test')
+  assert.ok(lines.length <= 25)
+  assert.ok(lines.every(line => line.length <= 160))
+  const result = decodeDiagnostics(lines.join('\n'))
+  assert.deepEqual(result.errors, [])
+  assert.deepEqual(result.incomplete, [])
+  assert.equal(result.reports.length, 1)
+  const decoded = result.reports[0]
+  assert.equal(decoded.meta.modePersisted, true)
+  assert.equal(decoded.meta.deviceSource, 9568513)
+  assert.equal(decoded.work.fullMaterializations, 2)
+  assert.equal(decoded.work.fullAsteroidVisits, 8)
+  assert.equal(decoded.trace.rows[0][2], null)
 })

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { RuntimeDiagnostics } from '../zepp-app/shared/runtime-diagnostics.js'
 import { advanceSimulationClock, createSimulationClock } from '../zepp-app/shared/simulation-clock.js'
+import { CONTROL_MODES, WRIST_SIDES, TIME_SCALE_OPTIONS, SPAWN_MULTIPLIER_OPTIONS } from '../zepp-app/shared/constants.js'
 
 function harness(meta = {}) {
   let wall = 0
@@ -410,4 +411,100 @@ test('native-sized ASCII chunks round-trip quotes, backslashes and Unicode with 
   assert.equal(result.steady.callbackMs.counts[0], 2)
   // The serializer must not mutate the in-memory histogram layout.
   assert.deepEqual(h.diag.steady.callbackMs.bins, result.histogramBins)
+})
+
+function compactReport(h) {
+  assert.ok(h.lines.length > 0 && h.lines.length <= 25)
+  return h.lines.map((line, index) => {
+    assert.ok(line.startsWith('PP_METRIC '))
+    assert.ok(line.length <= 160, `oversized compact record (${line.length}): ${line}`)
+    assert.match(line, /^[\x20-\x7e]+$/)
+    const record = JSON.parse(line.slice(10))
+    assert.equal(record.r, h.diag.runId)
+    assert.equal(record.p, index + 1)
+    assert.equal(record.t, h.lines.length)
+    return record
+  })
+}
+
+test('compact export preserves summary measurements and bounded representative callback pairs', () => {
+  const metadata = { version: '2.3.30', deviceSource: 9568513, runIndex: 2,
+    phaseSampleEvery: 1, controlMode: 'touch', wristSide: 'right', timeScale: 1.5,
+    spawnMultiplier: 1.25, width: 480, height: 480, modePersisted: true }
+  const full = harness(metadata)
+  const compact = harness({ ...metadata, compactExport: true })
+  for (const h of [full, compact]) {
+    h.diag.runId = '1762358400000-12'
+    h.set(10)
+    h.diag.beginFrame(10, h.clock, true, 7)
+    sampleStep(h)
+    h.diag.markUpdate(h.now())
+    h.advance(4)
+    h.diag.endFrame(h.now(), h.clock)
+    for (const arrival of [3010, 4010, 4020, 4030]) emptyFrame(h, arrival)
+    emptyFrame(h, 4040, false, true)
+  }
+  const expected = report(full)
+  const records = compactReport(compact)
+  assert.equal(records.length, 25)
+  const one = kind => records.find(record => record.k === kind).d
+  assert.deepEqual(one('meta'), [2, '2.3.30', 9568513, 2, 1, 'touch', 'right', 1.5, 1.25, 480, 480, true])
+  assert.deepEqual(one('clock'), [4040, 6, 1, 0, 0, 0, 'terminal'])
+  const names = ['gapMs', 'previousCallbackMs', 'residualMs', 'callbackMs', 'updateMs', 'drawSubmissionMs', 'bookkeepingMs']
+  const metrics = records.filter(record => record.k === 'metric')
+  assert.equal(metrics.length, names.length)
+  metrics.forEach((record, index) => {
+    const hist = expected.steady[names[index]]
+    assert.deepEqual(record.d.slice(0, 5), [index, hist.count, hist.sum, hist.max, hist.invalid])
+  })
+  assert.equal(metrics[0].d[5], null, 'p95 overflow has no finite upper bound')
+  assert.equal(metrics[3].d[5], 25)
+  assert.deepEqual(one('work'), [5, 1, 1, 7, 3, 7, 4, 0, 0, 0, 0])
+  const phases = records.filter(record => record.k === 'phase')
+  assert.equal(phases.length, 6)
+  phases.forEach((record, index) => assert.deepEqual(record.d, [index, 1, index + 1, index + 1, 0]))
+  records.filter(record => record.k === 'group').forEach((record, index) => {
+    const group = expected.groups[index]
+    assert.deepEqual(record.d, [index, group.callbackMs.count, group.gapMs.count, group.gapMs.sum,
+      group.gapMs.max, group.updateMs.sum, group.drawSubmissionMs.sum, group.callbackMs.sum])
+  })
+  assert.deepEqual(one('calibration'), [64, 0, 63, null, 0, 0, 0])
+  assert.deepEqual(records.filter(record => record.k === 'pair').map(record => record.d[0]), [5, 6, 2, 3])
+  const columns = ['frame', 'atMs', 'gapMs', 'previousCallbackMs', 'callbackMs', 'updateMs', 'drawSubmissionMs', 'steps', 'pausedMs']
+  records.filter(record => record.k === 'pair').forEach(record => {
+    const row = expected.trace.rows.find(row => row[0] === record.d[0])
+    assert.deepEqual(record.d, columns.map(name => row[expected.trace.columns.indexOf(name)]))
+  })
+  assert.deepEqual(one('terminal'), [1, 0, 0, 0, 0, 0])
+  assert.equal(compact.reads(), full.reads(), 'export choice adds no clock reads')
+  const readCount = compact.reads()
+  emptyFrame(compact, 5000)
+  assert.equal(compact.reads(), readCount)
+  assert.equal(compact.lines.length, 25)
+})
+
+test('compact records stay native-sized for all supported control, wrist and speed settings', () => {
+  for (const controlMode of CONTROL_MODES) for (const wristSide of WRIST_SIDES) {
+    for (const timeScale of TIME_SCALE_OPTIONS) for (const spawnMultiplier of SPAWN_MULTIPLIER_OPTIONS) {
+      const h = harness({ compactExport: true, version: '2.3.30', deviceSource: 9568513,
+        runIndex: 12345, phaseSampleEvery: 13, controlMode, wristSide, timeScale,
+        spawnMultiplier, width: 480, height: 480, modePersisted: false })
+      h.diag.runId = '1762358400000-12345'
+      emptyFrame(h, 30000)
+      const records = compactReport(h)
+      assert.equal(records.length, 22)
+      assert.equal(records.filter(record => record.k === 'pair').length, 1)
+      assert.equal(records.find(record => record.k === 'metric' && record.d[0] === 0).d[5], null)
+    }
+  }
+})
+
+test('compact export escapes Unicode and deduplicates latest and largest-gap rows', () => {
+  const h = harness({ compactExport: true, version: 'Ω', phaseSampleEvery: 0 })
+  emptyFrame(h, 10)
+  emptyFrame(h, 20)
+  h.diag.requestFinish('done')
+  const records = compactReport(h)
+  assert.equal(records.find(record => record.k === 'meta').d[1], 'Ω')
+  assert.equal(records.filter(record => record.k === 'pair').length, 2)
 })

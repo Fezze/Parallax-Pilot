@@ -88,7 +88,7 @@ test('raw pointer counters include MOVE callbacks rejected by the game filters',
 
 test('natural finish and synchronous destruction defer reporting until the terminal callback ends', async () => {
   await game(({ page, logs, at }) => {
-    const reports = () => logs.filter(line => line.startsWith('PP_DIAG '))
+    const reports = () => logs.filter(line => line.startsWith('PP_DIAG ') || line.startsWith('PP_METRIC '))
     page.stepSimulation = function () {
       this.finishRun()
       this.onDestroy()
