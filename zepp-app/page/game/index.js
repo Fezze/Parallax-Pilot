@@ -42,10 +42,11 @@ import {
   SHIP_STROKE_WIDTH,
 } from '../../shared/game-core.js'
 import { sanitizeControlMode } from '../../shared/device.js'
-import { advanceSimulationClock, createSimulationClock, MAX_SIMULATION_GAP_MS } from '../../shared/simulation-clock.js'
+import { advanceSimulationClock, createSimulationClock, MAX_SIMULATION_GAP_MS, SIMULATION_STEP_MS } from '../../shared/simulation-clock.js'
 import { createPointerInputQueue, enqueuePointerInput } from '../../shared/pointer-input.js'
+import { RuntimeDiagnostics } from '../../shared/runtime-diagnostics.js'
 import { normalizeTiltInput } from '../../shared/tilt-calibration.js'
-import { appendScore, loadSettings, loadTiltCalibration, saveLastSession, saveSettings } from '../../shared/storage.js'
+import { advanceRuntimeDiagnosticRun, appendScore, loadSettings, loadTiltCalibration, saveLastSession, saveSettings } from '../../shared/storage.js'
 
 const FRAME_INTERVAL_MS = 16
 const SQUARE_SPAWN_INTERVAL_FACTOR = 0.84
@@ -54,6 +55,8 @@ const MAX_SPAWNS_PER_TICK = 2
 const CONTROL_BASE_SPEED_FACTOR = 0.46
 const SQUARE_HUD_CORNER_RADIUS = 36
 const HUD_DISPLAY_HP_SPEED = 72
+// Temporary physical-watch diagnostic build; this does not change game timing.
+const DIAGNOSTIC_VERSION = '2.3.29'
 
 function moveTowards(current, target, maxDelta) {
   if (current === target) {
@@ -309,7 +312,32 @@ Page({
     this.asteroidSeed = 0
     this.hp = HP_MAX
     this.displayedHp = HP_MAX
+    const diagnosticSession = advanceRuntimeDiagnosticRun()
+    const diagnosticRun = diagnosticSession.index
+    this.diagnosticMetadata = {
+      version: DIAGNOSTIC_VERSION,
+      baselineCommit: '9f3d63e',
+      runIndex: diagnosticRun,
+      phaseSampleEvery: diagnosticSession.persisted && diagnosticRun % 2 ? 0 : 13,
+      modePersisted: diagnosticSession.persisted,
+      width: deviceInfo.width,
+      height: deviceInfo.height,
+      deviceSource: deviceInfo.deviceSource,
+      controlMode: settings.controlMode,
+      wristSide: settings.wristSide,
+      timeScale: settings.timeScale,
+      spawnMultiplier: settings.spawnMultiplier,
+      requestedIntervalMs: FRAME_INTERVAL_MS,
+      simulationStepMs: SIMULATION_STEP_MS,
+      maxAdmittedGapMs: MAX_SIMULATION_GAP_MS,
+      vibrations: 0,
+      callbackErrors: 0,
+    }
+    this.runtimeDiagnostics = new RuntimeDiagnostics(this.diagnosticMetadata)
+    // Startup logging and clock calibration happen before the game's clock.
+    console.log(`PP_DIAG_START v=${DIAGNOSTIC_VERSION} run=${diagnosticRun} sampling=${this.diagnosticMetadata.phaseSampleEvery} control=${settings.controlMode} wrist=${settings.wristSide} time=${settings.timeScale} spawn=${settings.spawnMultiplier}`)
     this.simulationClock = createSimulationClock(Date.now())
+    this.diagnosticMetadata.gameClockAt = this.simulationClock.lastFrameAt
     this.lastSpawnAt = 0
     this.lastDamageAt = -Infinity
     this.finished = false
@@ -355,6 +383,7 @@ Page({
       this.bindTiltSensor()
       this.drawFrame()
 
+    this.diagnosticMetadata.timerRegisteredAt = Date.now()
     this.loop = setInterval(() => {
       this.tick()
     }, FRAME_INTERVAL_MS)
@@ -376,16 +405,21 @@ Page({
       this.accelerometer.stop()
       this.accelerometer = null
     }
+    this.runtimeDiagnostics.requestFinish('destroy')
   },
 
   bindCanvasEvents() {
     const record = (kind, y) => {
       if (this.finished || this.destroyed) return
+      if (kind !== 'move') this.runtimeDiagnostics.pointer(kind)
       enqueuePointerInput(this.pointerInput, kind, y, Date.now(), this.simulationClock)
     }
     this.canvas.addEventListener(event.CLICK_DOWN, info => record('down', info.y))
     this.canvas.addEventListener(event.CLICK_UP, () => record('up'))
     this.canvas.addEventListener(event.MOVE, info => {
+      if (this.finished || this.destroyed) return
+      // Include delivered MOVE callbacks even when game input coalesces them.
+      this.runtimeDiagnostics.pointer('move')
       if (!this.pointerInput.down) return
       if (this.settings.controlMode === 'touch' &&
           (info.y < this.viewportHalfHeight) === (this.pointerInput.y < this.viewportHalfHeight)) return
@@ -542,6 +576,7 @@ Page({
 
     if (didDamage && now - this.lastDamageAt > 90) {
       this.lastDamageAt = now
+      this.diagnosticMetadata.vibrations += 1
       this.vibrator.start({
         mode: VIBRATOR_SCENE_SHORT_MIDDLE,
       })
@@ -558,6 +593,7 @@ Page({
     }
 
     this.finished = true
+    this.runtimeDiagnostics.requestFinish('game-over')
     const scoreEntry = createScoreEntry(this.simulationClock.elapsedMs, this.settings, now)
     saveLastSession(scoreEntry)
     appendScore(scoreEntry)
@@ -587,6 +623,7 @@ Page({
   },
 
   stepSimulation(deltaSeconds, now) {
+    const sampled = this.runtimeDiagnostics.beginStep(this.asteroids.length)
     const previousShipRect = this.shipRect
     this.updateShip(deltaSeconds)
 
@@ -603,8 +640,10 @@ Page({
       now,
       this.settings.timeScale
     )
+    if (sampled) this.runtimeDiagnostics.markStepPhase(0)
 
     this.spawnAsteroids(now, shipRect, difficulty)
+    if (sampled) this.runtimeDiagnostics.markStepPhase(1)
     advanceAsteroidsInCollisionGrid(
       this.asteroids,
       deltaSeconds,
@@ -612,6 +651,7 @@ Page({
       this.collisionGrid,
       true
     )
+    if (sampled) this.runtimeDiagnostics.markStepPhase(2)
     collectCollisionCandidatesFromGrid(
       this.collisionGrid,
       shipRect,
@@ -619,19 +659,40 @@ Page({
       this.collisionCandidates,
       previousShipRect
     )
+    if (sampled) this.runtimeDiagnostics.markStepPhase(3)
     this.handleCollisions(now, shipRect, difficulty, previousShipRect)
+    if (sampled) this.runtimeDiagnostics.markStepPhase(4)
     this.displayedHp = moveTowards(
       this.displayedHp,
       this.hp,
       HUD_DISPLAY_HP_SPEED * deltaSeconds
     )
+    if (sampled) this.runtimeDiagnostics.markStepPhase(5)
+    this.runtimeDiagnostics.endStep(this.collisionCandidates.length)
   },
 
   tick() {
     if (this.finished || this.destroyed) return
-    this.advanceSimulation(Date.now())
-    // Collision handling may have navigated away during catch-up.
-    if (!this.finished && !this.destroyed) this.drawFrame()
+    const now = Date.now()
+    const diagnostics = this.runtimeDiagnostics
+    if (!diagnostics.enabled) {
+      this.advanceSimulation(now)
+      if (!this.finished && !this.destroyed) this.drawFrame()
+      return
+    }
+    diagnostics.beginFrame(now, this.simulationClock, this.pointerInput.down, this.asteroids.length)
+    try {
+      // Reuse the original admission timestamp, before diagnostic bookkeeping.
+      this.advanceSimulation(now)
+      diagnostics.markUpdate(Date.now())
+      if (!this.finished && !this.destroyed) this.drawFrame()
+    } catch (error) {
+      this.diagnosticMetadata.callbackErrors += 1
+      diagnostics.requestFinish('callback-error')
+      throw error
+    } finally {
+      diagnostics.endFrame(Date.now(), this.simulationClock, this.finished || this.destroyed)
+    }
   },
 
   drawFrame(shipRect = this.shipRect) {

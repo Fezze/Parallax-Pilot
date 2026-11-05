@@ -31,6 +31,20 @@ function getSessionStorage() {
   return sessionStorageInstance
 }
 
+// Keep diagnostic writes on the same cached instance as settings and scores.
+// Separate LocalStorage instances can overwrite each other's loaded snapshots.
+export function advanceRuntimeDiagnosticRun() {
+  try {
+    const store = getLocalStorage()
+    const previous = Number(store.getItem('runtime_diagnostic_run_v1', 0))
+    const index = (Number.isFinite(previous) && previous >= 0 ? Math.floor(previous) : 0) % 1000000 + 1
+    store.setItem('runtime_diagnostic_run_v1', String(index))
+    return { index, persisted: true }
+  } catch (_error) {
+    return { index: 1, persisted: false }
+  }
+}
+
 export function loadSettings() {
   return readSettings(getLocalStorage())
 }
