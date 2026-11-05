@@ -92,3 +92,7 @@ The clock can admit one block of whole10ms quanta with the same carry, rollback 
 An unchanged ship pose no longer rewrites five vertices every quantum. Quiet segments preserve separate previous/current canonical rectangles and the final two HP values, including the first stationary quantum after movement and the first jump of a swipe. Tilt retains per-quantum reads because sensor traces are part of its existing control contract; geometry caching and scheduled spawning still apply.
 
 The next spawn quantum is solved from the current difficulty/interval equation, then checked at adjacent lattice points using the original predicate. Retained debt schedules at the next unprocessed quantum. Collision windows conservatively include both spatial rounding and the preceding sweep; only the existing10ms narrow phase determines damage. Logical steps include quiet quanta, while eventQuanta/skippedQuanta expose how much full dispatch was avoided.
+
+## Damage eligibility inside contact windows
+
+A spatial contact window does not wake a full step while that asteroid remains inside its 260 ms damage cooldown. Cached windows keep the asteroid reference, so a hit immediately moves the next eligible quantum even within the same admitted block. The inclusive readiness boundary is rounded up to the canonical lattice. Each asteroid keeps its own deadline; births and other ready contacts still wake independently. Motion and HUD continue analytically between those events.

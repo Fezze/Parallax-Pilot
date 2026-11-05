@@ -14,6 +14,76 @@ const EPOCH = 1700000000000
 let importId = 0
 const schedules = [[16], [33], [50], [100], [200], [7, 211, 38, 149, 3, 249, 52]]
 
+test('a hit inside an admitted block immediately prevents remaining immune steps from waking the world', async () => {
+  await withGame({}, ({ page, tick }) => {
+    page.hp = page.displayedHp = 10000
+    const asteroid = { id: 'continuous-contact', x: page.shipRect.centerX, y: page.shipRect.centerY,
+      radius: 8, vx: 0, lastHitAt: -Infinity }
+    page.asteroids.push(asteroid)
+    addAsteroidToCollisionGrid(asteroid, page.collisionGrid)
+    tick(200)
+    assert.equal(asteroid.lastHitAt, 10)
+    assert.equal(page.diagnosticMetadata.eventQuanta, 1)
+    assert.equal(page.diagnosticMetadata.skippedQuanta, 19)
+    const afterHit = page.hp
+    tick(260)
+    assert.equal(page.hp, afterHit)
+    assert.equal(page.diagnosticMetadata.eventQuanta, 1)
+    tick(270)
+    assert.equal(asteroid.lastHitAt, 270)
+    assert.ok(page.hp < afterHit)
+    assert.equal(page.diagnosticMetadata.eventQuanta, 2)
+  })
+})
+
+test('dense contact during immunity skips dispatch and resumes damage at the exact per-asteroid deadline', async () => {
+  await withGame({}, ({ page, tick }) => {
+    page.hp = page.displayedHp = 10000
+    for (let index = 0; index < 16; index += 1) {
+      const asteroid = { id: `immune-${index}`, x: page.shipRect.centerX, y: page.shipRect.centerY,
+        vx: 0, radius: 8, lastHitAt: 0 }
+      page.asteroids.push(asteroid)
+      addAsteroidToCollisionGrid(asteroid, page.collisionGrid)
+    }
+    tick(200)
+    assert.equal(page.hp, 10000)
+    assert.equal(page.diagnosticMetadata.eventQuanta, 0)
+    assert.equal(page.diagnosticMetadata.skippedQuanta, 20)
+    tick(260)
+    assert.ok(page.hp < 10000)
+    assert.equal(page.diagnosticMetadata.eventQuanta, 1)
+    assert.ok(page.asteroids.every(a => a.lastHitAt === 260))
+    const afterHit = page.hp
+    tick(510)
+    assert.equal(page.hp, afterHit)
+    assert.equal(page.diagnosticMetadata.eventQuanta, 1)
+    tick(520)
+    assert.ok(page.hp < afterHit)
+    assert.ok(page.asteroids.every(a => a.lastHitAt === 520))
+    assert.equal(page.diagnosticMetadata.eventQuanta, 2)
+    assert.equal(page.diagnosticMetadata.skippedQuanta, 50)
+  })
+})
+
+test('one asteroid cooldown does not delay another independent contact', async () => {
+  await withGame({}, ({ page, tick }) => {
+    page.hp = page.displayedHp = 10000
+    tick(130)
+    for (const [id, lastHitAt] of [['first', 0], ['second', 130]]) {
+      const asteroid = { id, lastHitAt, x: page.shipRect.centerX, y: page.shipRect.centerY, radius: 8, vx: 0 }
+      page.asteroids.push(asteroid)
+      addAsteroidToCollisionGrid(asteroid, page.collisionGrid)
+    }
+    tick(380)
+    assert.deepEqual(page.asteroids.map(a => a.lastHitAt), [260, 130])
+    const afterFirst = page.hp
+    tick(400)
+    assert.deepEqual(page.asteroids.map(a => a.lastHitAt), [260, 390])
+    assert.ok(page.hp < afterFirst)
+    assert.equal(page.diagnosticMetadata.eventQuanta, 2)
+  })
+})
+
 test('an empty idle block advances logical time without world dispatch or unchanged geometry writes', async () => {
   await withGame({}, ({ page, tick }) => {
     let writes = 0

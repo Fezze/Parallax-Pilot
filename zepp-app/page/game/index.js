@@ -64,7 +64,7 @@ const CONTROL_BASE_SPEED_FACTOR = 0.46
 const SQUARE_HUD_CORNER_RADIUS = 36
 const HUD_DISPLAY_HP_SPEED = 72
 // Temporary physical-watch diagnostic build; this does not change game timing.
-const DIAGNOSTIC_VERSION = '2.3.32'
+const DIAGNOSTIC_VERSION = '2.3.33'
 
 function moveTowards(current, target, maxDelta) {
   if (current === target) {
@@ -330,7 +330,7 @@ Page({
     const diagnosticRun = diagnosticSession.index
     this.diagnosticMetadata = {
       version: DIAGNOSTIC_VERSION,
-      baselineCommit: 'b5c7264',
+      baselineCommit: '07706c6',
       runIndex: diagnosticRun,
       phaseSampleEvery: diagnosticSession.persisted && diagnosticRun % 2 ? 0 : 13,
       modePersisted: diagnosticSession.persisted,
@@ -714,8 +714,14 @@ Page({
     for (let index = 0; index < this.frameCollisionCandidates.length; index += 1) {
       const asteroid = this.frameCollisionCandidates[index]
       if (asteroid.motionRemoved) continue
+      // This object cannot damage again anywhere in the remaining segment.
+      // Its analytic position still advances at the usual scene boundaries.
+      if (asteroid.lastHitAt + COLLISION_COOLDOWN_MS > throughMs) continue
       const slot = this.collisionWindows[count] || (this.collisionWindows[count] = {})
-      if (getCollisionQuantumWindow(asteroid, this.shipGeometry, fromMs, throughMs, this.shipCenterY, velocity, slot, SIMULATION_STEP_MS, instantCenter)) count += 1
+      if (getCollisionQuantumWindow(asteroid, this.shipGeometry, fromMs, throughMs, this.shipCenterY, velocity, slot, SIMULATION_STEP_MS, instantCenter)) {
+        slot.asteroid = asteroid
+        count += 1
+      }
     }
     this.collisionWindowCount = count
   },
@@ -744,7 +750,11 @@ Page({
         let next = Math.max(cursor + SIMULATION_STEP_MS, this.nextSpawnAt)
         for (let index = 0; index < this.collisionWindowCount; index += 1) {
           const window = this.collisionWindows[index]
-          const candidate = Math.max(cursor + SIMULATION_STEP_MS, window.firstMs)
+          // A hit inside this block changes eligibility without rebuilding the
+          // spatial window. Read this asteroid's current cooldown every time.
+          const readyAt = window.asteroid.lastHitAt + COLLISION_COOLDOWN_MS
+          const readyQuantum = Number.isFinite(readyAt) ? Math.ceil(readyAt / SIMULATION_STEP_MS) * SIMULATION_STEP_MS : 0
+          const candidate = Math.max(cursor + SIMULATION_STEP_MS, window.firstMs, readyQuantum)
           if (candidate <= window.lastMs && candidate < next) next = candidate
         }
         if (next > throughMs) {

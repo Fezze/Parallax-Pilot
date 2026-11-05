@@ -65,13 +65,14 @@ test('all actual world-step phases are connected in order and final frame timing
     page.runtimeDiagnostics = observer({
       beginFrame() { events.push('frame') }, beginStep() { events.push('step'); return true },
       markStepPhase(index) { events.push(index) }, endStep() { events.push('step-end') },
+      recordSkippedSteps(count) { events.push(`skip:${count}`) },
       markUpdate() { events.push('update-end') }, endFrame() { events.push('frame-end') },
     })
     const draw = page.drawFrame
     page.drawFrame = function (...args) { events.push('draw'); return draw.apply(this, args) }
     at(20); page.tick()
     assert.deepEqual(events, ['frame', 'step', 0, 1, 2, 3, 4, 5, 'step-end',
-      'step', 0, 1, 2, 3, 4, 5, 'step-end', 'update-end', 'draw', 'frame-end'])
+      'skip:1', 'update-end', 'draw', 'frame-end'])
     page.runtimeDiagnostics = original
   })
 })
