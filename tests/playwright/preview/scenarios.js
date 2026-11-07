@@ -1,4 +1,4 @@
-import { createShipRect } from '../../../zepp-app/shared/game-core.js'
+import { createShipRect, getAsteroidXAt } from '../../../zepp-app/shared/game-core.js'
 import { tiltProfile } from '../../tilt-fixtures.js'
 const DEFAULT_LOCALE = 'en-US'
 
@@ -451,13 +451,18 @@ function createGameScenario({
       }),
     },
     afterBuild(page) {
-      page.lastSpawnAt = -2600
+      page.lastSpawnAt = page.scheduledLastSpawnAt = -2600
+      page.nextSpawnAt = 10
       page.simulationClock.lastFrameAt = Date.now() - 16
       page.tick()
       page.tick()
 
+      const renderMs = page.getRenderMs()
       page.asteroids.slice(0, 3).forEach((asteroid, index) => {
-        asteroid.x = Math.round(page.viewport.width * (0.78 - index * 0.18))
+        // The snapshot uses the motion anchor to draw the intended fixture position.
+        asteroid.motionBaseAt = renderMs
+        asteroid.motionBaseX = Math.round(page.viewport.width * (0.78 - index * 0.18))
+        asteroid.x = getAsteroidXAt(asteroid, page.simulationClock.elapsedMs)
         asteroid.y = Math.round(page.viewport.height * (0.24 + index * 0.22))
       })
       if (variant.includes('limit-')) {

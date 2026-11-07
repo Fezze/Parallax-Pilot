@@ -55,6 +55,13 @@ for (const [scenarioId, scenario] of Object.entries(previewScenarios)) {
 
     if (scenarioId.startsWith('game-')) {
       expect(preview.canvasCount).toBe(1)
+      const visibleAsteroids = await page.evaluate(() => {
+        const game = window.__previewPageDefinition
+        const frame = game.publishedFrame
+        return frame.asteroids.slice(0, frame.asteroidCount).filter(({ x, radius }) =>
+          x > radius && x < game.viewport.width - radius).length
+      })
+      expect(visibleAsteroids).toBeGreaterThan(0)
     }
 
     const screenshotPath = getScreenshotPath(scenarioId, scenario)
