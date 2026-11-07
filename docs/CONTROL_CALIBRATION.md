@@ -37,8 +37,9 @@ stage on write and read. Full diagnostics are saved only when the existing
 calibration-logs feature is enabled. Lifecycle exit stops acquisition immediately.
 
 Touch speed retains the pre-calibration sensitivity setting and is independent
-of tilt profile presence, validity or wrist. Swipe maps drag displacement directly
-to ship displacement and likewise ignores calibration. Calibrated tilt uses the
+of tilt profile presence, validity or wrist. Swipe maps drag displacement to a
+press-relative target, then approaches it at the touch speed cap. Swipe also
+ignores calibration. Calibrated tilt uses the
 measured spans and the common viewport-scaled control speed. R1 simulation time
 and input-event timing remain intact.
 
