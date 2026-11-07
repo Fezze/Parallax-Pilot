@@ -78,17 +78,19 @@ test('all actual world-step phases are connected in order and final frame timing
 })
 
 test('raw pointer counters include MOVE callbacks rejected by the game filters', async () => {
-  await game(({ page, canvas }) => {
+  await game(({ page, canvas, at }) => {
     const original = page.runtimeDiagnostics
     const kinds = []
-    page.runtimeDiagnostics = observer({ pointer(kind) { kinds.push(kind) } })
+    page.runtimeDiagnostics = observer({ pointer(kind, count) { kinds.push([kind, count]) } })
     canvas.__emit('MOVE', { y: 100 })
     canvas.__emit('CLICK_DOWN', { y: 100 })
     canvas.__emit('MOVE', { y: 110 })
     canvas.__emit('MOVE', { y: 110 })
     canvas.__emit('CLICK_UP')
-    assert.deepEqual(kinds, ['move', 'down', 'move', 'move', 'up'])
+    assert.deepEqual(kinds, [])
     assert.equal(page.simulationClock.elapsedMs, 0)
+    at(20); page.tick()
+    assert.deepEqual(kinds, [['down', 1], ['move', 3], ['up', 1]])
     page.runtimeDiagnostics = original
   })
 })

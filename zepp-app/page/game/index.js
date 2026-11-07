@@ -42,7 +42,7 @@ import {
   getNextSpawnQuantum,
   getCollisionQuantumWindow,
   getAsteroidXAt,
-  interpolateShipRect,
+  updateShipPoints,
   materializeAsteroidsAt,
   ROUND_HUD_MARGIN,
   HUD_STROKE_WIDTH,
@@ -51,7 +51,13 @@ import {
 } from '../../shared/game-core.js'
 import { sanitizeControlMode } from '../../shared/device.js'
 import { advanceSimulationClockBatched, createSimulationClock, MAX_SIMULATION_GAP_MS, SIMULATION_STEP_MS } from '../../shared/simulation-clock.js'
-import { createPointerInputQueue, enqueuePointerInput } from '../../shared/pointer-input.js'
+import {
+  clearPointerSamples,
+  consumePointerSamples,
+  createPointerInbox,
+  createPointerInputQueue,
+  recordPointerSample,
+} from '../../shared/pointer-input.js'
 import { RuntimeDiagnostics } from '../../shared/runtime-diagnostics.js'
 import { normalizeTiltInput } from '../../shared/tilt-calibration.js'
 import { advanceRuntimeDiagnosticRun, appendScore, loadSettings, loadTiltCalibration, saveLastSession, saveSettings } from '../../shared/storage.js'
@@ -65,7 +71,11 @@ const CONTROL_BASE_SPEED_FACTOR = 0.46
 const SQUARE_HUD_CORNER_RADIUS = 36
 const HUD_DISPLAY_HP_SPEED = 72
 // Temporary physical-watch diagnostic build; this does not change game timing.
-const DIAGNOSTIC_VERSION = '2.3.35'
+const DIAGNOSTIC_VERSION = '2.3.36'
+
+function createPresentationFrame() {
+  return { ship: {}, asteroids: [], asteroidCount: 0, displayedHp: HP_MAX }
+}
 
 function moveTowards(current, target, maxDelta) {
   if (current === target) {
@@ -308,6 +318,7 @@ Page({
     this.shipCenterY = deviceInfo.height / 2
     this.touchDirection = 0
     this.pointerDown = false
+    this.pointerInbox = createPointerInbox()
     this.pointerInput = createPointerInputQueue()
     this.swipeStartTouchY = null
     this.swipeCurrentTouchY = null
@@ -331,7 +342,7 @@ Page({
     const diagnosticRun = diagnosticSession.index
     this.diagnosticMetadata = {
       version: DIAGNOSTIC_VERSION,
-      baselineCommit: '5eb269a',
+      baselineCommit: '5703df0',
       runIndex: diagnosticRun,
       phaseSampleEvery: diagnosticSession.persisted && diagnosticRun % 2 ? 0 : 13,
       modePersisted: diagnosticSession.persisted,
@@ -381,7 +392,9 @@ Page({
       this.shipGeometry
     )
     createShipRect(this.viewport, this.shipCenterY, this.settings.wristSide, this.nextShipRect, this.shipGeometry)
-    this.renderShipRect = createShipRect(this.viewport, this.shipCenterY, this.settings.wristSide, {}, this.shipGeometry)
+    this.canvasShipPoints = Array.from({ length: 5 }, () => ({ x: 0, y: 0 }))
+    this.publishedFrame = createPresentationFrame()
+    this.nextPresentationFrame = createPresentationFrame()
     this.lastPoseCenterY = this.shipCenterY
     this.spriteRenderer = null
     this.lastSpriteHudHp = null
@@ -421,6 +434,8 @@ Page({
 
   onDestroy() {
     this.destroyed = true
+    this.flushPointerDiagnostics()
+    clearPointerSamples(this.pointerInbox)
     this.pointerInput.events.length = 0
     restoreScreenTimeout()
 
@@ -441,20 +456,21 @@ Page({
   bindCanvasEvents() {
     const record = (kind, y) => {
       if (this.finished || this.destroyed) return
-      if (kind !== 'move') this.runtimeDiagnostics.pointer(kind)
-      enqueuePointerInput(this.pointerInput, kind, y, Date.now(), this.simulationClock)
+      recordPointerSample(this.pointerInbox, kind, y)
     }
     this.canvas.addEventListener(event.CLICK_DOWN, info => record('down', info.y))
     this.canvas.addEventListener(event.CLICK_UP, () => record('up'))
-    this.canvas.addEventListener(event.MOVE, info => {
-      if (this.finished || this.destroyed) return
-      // Include delivered MOVE callbacks even when game input coalesces them.
-      this.runtimeDiagnostics.pointer('move')
-      if (!this.pointerInput.down) return
-      if (this.settings.controlMode === 'touch' &&
-          (info.y < this.viewportHalfHeight) === (this.pointerInput.y < this.viewportHalfHeight)) return
-      record('move', info.y)
-    })
+    this.canvas.addEventListener(event.MOVE, info => record('move', info.y))
+  },
+
+  flushPointerDiagnostics() {
+    const inbox = this.pointerInbox
+    if (inbox.downCount) this.runtimeDiagnostics.pointer('down', inbox.downCount)
+    if (inbox.moveCount) this.runtimeDiagnostics.pointer('move', inbox.moveCount)
+    if (inbox.upCount) this.runtimeDiagnostics.pointer('up', inbox.upCount)
+    inbox.downCount = 0
+    inbox.moveCount = 0
+    inbox.upCount = 0
   },
 
   applyPointerInput(input) {
@@ -635,6 +651,7 @@ Page({
     }
 
     this.finished = true
+    this.flushPointerDiagnostics()
     this.runtimeDiagnostics.requestFinish('game-over')
     const scoreEntry = createScoreEntry(this.simulationClock.elapsedMs, this.settings, now)
     saveLastSession(scoreEntry)
@@ -836,6 +853,9 @@ Page({
     if (this.finished || this.destroyed) return
     const now = Date.now()
     const diagnostics = this.runtimeDiagnostics
+    this.flushPointerDiagnostics()
+    consumePointerSamples(this.pointerInbox, this.pointerInput, this.simulationClock,
+      this.settings.controlMode, this.viewportHalfHeight)
     if (!diagnostics.enabled) {
       this.advanceSimulation(now)
       if (!this.finished && !this.destroyed) this.drawFrame()
@@ -857,30 +877,53 @@ Page({
   },
 
   drawFrame(shipRect) {
+    this.publishPresentationFrame(shipRect)
+    this.presentFrame(this.publishedFrame)
+  },
+
+  publishPresentationFrame(shipRect) {
     const interpolate = !shipRect && this.simulationClock.elapsedMs > 0
     const alpha = this.simulationClock.pendingMs / SIMULATION_STEP_MS
     const renderAtMs = interpolate ? this.simulationClock.elapsedMs - SIMULATION_STEP_MS + this.simulationClock.pendingMs : this.simulationClock.elapsedMs
-    const renderedHp = interpolate ? this.previousDisplayedHp + (this.displayedHp - this.previousDisplayedHp) * alpha : this.displayedHp
-    const hpRatio = renderedHp / HP_MAX
+    const frame = this.nextPresentationFrame
+    const pose = shipRect || this.shipRect
+    frame.ship.x = pose.x
+    frame.ship.y = interpolate ? this.nextShipRect.y + (pose.y - this.nextShipRect.y) * alpha : pose.y
+    frame.ship.w = pose.w
+    frame.ship.h = pose.h
+    frame.ship.wristSide = pose.wristSide
+    frame.displayedHp = interpolate
+      ? this.previousDisplayedHp + (this.displayedHp - this.previousDisplayedHp) * alpha
+      : this.displayedHp
+    frame.asteroidCount = this.asteroids.length
+    for (let i = 0; i < frame.asteroidCount; i += 1) {
+      const asteroid = this.asteroids[i]
+      const image = frame.asteroids[i] || (frame.asteroids[i] = {})
+      image.id = asteroid.id
+      image.x = interpolate ? getAsteroidXAt(asteroid, renderAtMs) : asteroid.x
+      image.y = asteroid.y
+      image.radius = asteroid.radius
+    }
 
+    // The renderer only sees the complete published frame. Reuse the other buffer.
+    this.nextPresentationFrame = this.publishedFrame
+    this.publishedFrame = frame
+  },
+
+  presentFrame(frame) {
+    const hpRatio = frame.displayedHp / HP_MAX
     if (this.spriteRenderer) {
-      const y = interpolate
-        ? this.nextShipRect.y + (this.shipRect.y - this.nextShipRect.y) * alpha
-        : (shipRect || this.shipRect).y
-      this.spriteRenderer.draw(this.asteroids, y, renderAtMs, interpolate)
-      if (renderedHp !== this.lastSpriteHudHp) {
+      this.spriteRenderer.draw(frame)
+      if (frame.displayedHp !== this.lastSpriteHudHp) {
         if (this.lastSpriteHudHp !== null) {
           this.canvas.clear({ x: 0, y: 0, w: this.viewport.width, h: this.viewport.height })
         }
         this.drawHud(hpRatio)
-        this.lastSpriteHudHp = renderedHp
+        this.lastSpriteHudHp = frame.displayedHp
       }
       return
     }
 
-    if (!shipRect) shipRect = interpolate
-      ? interpolateShipRect(this.nextShipRect, this.shipRect, alpha, this.renderShipRect)
-      : this.shipRect
     this.canvas.drawRect({
       x1: 0,
       y1: 0,
@@ -893,10 +936,10 @@ Page({
       color: COLORS.asteroid,
       line_width: 2,
     })
-    for (let index = 0; index < this.asteroids.length; index += 1) {
-      const asteroid = this.asteroids[index]
+    for (let index = 0; index < frame.asteroidCount; index += 1) {
+      const asteroid = frame.asteroids[index]
       this.canvas.strokeCircle({
-        center_x: interpolate ? getAsteroidXAt(asteroid, renderAtMs) : asteroid.x,
+        center_x: asteroid.x,
         center_y: asteroid.y,
         radius: asteroid.radius,
         color: COLORS.asteroid,
@@ -905,7 +948,7 @@ Page({
 
     drawOutlineShip(
       this.canvas,
-      shipRect.points
+      updateShipPoints(this.canvasShipPoints, frame.ship)
     )
 
     this.drawHud(hpRatio)

@@ -86,6 +86,15 @@ reporting until that callback returns through its measurement boundary.
 
 ## Physical collection procedure
 
+Version 2.3.36 captures changed pointer coordinates and gesture boundaries with
+their delivery times. The game timer interprets those samples before advancing
+the simulation. Touch direction filtering still precedes the existing 10 ms
+command compaction. Raw callback counts are folded into the observer once per
+frame, and update timing includes the input drain. The renderer reads a reusable
+frame of interpolated positions and displayed health. IMG remains the default,
+with the Canvas path available for fallback. This keeps input capture separate
+from drawing within the same JavaScript runtime.
+
 1. Verify the installed version and Bridge target app-Android. Leave Zepp open
    on the phone. Keep the same watch firmware, brightness and time/spawn/wrist
    settings across comparisons; record any changes rather than normalizing them

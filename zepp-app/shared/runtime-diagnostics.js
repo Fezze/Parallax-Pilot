@@ -263,11 +263,11 @@ export class RuntimeDiagnostics {
     this.updateAt = at
   }
 
-  pointer(kind) {
+  pointer(kind, count = 1) {
     if (!this.enabled) return
     const index = kind === 'down' ? 0 : kind === 'move' ? 1 : kind === 'up' ? 2 : kind === 'cancel' ? 3 : 4
-    this.pointerCounts[index] += 1
-    this.pendingPointers[index] += 1
+    this.pointerCounts[index] += count
+    this.pendingPointers[index] += count
   }
 
   beginStep(asteroidCount) {
