@@ -2,10 +2,10 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   addAsteroidToCollisionGrid, advanceAsteroidsInCollisionGrid,
-  calculateCollisionResult, collectCollisionCandidatesFromGrid,
-  createCollisionGrid, createShipRect, getAsteroidCollisionWindow,
+  anchorAsteroidMotion, calculateCollisionResult, collectCollisionCandidatesFromGrid,
+  createCollisionGrid, createShipGeometry, createShipRect, getAsteroidCollisionWindow, getAsteroidXAt,
   getCollisionQuantumWindow, getShipYLimits, getSweptCollisionDamage,
-  isAsteroidInCollisionBand, prepareCollisionWindowSegment,
+  isAsteroidInCollisionBand, isCollisionWindowClear, prepareCollisionWindowSegment,
 } from '../zepp-app/shared/game-core.js'
 
 const viewports = [416, 454, 466, 480].map(width => ({ width, height: width }))
@@ -79,6 +79,97 @@ test('prepared segments reuse scratch across asteroids and respect a swipe stop'
   assert.equal(getAsteroidCollisionWindow(stationary, segment, window), null)
   prepareCollisionWindowSegment(geometry, 0, 100, 80, 1000, 10, undefined, segment)
   assert.deepEqual(getAsteroidCollisionWindow(stationary, segment, window), { firstMs: 10, lastMs: 70 })
+})
+
+test('whole-window rejection agrees with canonical sweeps and the silhouette oracle', t => {
+  const viewport = viewports[2]
+  const fromMs = 1770
+  const throughMs = fromMs + 160
+  let seed = 7596
+  const random = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 2 ** 32 }
+  let compared = 0
+  for (const wrist of wrists) {
+    const geometry = createShipGeometry(viewport, wrist)
+    const { min, max } = geometry.limits
+    const scenarios = [
+      ['stationary', 200.49999999999997, 0],
+      ['moving down', 204.3, 310],
+      ['moving up', 254.49999999999997, -170],
+      ['swipe stop', 190.4, 370, 210.5],
+      ['top clamp', min + 14.2, -340],
+      ['bottom clamp', max - 10.1, 270],
+      ['pinned at limit', max, 270],
+    ]
+    for (const [name, startY, velocityY, stopY] of scenarios) {
+      const segment = prepareCollisionWindowSegment(geometry, fromMs, throughMs, startY, velocityY, 10, stopY)
+      const rects = [createShipRect(viewport, startY, wrist)]
+      let centerY = startY
+      for (let now = fromMs + 10; now <= throughMs; now += 10) {
+        // Simulate scalar control with its repeated floating-point additions.
+        const target = stopY ?? (velocityY < 0 ? min : max)
+        const next = centerY + velocityY * 0.01
+        centerY = velocityY < 0 ? Math.max(next, target) : Math.min(next, target)
+        rects.push(createShipRect(viewport, centerY, wrist))
+      }
+      let clearWindows = 0
+      let hitWindows = 0
+      for (let index = 0; index < 130; index += 1) {
+        const radius = 7 + random() * 11
+        const yLow = Math.min(startY, centerY) - geometry.h / 2 - radius
+        const yHigh = Math.max(startY, centerY) + geometry.h / 2 + radius
+        const asteroid = { x: geometry.x - 35 + random() * (geometry.w + 70), y: yLow + random() * (yHigh - yLow),
+          radius, vx: index % 3 === 0 ? 0 : (random() - 0.5) * 1900 }
+        anchorAsteroidMotion(asteroid, fromMs - 130)
+        const window = getAsteroidCollisionWindow(asteroid, segment)
+        if (!window) continue
+        if (index % 3 === 1) window.firstMs = Math.min(window.lastMs, window.firstMs + 20)
+        const clear = isCollisionWindowClear(asteroid, segment, window, rects[0])
+        let hit = false
+        for (let now = window.firstMs; now <= window.lastMs; now += 10) {
+          const step = (now - fromMs) / 10
+          const circle = { ...asteroid, x: getAsteroidXAt(asteroid, now), previousX: getAsteroidXAt(asteroid, now - 10) }
+          if (getSweptCollisionDamage(rects[step], rects[step - 1], circle)) hit = true
+          if (clear) {
+            const distance = oracleSweptDistance(rects[step], rects[step - 1], circle)
+            assert.ok(distance >= radius - 1e-8, JSON.stringify({ wrist, name, window, now, circle, distance }))
+            compared++
+          }
+        }
+        if (hit) assert.equal(clear, false, JSON.stringify({ wrist, name, window, asteroid }))
+        if (clear) clearWindows++
+        if (hit) hitWindows++
+      }
+      assert.ok(clearWindows > 0 && hitWindows > 0, JSON.stringify({ wrist, name, clearWindows, hitWindows }))
+    }
+  }
+  t.diagnostic(`${compared} independently checked sweeps from rejected windows`)
+})
+
+test('whole-window rejection retains near tangencies and sweeps through a stop', () => {
+  const viewport = viewports[2]
+  const window = Object.freeze({ firstMs: 10, lastMs: 30 })
+  for (const wrist of wrists) {
+    const geometry = createShipGeometry(viewport, wrist)
+    const direction = wrist === 'left' ? 1 : -1
+    const nose = wrist === 'left' ? geometry.x + geometry.w : geometry.x
+    const stationary = prepareCollisionWindowSegment(geometry, 0, 30, 200.49, 0)
+    const fixed = createShipRect(viewport, stationary.start, wrist)
+    for (const offset of [-1e-7, 0, 1e-7]) {
+      const asteroid = anchorAsteroidMotion({ x: nose + direction * (7 + offset), y: fixed.centerY, radius: 7, vx: 0 }, 0)
+      assert.equal(isCollisionWindowClear(Object.freeze(asteroid), Object.freeze(stationary), window, fixed), offset > 0)
+    }
+
+    for (const stopY of [undefined, 180]) {
+      const endY = stopY ?? geometry.limits.min
+      const startY = endY + 20
+      const moving = prepareCollisionWindowSegment(geometry, 0, 30, startY, -4000, 10, stopY)
+      const before = createShipRect(viewport, startY, wrist)
+      const after = createShipRect(viewport, endY, wrist)
+      const asteroid = anchorAsteroidMotion({ x: nose - direction * 20, y: after.centerY, radius: 7, vx: direction * 2000 }, 0)
+      assert.ok(getSweptCollisionDamage(after, before, { ...asteroid, x: nose, previousX: asteroid.x }) > 0)
+      assert.equal(isCollisionWindowClear(asteroid, moving, window, before), false)
+    }
+  }
 })
 
 test('grid contains every independent rectangle-oracle overlap at radii and cell boundaries', t => {

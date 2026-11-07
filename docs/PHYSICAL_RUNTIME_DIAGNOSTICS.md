@@ -217,3 +217,11 @@ now takes place at native delivery, outside the measured timer callback.
 The Android Bridge installed 2.3.39/code 90 on physical Balance 2 on November 7, 2026. The instrumented source commit is `996703a`. A native SWIPE run confirmed both slow-update records survive export and decoding.
 
 The Android Bridge installed 2.3.40/code 91 on the physical Balance 2 on November 7, 2026. The installed application uses source commit `e859368`. Native firmware decoded the new probe fields after an ordinary IMG SWIPE run.
+
+## Whole-window work counters in 2.3.41
+
+The compact work record adds clearWindows and clearWindowQuanta.
+The latter sums potential canonical candidate instants in the discarded
+windows. Different windows can overlap, so this is not a count of
+executed probes saved. Compare probeQuanta directly for the remaining
+probe workload. Existing physical records retain their original meaning.

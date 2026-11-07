@@ -85,7 +85,7 @@ test('one asteroid cooldown does not delay another independent contact', async (
   })
 })
 
-test('a 25-quantum near miss performs exact tests without dispatching the world', async () => {
+test('a stationary 25-quantum near miss clears the whole window without a contact probe', async () => {
   for (const controlMode of ['touch', 'swipe']) for (const wristSide of ['left', 'right']) {
     await withGame({ settings: { controlMode, wristSide } }, ({ page, tick }) => {
       const ship = page.shipRect
@@ -100,9 +100,31 @@ test('a 25-quantum near miss performs exact tests without dispatching the world'
       assert.equal(page.hp, 100)
       assert.equal(asteroid.lastHitAt, -Infinity)
       assert.equal(page.diagnosticMetadata.eventQuanta, 0)
-      assert.equal(page.diagnosticMetadata.probeQuanta, 25)
-      assert.equal(page.runtimeDiagnostics.frameCandidates, 25)
+      assert.equal(page.diagnosticMetadata.probeQuanta, 0)
+      assert.equal(page.diagnosticMetadata.clearWindows, 1)
+      assert.equal(page.diagnosticMetadata.clearWindowQuanta, 25)
+      assert.equal(page.runtimeDiagnostics.frameCandidates, 0)
       assert.equal(page.diagnosticMetadata.fullMaterializations, 1)
+    })
+  }
+})
+
+test('a moving corner near miss rejects the interval without changing the ship trajectory', async () => {
+  for (const controlMode of ['touch', 'swipe']) for (const wristSide of ['left', 'right']) {
+    await withGame({ settings: { controlMode, wristSide } }, ({ page, tick, canvas }) => {
+      const ship = page.shipRect
+      const initialY = page.shipCenterY
+      const x = wristSide === 'left' ? ship.x - 7 : ship.x + ship.w + 7
+      page.asteroids.push({ id: 'moving-away', x, y: ship.y - 7, radius: 8, vx: 0, lastHitAt: -Infinity })
+      canvas.__emit('CLICK_DOWN', { y: 330 })
+      if (controlMode === 'swipe') canvas.__emit('MOVE', { y: 410 })
+      tick(250)
+      assert.ok(Math.abs(page.shipCenterY - (initialY + page.baseControlSpeed * 0.25)) < 1e-9)
+      assert.equal(page.hp, 100)
+      assert.equal(page.diagnosticMetadata.eventQuanta, 0)
+      assert.equal(page.diagnosticMetadata.probeQuanta, 0)
+      assert.equal(page.diagnosticMetadata.clearWindows, 1)
+      assert.ok(page.diagnosticMetadata.clearWindowQuanta > 1)
     })
   }
 })

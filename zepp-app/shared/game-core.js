@@ -559,7 +559,7 @@ export function prepareCollisionWindowSegment(geometry, fromMs, throughMs, start
   const limits = geometry.limits
   const start = clamp(startCenterY, limits.min, limits.max)
   const quanta = Math.ceil(duration / stepMs)
-  const roundingPadding = 1 + Number.EPSILON * (quanta + 2) *
+  const additionPadding = Number.EPSILON * (quanta + 2) *
     Math.max(1, Math.abs(startCenterY), Math.abs(limits.min), Math.abs(limits.max), Math.abs(velocityY * duration / 1000)) * 4
   let end = clamp(startCenterY + velocityY * (duration / 1000), limits.min, limits.max)
   if (stopCenterY !== undefined) {
@@ -572,7 +572,7 @@ export function prepareCollisionWindowSegment(geometry, fromMs, throughMs, start
   out.stepMs = stepMs
   out.leftEdge = geometry.x
   out.rightEdge = geometry.x + geometry.w
-  out.halfHeight = geometry.h / 2 + roundingPadding
+  out.halfHeight = geometry.h / 2 + (1 + additionPadding)
   out.startCenterY = startCenterY
   out.start = start
   out.end = end
@@ -580,6 +580,14 @@ export function prepareCollisionWindowSegment(geometry, fromMs, throughMs, start
   out.high = Math.max(start, end)
   out.velocityY = velocityY
   out.speedY = velocityY / 1000
+  const sweepLimitY = stopCenterY ?? (velocityY > 0 ? limits.max : limits.min)
+  out.sweepSupported = startCenterY === start && (stopCenterY === undefined ||
+    (stopCenterY >= limits.min && stopCenterY <= limits.max && (stopCenterY - start) * velocityY >= 0))
+  out.sweepStepY = velocityY * (stepMs / 1000)
+  out.sweepStopStep = (sweepLimitY - start) / out.sweepStepY
+  out.sweepMinY = Math.min(start, sweepLimitY)
+  out.sweepMaxY = Math.max(start, sweepLimitY)
+  out.additionPadding = additionPadding
   return out
 }
 
@@ -821,14 +829,7 @@ function isPointInsideShip(x, y, points) {
   return inside
 }
 
-function getSweptShipDistanceSquared(shipRect, previousShipRect, asteroid, stopAtOverlapRadiusSquared) {
-  const points = shipRect.points || updateShipPoints(Array.from({ length: 5 }, () => ({ x: 0, y: 0 })), shipRect)
-  // Translate the start of the circle path into the final ship's frame. The
-  // ship only translates, so this handles touch, tilt and swipe continuously.
-  const ax = (asteroid.previousX ?? asteroid.x) + shipRect.x - previousShipRect.x
-  const ay = asteroid.y + shipRect.y - previousShipRect.y
-  const bx = asteroid.x
-  const by = asteroid.y
+function getShipPathDistanceSquared(points, ax, ay, bx, by, stopAtOverlapRadiusSquared) {
   if (isPointInsideShip(ax, ay, points) || isPointInsideShip(bx, by, points)) return 0
 
   let distanceSquared = Infinity
@@ -839,6 +840,55 @@ function getSweptShipDistanceSquared(shipRect, previousShipRect, asteroid, stopA
     if (stopAtOverlapRadiusSquared !== undefined && distanceSquared < stopAtOverlapRadiusSquared) break
   }
   return distanceSquared
+}
+
+function getSweptShipDistanceSquared(shipRect, previousShipRect, asteroid, stopAtOverlapRadiusSquared) {
+  const points = shipRect.points || updateShipPoints(Array.from({ length: 5 }, () => ({ x: 0, y: 0 })), shipRect)
+  // Translate the start of the circle path into the final ship's frame. The
+  // ship only translates, so this handles touch, tilt and swipe continuously.
+  const ax = (asteroid.previousX ?? asteroid.x) + shipRect.x - previousShipRect.x
+  const ay = asteroid.y + shipRect.y - previousShipRect.y
+  return getShipPathDistanceSquared(points, ax, ay, asteroid.x, asteroid.y, stopAtOverlapRadiusSquared)
+}
+
+// The window uses inclusive test instants, so its first sweep begins one
+// quantum earlier. The caller supplies the canonical start pose for this
+// segment and an anchored asteroid in simulation coordinates.
+export function isCollisionWindowClear(asteroid, segment, window, shipRect) {
+  if (!segment?.sweepSupported || !shipRect.points || asteroid.motionBaseAt === undefined) return false
+  const { start, sweepStepY, sweepStopStep, sweepMinY, sweepMaxY } = segment
+  if (shipRect.y !== Math.round(start - shipRect.h / 2)) return false
+  const firstAt = window.firstMs - segment.stepMs
+  const lastAt = window.lastMs
+  const ax = getAsteroidXAt(asteroid, firstAt)
+  const bx = getAsteroidXAt(asteroid, lastAt)
+  let ay = asteroid.y
+  let by = asteroid.y
+  // Keep near tangencies for the canonical predicate. The scale also covers
+  // cancellation in anchor-based X evaluation and near-parallel edge tests.
+  let radius = asteroid.radius + Number.EPSILON * 64 * Math.max(1,
+    Math.abs(asteroid.motionBaseX), Math.abs(ax), Math.abs(bx), Math.abs(ay),
+    Math.abs(shipRect.x) + shipRect.w, Math.abs(shipRect.y) + shipRect.h,
+    Math.abs(sweepMinY), Math.abs(sweepMaxY), asteroid.radius)
+  if (sweepStepY !== 0 && sweepMinY !== sweepMaxY) {
+    const firstStep = (firstAt - segment.fromMs) / segment.stepMs
+    const lastStep = (lastAt - segment.fromMs) / segment.stepMs
+    const firstY = clamp(start + sweepStepY * firstStep, sweepMinY, sweepMaxY)
+    const lastY = clamp(start + sweepStepY * lastStep, sweepMinY, sweepMaxY)
+    const originY = asteroid.y + shipRect.y + shipRect.h / 2
+    ay = originY - firstY
+    by = originY - lastY
+    radius += 0.5 + segment.additionPadding
+    if (firstStep < sweepStopStep && sweepStopStep < lastStep) {
+      // The clamped line bends only at the stop. Its largest distance from
+      // the endpoint chord is bounded by the vertical gap at that bend.
+      radius += Math.abs(lastY - firstY) * ((lastStep - sweepStopStep) / (lastStep - firstStep))
+    }
+  }
+  // Each rounded canonical endpoint is in this tube at its own time. Linear
+  // interpolation keeps every 10 ms relative sweep in the same tube.
+  const radiusSquared = radius * radius
+  return getShipPathDistanceSquared(shipRect.points, ax, ay, bx, by, radiusSquared) > radiusSquared
 }
 
 // The caller has already checked the collision band and cooldown.

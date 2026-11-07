@@ -161,7 +161,8 @@ function compactRecords(report) {
     steady.objectVisits.sum, steady.candidates.sum, steady.asteroids.max,
     steady.steps.counts[0], steady.pausedMs.count - steady.pausedMs.counts[0],
     meta.fullMaterializations || 0, meta.fullAsteroidVisits || 0, meta.sensorReads || 0,
-    meta.skippedQuanta || 0, meta.eventQuanta || 0, report.probeQuanta])
+    meta.skippedQuanta || 0, meta.eventQuanta || 0, report.probeQuanta,
+    meta.clearWindows || 0, meta.clearWindowQuanta || 0])
   for (let index = 0; index < PHASES.length; index += 1) {
     const hist = report.sampling.steady[index]
     record('phase', [index, hist.count, hist.sum, hist.max, hist.invalid])

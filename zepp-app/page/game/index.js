@@ -40,6 +40,7 @@ import {
   getNextSpawnQuantum,
   prepareCollisionWindowSegment,
   getAsteroidCollisionWindow,
+  isCollisionWindowClear,
   getAsteroidXAt,
   getSweptCollisionDamage,
   getSweptShipBounds,
@@ -67,7 +68,7 @@ const SQUARE_HUD_CORNER_RADIUS = 36
 const HUD_DISPLAY_HP_SPEED = 72
 const SIMULATION_STEP_SECONDS = SIMULATION_STEP_MS / 1000
 // Temporary physical-watch diagnostic build; this does not change game timing.
-const DIAGNOSTIC_VERSION = '2.3.40'
+const DIAGNOSTIC_VERSION = '2.3.41'
 
 function resetStallFrame(frame, inbox) {
   frame.inputMs = 0
@@ -365,7 +366,7 @@ Page({
     const diagnosticRun = diagnosticSession.index
     this.diagnosticMetadata = {
       version: DIAGNOSTIC_VERSION,
-      baselineCommit: '996703a',
+      baselineCommit: 'e859368',
       runIndex: diagnosticRun,
       phaseSampleEvery: 0,
       modePersisted: diagnosticSession.persisted,
@@ -388,6 +389,8 @@ Page({
       skippedQuanta: 0,
       eventQuanta: 0,
       probeQuanta: 0,
+      clearWindows: 0,
+      clearWindowQuanta: 0,
       measureDamage: true,
       foldedSwipeMoves: 0,
       stallFrame: {},
@@ -868,12 +871,22 @@ Page({
       if (asteroid.motionRemoved) continue
       // This object cannot damage again anywhere in the remaining segment.
       // Its analytic position still advances at the usual scene boundaries.
-      if (asteroid.lastHitAt + COLLISION_COOLDOWN_MS > throughMs) continue
+      const readyAt = asteroid.lastHitAt + COLLISION_COOLDOWN_MS
+      if (readyAt > throughMs) continue
       const slot = this.collisionWindows[count] || (this.collisionWindows[count] = {})
-      if (getAsteroidCollisionWindow(asteroid, segment, slot)) {
-        slot.asteroid = asteroid
-        count += 1
+      if (!getAsteroidCollisionWindow(asteroid, segment, slot)) continue
+      if (Number.isFinite(readyAt)) {
+        slot.firstMs = Math.max(slot.firstMs, Math.ceil(readyAt / SIMULATION_STEP_MS) * SIMULATION_STEP_MS)
       }
+      if (slot.firstMs > slot.lastMs) continue
+      // A single candidate quantum already needs only one exact probe.
+      if (slot.lastMs > slot.firstMs && isCollisionWindowClear(asteroid, segment, slot, this.shipRect)) {
+        this.diagnosticMetadata.clearWindows += 1
+        this.diagnosticMetadata.clearWindowQuanta += 1 + (slot.lastMs - slot.firstMs) / SIMULATION_STEP_MS
+        continue
+      }
+      slot.asteroid = asteroid
+      count += 1
     }
     this.collisionWindowCount = count
     if (probe) probe.windowsMs += Date.now() - startedAt

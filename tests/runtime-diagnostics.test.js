@@ -460,7 +460,7 @@ test('compact export preserves summary measurements and bounded representative c
   })
   assert.equal(metrics[0].d[5], null, 'p95 overflow has no finite upper bound')
   assert.equal(metrics[3].d[5], 25)
-  assert.deepEqual(one('work'), [5, 1, 1, 7, 3, 7, 4, 0, 144, 536, 0, 820, 100, 0])
+  assert.deepEqual(one('work'), [5, 1, 1, 7, 3, 7, 4, 0, 144, 536, 0, 820, 100, 0, 0, 0])
   const phases = records.filter(record => record.k === 'phase')
   assert.equal(phases.length, 6)
   phases.forEach((record, index) => assert.deepEqual(record.d, [index, 1, index + 1, index + 1, 0]))
@@ -498,7 +498,7 @@ test('compact records stay native-sized for all supported control, wrist and spe
       assert.equal(records.length, 22)
       assert.equal(records.filter(record => record.k === 'pair').length, 1)
       assert.equal(records.find(record => record.k === 'metric' && record.d[0] === 0).d[5], null)
-      assert.deepEqual(records.find(record => record.k === 'work').d.slice(8), [144, 536, 920, 820, 100, 0])
+      assert.deepEqual(records.find(record => record.k === 'work').d.slice(8), [144, 536, 920, 820, 100, 0, 0, 0])
     }
   }
 })
@@ -613,7 +613,7 @@ test('analytic skips and contact probes preserve logical work while compact phas
   assert.equal(expected.clock.elapsedMs, 100)
   assert.deepEqual(expected.trace.rows.map(row => row[expected.trace.columns.indexOf('steps')]), [7, 0, 3])
   assert.deepEqual(records.find(record => record.k === 'clock').d.slice(1, 6), [3, 10, 100, 430, 0])
-  assert.deepEqual(records.find(record => record.k === 'work').d, [2, 7, 7, 19, 8, 7, 1, 1, 0, 0, 0, 0, 0, 2])
+  assert.deepEqual(records.find(record => record.k === 'work').d, [2, 7, 7, 19, 8, 7, 1, 1, 0, 0, 0, 0, 0, 2, 0, 0])
   assert.deepEqual(records.find(record => record.k === 'terminal').d, [1, 0, 0, 0, 0, 3])
   for (const collection of ['steady', 'terminal']) {
     for (const name of Object.keys(compact.diag[collection])) {

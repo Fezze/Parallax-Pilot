@@ -150,3 +150,19 @@ bounded pool, preserving existing coalescing and timestamp rules. Only the
 timer advances time and submits the picture. A truly frozen callback
 skips the same-time scene scans and publication; a changed interpolation
 remainder still draws.
+
+## Whole-window rejection in 2.3.41
+
+After finding a conservative candidate window and clipping it to initial
+cooldown readiness, TOUCH and SWIPE can reject a multi-quantum interval
+as a unit. The asteroid sweep starts one quantum before the first
+possible test. For stationary motion it is checked against the fixed
+rounded polygon. For moving segments a relative endpoint chord is
+expanded by the bound for canonical Y rounding, numerical error and a
+possible bend at the stop or movement limit.
+
+Every canonical sweep lies in that expanded path because its endpoints
+are covered and the interpolation between them is linear. A positive
+separation can remove the window. Remaining candidates use the original
+exact tests at the original quanta. Input segment boundaries, spawning,
+TILT reads, damage, and fatal scoring retain their chronology.

@@ -207,6 +207,8 @@ test('compact slow updates keep the two worst valid steady updates across the ru
       diagnostic.beginStep(0)
       diagnostic.recordSkippedSteps(5)
       for (let i = 0; i < 5; i += 1) diagnostic.recordContactProbe(4, 1)
+      meta.clearWindows = 3
+      meta.clearWindowQuanta = 24
     }
     if (frame === 70) {
       stallFrame.contactMs = -1
@@ -232,6 +234,9 @@ test('compact slow updates keep the two worst valid steady updates across the ru
   assert.deepEqual(result.incomplete, [])
   assert.ok(result.reports[0].trace.rows.every(row => row[0] !== 1))
   assert.equal(result.reports[0].work.probeQuanta, 5)
+  assert.equal(result.reports[0].work.clearWindows, 3)
+  assert.equal(result.reports[0].work.clearWindowQuanta, 24)
+  assert.ok(result.reports[0].caveats.some(caveat => caveat.includes('including overlaps')))
   assert.equal(result.reports[0].work.objectVisitsSum, 20)
   assert.equal(result.reports[0].work.candidatesSum, 5)
   assert.deepEqual(result.reports[0].slowUpdates, [
@@ -260,6 +265,32 @@ test('compact slow updates use null for a missing next arrival and reject malfor
   const malformed = decodeDiagnostics(compactLines(records).join('\n'))
   assert.equal(malformed.reports.length, 0)
   assert.match(malformed.errors[0].message, /Invalid stall record/)
+})
+
+test('compact work retains all earlier tuple lengths and rejects partial sweep counters', () => {
+  const records = compactRecords()
+  const work = records.find(([kind]) => kind === 'work')
+  const complete = [...work[1], 2, 8, 3, 20, 2, 5, 7, 36]
+  for (const length of [8, 11, 13, 14, 16]) {
+    work[1] = complete.slice(0, length)
+    const result = decodeDiagnostics(compactLines(records).join('\n'))
+    assert.deepEqual(result.errors, [])
+    const { work: decoded } = result.reports[0]
+    assert.equal(decoded.fullMaterializations, length >= 11 ? 2 : undefined)
+    assert.equal(decoded.skippedQuanta, length >= 13 ? 20 : undefined)
+    assert.equal(decoded.probeQuanta, length >= 14 ? 5 : undefined)
+    assert.equal('clearWindows' in decoded, length === 16)
+    assert.equal('clearWindowQuanta' in decoded, length === 16)
+    if (length === 16) {
+      assert.equal(decoded.clearWindows, 7)
+      assert.equal(decoded.clearWindowQuanta, 36)
+    }
+  }
+
+  work[1] = complete.slice(0, 15)
+  const malformed = decodeDiagnostics(compactLines(records).join('\n'))
+  assert.equal(malformed.reports.length, 0)
+  assert.match(malformed.errors[0].message, /Invalid work record/)
 })
 
 test('the real compact exporter round-trips boolean metadata, first-frame null timings and batching counts', () => {
@@ -291,6 +322,8 @@ test('the real compact exporter round-trips boolean metadata, first-frame null t
   assert.equal(decoded.work.skippedQuanta, 20)
   assert.equal(decoded.work.eventQuanta, 2)
   assert.equal(decoded.work.probeQuanta, 0)
+  assert.equal(decoded.work.clearWindows, 0)
+  assert.equal(decoded.work.clearWindowQuanta, 0)
   assert.match(decoded.caveats[1], /Analytic skips contribute logical steps only/)
   assert.equal(decoded.trace.rows[0][2], null)
 })
