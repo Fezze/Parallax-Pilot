@@ -225,3 +225,5 @@ The latter sums potential canonical candidate instants in the discarded
 windows. Different windows can overlap, so this is not a count of
 executed probes saved. Compare probeQuanta directly for the remaining
 probe workload. Existing physical records retain their original meaning.
+
+The Android Bridge installed 2.3.41/code 92 on physical Balance 2 on November 7, 2026. The installed application uses source commit `8cc36ad`. Native SWIPE run 20 verified ordinary gameplay and the new work record.
