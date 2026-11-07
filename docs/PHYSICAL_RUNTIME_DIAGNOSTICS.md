@@ -202,3 +202,5 @@ time, including any preemption. An isolated long span localizes where to
 investigate. A repeated long span correlated with its workload is stronger
 evidence of a computation bottleneck. Game rules and the timing policy use
 the same admission timestamp as 2.3.38.
+
+The Android Bridge installed 2.3.39/code 90 on physical Balance 2 on November 7, 2026. The instrumented source commit is `996703a`. A native SWIPE run confirmed both slow-update records survive export and decoding.
