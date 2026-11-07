@@ -203,4 +203,15 @@ investigate. A repeated long span correlated with its workload is stronger
 evidence of a computation bottleneck. Game rules and the timing policy use
 the same admission timestamp as 2.3.38.
 
+## Full dispatch and contact probes in 2.3.40
+
+Full event dispatch now covers spawning quanta. The lighter path records
+contact probe time and count separately, including pose-only non-spawn
+TILT quanta. The existing skipped count includes those lighter quanta;
+full plus skipped counts still equals total executed logical steps.
+Probe and full-step timings both include their respective exact contact
+time. The pointer inbox count describes capture volume and the input
+drain duration covers frame-side counter handling. Bounded compaction
+now takes place at native delivery, outside the measured timer callback.
+
 The Android Bridge installed 2.3.39/code 90 on physical Balance 2 on November 7, 2026. The instrumented source commit is `996703a`. A native SWIPE run confirmed both slow-update records survive export and decoding.

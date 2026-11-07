@@ -3,8 +3,9 @@ import assert from 'node:assert/strict'
 import {
   addAsteroidToCollisionGrid, advanceAsteroidsInCollisionGrid,
   calculateCollisionResult, collectCollisionCandidatesFromGrid,
-  createCollisionGrid, createShipRect, getShipYLimits, getSweptCollisionDamage,
-  isAsteroidInCollisionBand,
+  createCollisionGrid, createShipRect, getAsteroidCollisionWindow,
+  getCollisionQuantumWindow, getShipYLimits, getSweptCollisionDamage,
+  isAsteroidInCollisionBand, prepareCollisionWindowSegment,
 } from '../zepp-app/shared/game-core.js'
 
 const viewports = [416, 454, 466, 480].map(width => ({ width, height: width }))
@@ -58,6 +59,27 @@ function oracleSweptDistance(rect, previousRect, asteroid) {
 function hit(rect, asteroid, previousShipRect = rect, now = 1000) {
   return calculateCollisionResult({ shipRect: rect, previousShipRect, asteroid, now }).hit
 }
+
+test('prepared segments reuse scratch across asteroids and respect a swipe stop', () => {
+  const geometry = { x: 100, w: 20, h: 20, limits: { min: 20, max: 200 } }
+  const segment = {}
+  const window = {}
+  assert.equal(prepareCollisionWindowSegment(geometry, 0, 100, 100, 0, 10, undefined, segment), segment)
+
+  const fromLeft = { x: 80, y: 100, radius: 10, vx: 1000 }
+  const fromRight = { x: 150, y: 100, radius: 10, vx: -1000 }
+  assert.equal(getAsteroidCollisionWindow(fromLeft, segment, window), window)
+  assert.deepEqual(window, { firstMs: 10, lastMs: 70 })
+  assert.equal(getAsteroidCollisionWindow(fromRight, segment, window), window)
+  assert.deepEqual(window, { firstMs: 20, lastMs: 80 })
+  assert.deepEqual(getCollisionQuantumWindow(fromRight, geometry, 0, 100, 100, 0), window)
+
+  const stationary = { x: 100, y: 110, radius: 10, vx: 0 }
+  prepareCollisionWindowSegment(geometry, 0, 100, 80, 1000, 10, 88, segment)
+  assert.equal(getAsteroidCollisionWindow(stationary, segment, window), null)
+  prepareCollisionWindowSegment(geometry, 0, 100, 80, 1000, 10, undefined, segment)
+  assert.deepEqual(getAsteroidCollisionWindow(stationary, segment, window), { firstMs: 10, lastMs: 70 })
+})
 
 test('grid contains every independent rectangle-oracle overlap at radii and cell boundaries', t => {
   let comparisons = 0

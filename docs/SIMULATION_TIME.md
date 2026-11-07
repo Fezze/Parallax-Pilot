@@ -133,3 +133,20 @@ timestamp and stops the game timer. A one-shot callback calculates the
 score and writes the existing history format before opening results.
 Teardown consumes an outstanding result before the page exits. Normal
 results receive the completed entry through route parameters.
+
+## Contact-only quanta in 2.3.40
+
+The existing window scheduler still selects a canonical candidate instant.
+At a non-spawn instant, the game advances one ship pose and checks only
+eligible windows using the exact swept collision test. It no longer runs
+the complete spawn and world-dispatch path for a miss or a hit. Spawning
+keeps its original complete step and checks newborns immediately. If
+time remains in the block, the scheduler appends windows for newborns
+and retains conservative windows for the rest of the scene.
+
+TILT retains its per-quantum sensor reads and uses the lighter path on
+non-spawn quanta. Native touch delivery stages commands directly into the
+bounded pool, preserving existing coalescing and timestamp rules. Only the
+timer advances time and submits the picture. A truly frozen callback
+skips the same-time scene scans and publication; a changed interpolation
+remainder still draws.

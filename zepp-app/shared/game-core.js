@@ -549,27 +549,53 @@ export function getCollisionQuantumWindow(
   stopCenterY
 ) {
   if (asteroid.motionRemoved || throughMs < fromMs + stepMs) return null
-  anchorAsteroidMotion(asteroid, fromMs)
-  const duration = throughMs - fromMs
-  const fromX = getAsteroidXAt(asteroid, fromMs)
-  const throughX = getAsteroidXAt(asteroid, throughMs)
-  const left = geometry.x - asteroid.radius
-  const right = geometry.x + geometry.w + asteroid.radius
-  if (Math.max(fromX, throughX) < left || Math.min(fromX, throughX) > right) return null
+  const segment = prepareCollisionWindowSegment(geometry, fromMs, throughMs, startCenterY, velocityY, stepMs, stopCenterY)
+  return getAsteroidCollisionWindow(asteroid, segment, out)
+}
 
+export function prepareCollisionWindowSegment(geometry, fromMs, throughMs, startCenterY, velocityY, stepMs = 10, stopCenterY, out = {}) {
+  if (throughMs < fromMs + stepMs) return null
+  const duration = throughMs - fromMs
   const limits = geometry.limits
   const start = clamp(startCenterY, limits.min, limits.max)
   const quanta = Math.ceil(duration / stepMs)
   const roundingPadding = 1 + Number.EPSILON * (quanta + 2) *
     Math.max(1, Math.abs(startCenterY), Math.abs(limits.min), Math.abs(limits.max), Math.abs(velocityY * duration / 1000)) * 4
-  const halfHeight = geometry.h / 2 + roundingPadding
-  const lowCenter = asteroid.y - asteroid.radius - halfHeight
-  const highCenter = asteroid.y + asteroid.radius + halfHeight
   let end = clamp(startCenterY + velocityY * (duration / 1000), limits.min, limits.max)
   if (stopCenterY !== undefined) {
     end = clamp(end, Math.min(start, stopCenterY), Math.max(start, stopCenterY))
   }
-  if (Math.max(start, end) < lowCenter || Math.min(start, end) > highCenter) return null
+
+  out.fromMs = fromMs
+  out.throughMs = throughMs
+  out.duration = duration
+  out.stepMs = stepMs
+  out.leftEdge = geometry.x
+  out.rightEdge = geometry.x + geometry.w
+  out.halfHeight = geometry.h / 2 + roundingPadding
+  out.startCenterY = startCenterY
+  out.start = start
+  out.end = end
+  out.low = Math.min(start, end)
+  out.high = Math.max(start, end)
+  out.velocityY = velocityY
+  out.speedY = velocityY / 1000
+  return out
+}
+
+export function getAsteroidCollisionWindow(asteroid, segment, out = {}) {
+  if (!segment || asteroid.motionRemoved) return null
+  const { fromMs, throughMs, duration, stepMs, halfHeight, startCenterY, start, end, velocityY, speedY } = segment
+  anchorAsteroidMotion(asteroid, fromMs)
+  const fromX = getAsteroidXAt(asteroid, fromMs)
+  const throughX = getAsteroidXAt(asteroid, throughMs)
+  const left = segment.leftEdge - asteroid.radius
+  const right = segment.rightEdge + asteroid.radius
+  if (Math.max(fromX, throughX) < left || Math.min(fromX, throughX) > right) return null
+
+  const lowCenter = asteroid.y - asteroid.radius - halfHeight
+  const highCenter = asteroid.y + asteroid.radius + halfHeight
+  if (segment.high < lowCenter || segment.low > highCenter) return null
 
   let firstMs = fromMs + stepMs
   let lastMs = throughMs
@@ -586,15 +612,14 @@ export function getCollisionQuantumWindow(
   }
 
   if (velocityY !== 0) {
-    const speed = velocityY / 1000
     let enter = 0
     let exit = duration
     if (velocityY > 0) {
-      if (start < lowCenter) enter = (lowCenter - startCenterY) / speed
-      if (end > highCenter) exit = (highCenter - startCenterY) / speed
+      if (start < lowCenter) enter = (lowCenter - startCenterY) / speedY
+      if (end > highCenter) exit = (highCenter - startCenterY) / speedY
     } else {
-      if (start > highCenter) enter = (highCenter - startCenterY) / speed
-      if (end < lowCenter) exit = (lowCenter - startCenterY) / speed
+      if (start > highCenter) enter = (highCenter - startCenterY) / speedY
+      if (end < lowCenter) exit = (lowCenter - startCenterY) / speedY
     }
     enter = Math.max(0, Math.min(duration, enter))
     exit = Math.max(0, Math.min(duration, exit))

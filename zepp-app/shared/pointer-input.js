@@ -3,51 +3,40 @@ import { MAX_SIMULATION_GAP_MS, SIMULATION_STEP_MS } from './simulation-clock.js
 const POINTER_BUCKET_COUNT = Math.ceil(MAX_SIMULATION_GAP_MS / SIMULATION_STEP_MS) + 1
 export const MAX_POINTER_COMMANDS = 3 * POINTER_BUCKET_COUNT
 
-export function createPointerInbox() {
-  return { samples: [], length: 0, down: false, y: null, downCount: 0, moveCount: 0, upCount: 0 }
+export function createPointerCapture() {
+  return { length: 0, down: false, y: null, downCount: 0, moveCount: 0, upCount: 0 }
 }
 
-export function recordPointerSample(inbox, kind, y, now = Date.now) {
+export function recordPointerSample(capture, queue, clock, controlMode, halfHeight, kind, y, now = Date.now) {
   if (kind === 'move') {
-    inbox.moveCount += 1
-    if (!inbox.down || inbox.y === y) return
+    capture.moveCount += 1
+    if (!capture.down || capture.y === y) return
   } else if (kind === 'down') {
-    inbox.downCount += 1
-    inbox.down = true
+    capture.downCount += 1
+    capture.down = true
   } else {
-    inbox.upCount += 1
-    inbox.down = false
+    capture.upCount += 1
+    capture.down = false
   }
-  inbox.y = kind === 'up' ? null : y
+  capture.y = kind === 'up' ? null : y
+  capture.length += 1
+  if (controlMode === 'tilt') return
 
-  const index = inbox.length
-  const sample = inbox.samples[index] || (inbox.samples[index] = {})
-  sample.kind = kind
-  sample.y = y
-  sample.at = now()
-  inbox.length += 1
-}
-
-export function consumePointerSamples(inbox, queue, clock, controlMode, halfHeight) {
+  // The presentation callback owns the clock, which stays stable between frames.
   // Filter before compaction so a redundant touch move cannot replace a
   // crossing's timestamp during a long gap or a wall-clock rollback.
-  for (let index = 0; index < inbox.length; index += 1) {
-    const { kind, y, at } = inbox.samples[index]
-    if (kind === 'move' && controlMode === 'touch' &&
-        (y < halfHeight) === (queue.y < halfHeight)) continue
-    enqueuePointerInput(queue, kind, y, at, clock)
-  }
-  inbox.length = 0
+  if (kind === 'move' && controlMode === 'touch' &&
+      (y < halfHeight) === (queue.y < halfHeight)) return
+  enqueuePointerInput(queue, kind, y, now(), clock)
 }
 
-export function clearPointerSamples(inbox) {
-  inbox.samples.length = 0
-  inbox.length = 0
-  inbox.down = false
-  inbox.y = null
-  inbox.downCount = 0
-  inbox.moveCount = 0
-  inbox.upCount = 0
+export function clearPointerCapture(capture) {
+  capture.length = 0
+  capture.down = false
+  capture.y = null
+  capture.downCount = 0
+  capture.moveCount = 0
+  capture.upCount = 0
 }
 
 export function createPointerInputQueue(keepSwipeTarget = false) {

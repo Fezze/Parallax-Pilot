@@ -13,7 +13,8 @@ const COMPACT_GROUP_TIMING = [0, 3, 4, 5]
 const COMPACT_TRACE_COLUMNS = ['frame', 'atMs', 'gapMs', 'previousCallbackMs', 'callbackMs',
   'updateMs', 'drawSubmissionMs', 'steps', 'pausedMs']
 const STALL_WORK_FIELDS = ['inputMs', 'scanMs', 'windowsMs', 'quietMs', 'stepsMs', 'spawnMs',
-  'contactMs', 'materializeMs', 'inbox', 'commands', 'blocks', 'eventSteps', 'contactChecks']
+  'contactMs', 'materializeMs', 'inbox', 'commands', 'blocks', 'eventSteps', 'contactChecks',
+  'probeMs', 'probeSteps']
 export const SLOW_UPDATE_FIELDS = ['frame', 'incomingGapMs', 'updateMs', 'drawSubmissionMs',
   'nextGapMs', 'logicalQuanta', ...STALL_WORK_FIELDS, 'hit']
 let nextRun = 0
@@ -160,7 +161,7 @@ function compactRecords(report) {
     steady.objectVisits.sum, steady.candidates.sum, steady.asteroids.max,
     steady.steps.counts[0], steady.pausedMs.count - steady.pausedMs.counts[0],
     meta.fullMaterializations || 0, meta.fullAsteroidVisits || 0, meta.sensorReads || 0,
-    meta.skippedQuanta || 0, meta.eventQuanta || 0])
+    meta.skippedQuanta || 0, meta.eventQuanta || 0, report.probeQuanta])
   for (let index = 0; index < PHASES.length; index += 1) {
     const hist = report.sampling.steady[index]
     record('phase', [index, hist.count, hist.sum, hist.max, hist.invalid])
@@ -216,6 +217,7 @@ export class RuntimeDiagnostics {
     this.frameCount = 0
     this.stepCount = 0
     this.executedStepCount = 0
+    this.probeQuanta = 0
     this.sampleCount = 0
     this.sampleEvery = Number.isFinite(meta.phaseSampleEvery) ? meta.phaseSampleEvery : 13
     if (this.sampleEvery < 1) this.sampleEvery = 0
@@ -393,6 +395,13 @@ export class RuntimeDiagnostics {
     // executed canonical steps, so analytic spans cannot hide event costs.
     this.stepCount += count
     this.frameSteps += count
+  }
+
+  recordContactProbe(objectCount, candidateCount) {
+    if (!this.enabled || !this.active) return
+    this.probeQuanta += 1
+    this.frameVisits += objectCount
+    this.frameCandidates += candidateCount
   }
 
   markStepPhase(index) {
@@ -597,7 +606,7 @@ export class RuntimeDiagnostics {
     const report = {
       schema: 1, runId: this.runId, meta: this.meta, reason: this.reason,
       wallMs: this.finishWallMs,
-      frames: this.frameCount, steps: this.stepCount,
+      frames: this.frameCount, steps: this.stepCount, probeQuanta: this.probeQuanta,
       clock: { elapsedMs: this.finalElapsed, pausedMs: this.finalPaused, pendingMs: this.finalPending,
         observedElapsedMs: this.finalElapsed - this.initialElapsed, observedPausedMs: this.finalPaused - this.initialPaused },
       input: { names: ['down', 'move', 'up', 'cancel', 'other'], counts: this.pointerCounts },
@@ -629,7 +638,7 @@ export class RuntimeDiagnostics {
     }
     if (this.compactExport) {
       report.slowUpdates = this.slowUpdates
-      report.caveats.push('Phase sampling follows executed canonical steps, independently of logical step totals; analytically skipped quanta have no phase sample or object/candidate visits.')
+      report.caveats.push('Phase sampling follows executed canonical steps. Contact probes contribute object and candidate visits, and analytic skips contribute logical steps only.')
       const records = compactRecords(report)
       for (let part = 0; part < records.length; part += 1) {
         const entry = records[part]

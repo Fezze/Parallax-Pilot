@@ -48,7 +48,8 @@ async function game(run, runIndex = 0) {
 
 function observer(overrides = {}) {
   return { enabled: true, pointer() {}, beginFrame() {}, markUpdate() {}, endFrame() {}, recordHaptic() {},
-    beginStep() { return false }, markStepPhase() {}, endStep() {}, recordSkippedSteps() {}, requestFinish() {}, ...overrides }
+    beginStep() { return false }, markStepPhase() {}, endStep() {}, recordSkippedSteps() {}, recordContactProbe() {},
+    requestFinish() {}, ...overrides }
 }
 
 function possibleContact(page) {
@@ -70,6 +71,9 @@ test('diagnostic overhead does not change the timestamp admitted by the actual g
 test('all actual world-step phases are connected in order and final frame timing follows drawing', async () => {
   await game(({ page, at }) => {
     possibleContact(page)
+    page.lastSpawnAt = -1200
+    page.scheduledLastSpawnAt = page.lastSpawnAt
+    page.nextSpawnAt = 10
     const events = []
     const original = page.runtimeDiagnostics
     page.runtimeDiagnostics = observer({
@@ -109,7 +113,7 @@ test('natural finish and synchronous destruction defer reporting until the termi
   await game(({ page, logs, at }) => {
     possibleContact(page)
     const reports = () => logs.filter(line => line.startsWith('PP_DIAG ') || line.startsWith('PP_METRIC '))
-    page.stepSimulation = function () {
+    page.stepContacts = function () {
       this.finishRun()
       this.onDestroy()
       assert.equal(reports().length, 0)
@@ -172,7 +176,8 @@ test('the stall probe measures collision window work outside executed physics st
     assert.equal(probe.windowsMs, 25)
     assert.equal(probe.stepsMs, 0)
     assert.equal(probe.blocks, 1)
-    assert.equal(probe.eventSteps, 1)
+    assert.equal(probe.eventSteps, 0)
+    assert.equal(probe.probeSteps, 1)
     assert.equal(probe.contactChecks, 1)
     assert.equal(page.simulationClock.elapsedMs, 20)
   })

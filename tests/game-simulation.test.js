@@ -22,16 +22,17 @@ test('a hit inside an admitted block immediately prevents remaining immune steps
     page.asteroids.push(asteroid)
     tick(200)
     assert.equal(asteroid.lastHitAt, 10)
-    assert.equal(page.diagnosticMetadata.eventQuanta, 1)
-    assert.equal(page.diagnosticMetadata.skippedQuanta, 19)
+    assert.equal(page.diagnosticMetadata.eventQuanta, 0)
+    assert.equal(page.diagnosticMetadata.probeQuanta, 1)
+    assert.equal(page.diagnosticMetadata.skippedQuanta, 20)
     const afterHit = page.hp
     tick(260)
     assert.equal(page.hp, afterHit)
-    assert.equal(page.diagnosticMetadata.eventQuanta, 1)
+    assert.equal(page.diagnosticMetadata.probeQuanta, 1)
     tick(270)
     assert.equal(asteroid.lastHitAt, 270)
     assert.ok(page.hp < afterHit)
-    assert.equal(page.diagnosticMetadata.eventQuanta, 2)
+    assert.equal(page.diagnosticMetadata.probeQuanta, 2)
   })
 })
 
@@ -49,17 +50,19 @@ test('dense contact during immunity skips dispatch and resumes damage at the exa
     assert.equal(page.diagnosticMetadata.skippedQuanta, 20)
     tick(260)
     assert.ok(page.hp < 10000)
-    assert.equal(page.diagnosticMetadata.eventQuanta, 1)
+    assert.equal(page.diagnosticMetadata.eventQuanta, 0)
+    assert.equal(page.diagnosticMetadata.probeQuanta, 1)
     assert.ok(page.asteroids.every(a => a.lastHitAt === 260))
     const afterHit = page.hp
     tick(510)
     assert.equal(page.hp, afterHit)
-    assert.equal(page.diagnosticMetadata.eventQuanta, 1)
+    assert.equal(page.diagnosticMetadata.probeQuanta, 1)
     tick(520)
     assert.ok(page.hp < afterHit)
     assert.ok(page.asteroids.every(a => a.lastHitAt === 520))
-    assert.equal(page.diagnosticMetadata.eventQuanta, 2)
-    assert.equal(page.diagnosticMetadata.skippedQuanta, 50)
+    assert.equal(page.diagnosticMetadata.eventQuanta, 0)
+    assert.equal(page.diagnosticMetadata.probeQuanta, 2)
+    assert.equal(page.diagnosticMetadata.skippedQuanta, 52)
   })
 })
 
@@ -77,7 +80,43 @@ test('one asteroid cooldown does not delay another independent contact', async (
     tick(400)
     assert.deepEqual(page.asteroids.map(a => a.lastHitAt), [260, 390])
     assert.ok(page.hp < afterFirst)
-    assert.equal(page.diagnosticMetadata.eventQuanta, 2)
+    assert.equal(page.diagnosticMetadata.eventQuanta, 0)
+    assert.equal(page.diagnosticMetadata.probeQuanta, 2)
+  })
+})
+
+test('a 25-quantum near miss performs exact tests without dispatching the world', async () => {
+  for (const controlMode of ['touch', 'swipe']) for (const wristSide of ['left', 'right']) {
+    await withGame({ settings: { controlMode, wristSide } }, ({ page, tick }) => {
+      const ship = page.shipRect
+      const initialY = page.shipCenterY
+      const x = wristSide === 'left' ? ship.x - 7 : ship.x + ship.w + 7
+      const asteroid = { id: 'corner-pass', x, y: ship.y - 7, radius: 8, vx: 0, lastHitAt: -Infinity }
+      page.asteroids.push(asteroid)
+      assert.equal(calculateCollisionResult({ shipRect: ship, asteroid, now: 10 }).hit, false)
+      tick(250)
+      assert.equal(page.simulationClock.elapsedMs, 250)
+      assert.equal(page.shipCenterY, initialY)
+      assert.equal(page.hp, 100)
+      assert.equal(asteroid.lastHitAt, -Infinity)
+      assert.equal(page.diagnosticMetadata.eventQuanta, 0)
+      assert.equal(page.diagnosticMetadata.probeQuanta, 25)
+      assert.equal(page.runtimeDiagnostics.frameCandidates, 25)
+      assert.equal(page.diagnosticMetadata.fullMaterializations, 1)
+    })
+  }
+})
+
+test('empty TILT catch-up keeps every sensor read without dispatching the world', async () => {
+  await withGame({ settings: { controlMode: 'tilt' } }, ({ page, tick }) => {
+    const initialY = page.shipCenterY
+    page.accelerometer.current.y = 0.4
+    tick(250)
+    assert.equal(page.simulationClock.elapsedMs, 250)
+    assert.notEqual(page.shipCenterY, initialY)
+    assert.equal(page.diagnosticMetadata.sensorReads, 25)
+    assert.equal(page.diagnosticMetadata.eventQuanta, 0)
+    assert.equal(page.runtimeDiagnostics.frameCandidates, 0)
   })
 })
 
@@ -450,11 +489,13 @@ test('long stalls freeze the full world, preserve cooldowns and create no spawn 
     page.asteroids.push(asteroid)
     tick(20)
     const before = world(page)
+    const materializations = page.diagnosticMetadata.fullMaterializations
     const drawCount = canvas.__getDrawCalls().filter((call) => call.method === 'drawRect').length
     tick(60020)
     assert.deepEqual(world(page), before)
     assert.equal(page.simulationClock.pausedMs, 60000)
-    assert.equal(canvas.__getDrawCalls().filter((call) => call.method === 'drawRect').length, drawCount + 1)
+    assert.equal(page.diagnosticMetadata.fullMaterializations, materializations)
+    assert.equal(canvas.__getDrawCalls().filter((call) => call.method === 'drawRect').length, drawCount)
     tick(60030)
     assert.equal(page.hp, before.hp)
     tick(60270)

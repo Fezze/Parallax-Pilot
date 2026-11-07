@@ -188,7 +188,7 @@ test('compact slow updates keep the two worst valid steady updates across the ru
   const stallFrame = {
     inputMs: 1, scanMs: 2, windowsMs: 3, quietMs: 4, stepsMs: 20, spawnMs: 6,
     contactMs: 7, materializeMs: 8, inbox: 9, commands: 10, blocks: 11,
-    eventSteps: 12, contactChecks: 13,
+    eventSteps: 12, contactChecks: 13, probeMs: 8, probeSteps: 5,
   }
   const meta = {
     compactExport: true, measureDamage: true, stallFrame, version: '2.3.37', deviceSource: 9568513,
@@ -206,10 +206,13 @@ test('compact slow updates keep the two worst valid steady updates across the ru
       meta.frameHit = true
       diagnostic.beginStep(0)
       diagnostic.recordSkippedSteps(5)
+      for (let i = 0; i < 5; i += 1) diagnostic.recordContactProbe(4, 1)
     }
     if (frame === 70) {
       stallFrame.contactMs = -1
       stallFrame.contactChecks = 1e100
+      stallFrame.probeMs = NaN
+      stallFrame.probeSteps = 1e100
     }
     const update = frame === 1 ? 41 : frame === 2 ? 40 : frame === 3 ? 52 :
       frame === 70 ? 45 : frame === 71 ? 80 : 1
@@ -228,21 +231,30 @@ test('compact slow updates keep the two worst valid steady updates across the ru
   assert.deepEqual(result.errors, [])
   assert.deepEqual(result.incomplete, [])
   assert.ok(result.reports[0].trace.rows.every(row => row[0] !== 1))
+  assert.equal(result.reports[0].work.probeQuanta, 5)
+  assert.equal(result.reports[0].work.objectVisitsSum, 20)
+  assert.equal(result.reports[0].work.candidatesSum, 5)
   assert.deepEqual(result.reports[0].slowUpdates, [
     { frame: 70, incomingGapMs: 61, updateMs: 45, drawSubmissionMs: 4, nextGapMs: 60, logicalQuanta: 0,
-      ...stallFrame, contactMs: null, contactChecks: 46654, hit: false },
+      ...stallFrame, contactMs: null, contactChecks: 46654, probeMs: null, probeSteps: 46654, hit: false },
     { frame: 1, incomingGapMs: null, updateMs: 41, drawSubmissionMs: 4, nextGapMs: 61, logicalQuanta: 6,
-      ...stallFrame, contactMs: 7, contactChecks: 13, hit: true },
+      ...stallFrame, contactMs: 7, contactChecks: 13, probeMs: 8, probeSteps: 5, hit: true },
   ])
 })
 
 test('compact slow updates use null for a missing next arrival and reject malformed records', () => {
   const records = compactRecords()
+  records[0][1][1] = '2.3.39'
+  records.find(([kind]) => kind === 'work')[1].push(2, 8, 0, 20, 2)
   const packed = '0001' + 'zzz005002zzz000' + '000'.repeat(13) + '0'
   records.push(['stall', [packed]])
   const result = decodeDiagnostics(compactLines(records).join('\n'))
   assert.deepEqual(result.errors, [])
   assert.equal(result.reports[0].slowUpdates[0].nextGapMs, null)
+  assert.equal('probeMs' in result.reports[0].slowUpdates[0], false)
+  assert.equal('probeSteps' in result.reports[0].slowUpdates[0], false)
+  assert.equal(result.reports[0].work.eventQuanta, 2)
+  assert.equal('probeQuanta' in result.reports[0].work, false)
 
   records.push(['stall', [packed.slice(1)]])
   const malformed = decodeDiagnostics(compactLines(records).join('\n'))
@@ -278,7 +290,8 @@ test('the real compact exporter round-trips boolean metadata, first-frame null t
   assert.equal(decoded.work.fullAsteroidVisits, 8)
   assert.equal(decoded.work.skippedQuanta, 20)
   assert.equal(decoded.work.eventQuanta, 2)
-  assert.match(decoded.caveats[1], /skipped logical quanta produce no phase samples/)
+  assert.equal(decoded.work.probeQuanta, 0)
+  assert.match(decoded.caveats[1], /Analytic skips contribute logical steps only/)
   assert.equal(decoded.trace.rows[0][2], null)
 })
 

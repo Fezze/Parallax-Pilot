@@ -460,7 +460,7 @@ test('compact export preserves summary measurements and bounded representative c
   })
   assert.equal(metrics[0].d[5], null, 'p95 overflow has no finite upper bound')
   assert.equal(metrics[3].d[5], 25)
-  assert.deepEqual(one('work'), [5, 1, 1, 7, 3, 7, 4, 0, 144, 536, 0, 820, 100])
+  assert.deepEqual(one('work'), [5, 1, 1, 7, 3, 7, 4, 0, 144, 536, 0, 820, 100, 0])
   const phases = records.filter(record => record.k === 'phase')
   assert.equal(phases.length, 6)
   phases.forEach((record, index) => assert.deepEqual(record.d, [index, 1, index + 1, index + 1, 0]))
@@ -498,7 +498,7 @@ test('compact records stay native-sized for all supported control, wrist and spe
       assert.equal(records.length, 22)
       assert.equal(records.filter(record => record.k === 'pair').length, 1)
       assert.equal(records.find(record => record.k === 'metric' && record.d[0] === 0).d[5], null)
-      assert.deepEqual(records.find(record => record.k === 'work').d.slice(8), [144, 536, 920, 820, 100])
+      assert.deepEqual(records.find(record => record.k === 'work').d.slice(8), [144, 536, 920, 820, 100, 0])
     }
   }
 })
@@ -564,19 +564,22 @@ test('releasing a deferred export during a callback still includes the complete 
   assert.equal(result.damage.resultsRouteMs, null)
 })
 
-test('skipped logical quanta preserve work totals while compact phases follow executed steps', () => {
+test('analytic skips and contact probes preserve logical work while compact phases follow full steps', () => {
   const full = harness({ phaseSampleEvery: 3 })
   const compact = harness({ phaseSampleEvery: 3, compactExport: true })
   for (const h of [full, compact]) {
     const initialReads = h.reads()
     h.diag.recordSkippedSteps(10)
+    h.diag.recordContactProbe(999, 999)
     assert.equal(h.diag.stepCount, 0, 'inactive skips are ignored')
+    assert.equal(h.diag.probeQuanta, 0, 'inactive probes are ignored')
     h.set(10)
     h.diag.beginFrame(10, h.clock, false, 7)
     for (const invalid of [0, -1, NaN, Infinity, 1.5]) h.diag.recordSkippedSteps(invalid)
     assert.equal(h.diag.stepCount, 0)
     h.diag.recordSkippedSteps(3)
-    assert.equal(h.reads(), initialReads, 'skipping makes no clock observations')
+    h.diag.recordContactProbe(5, 2)
+    assert.equal(h.reads(), initialReads, 'skipping and probes make no clock observations')
     assert.equal(h.diag.sampleCount, 0)
     assert.equal(sampleStep(h), true, 'the first executed compact step and logical legacy step 4 are sampled')
     h.diag.recordSkippedSteps(2)
@@ -592,21 +595,25 @@ test('skipped logical quanta preserve work totals while compact phases follow ex
     h.set(510)
     h.diag.beginFrame(510, h.clock, true, 7)
     h.diag.recordSkippedSteps(3)
+    h.diag.recordContactProbe(8, 3)
     h.clock.elapsedMs = 100
     h.diag.markUpdate(510)
     h.diag.endFrame(510, h.clock, true)
     h.diag.recordSkippedSteps(10)
+    h.diag.recordContactProbe(999, 999)
     assert.equal(h.diag.stepCount, 10, 'disabled skips are ignored')
+    assert.equal(h.diag.probeQuanta, 2, 'disabled probes are ignored')
     assert.equal(h.diag.sampleCount, h === full ? 2 : 1, 'compact samples are independent of skipped logical quanta')
     assert.equal(h.diag.executedStepCount, 2)
   }
   const expected = report(full)
   const records = compactReport(compact)
   assert.equal(expected.steps, 10)
+  assert.equal(expected.probeQuanta, 2)
   assert.equal(expected.clock.elapsedMs, 100)
   assert.deepEqual(expected.trace.rows.map(row => row[expected.trace.columns.indexOf('steps')]), [7, 0, 3])
   assert.deepEqual(records.find(record => record.k === 'clock').d.slice(1, 6), [3, 10, 100, 430, 0])
-  assert.deepEqual(records.find(record => record.k === 'work').d, [2, 7, 7, 14, 6, 7, 1, 1, 0, 0, 0, 0, 0])
+  assert.deepEqual(records.find(record => record.k === 'work').d, [2, 7, 7, 19, 8, 7, 1, 1, 0, 0, 0, 0, 0, 2])
   assert.deepEqual(records.find(record => record.k === 'terminal').d, [1, 0, 0, 0, 0, 3])
   for (const collection of ['steady', 'terminal']) {
     for (const name of Object.keys(compact.diag[collection])) {

@@ -222,10 +222,11 @@ function validateTuple(tuple, length, label, nullable = []) {
 function decodeSlowUpdate(data) {
   const [packed] = data
   const expectedLength = 4 + (SLOW_UPDATE_FIELDS.length - 2) * 3 + 1
-  if (data.length !== 1 || typeof packed !== 'string' || packed.length !== expectedLength ||
+  const lengthBeforeProbes = 4 + 18 * 3 + 1
+  if (data.length !== 1 || typeof packed !== 'string' || ![lengthBeforeProbes, expectedLength].includes(packed.length) ||
       !/^[0-9a-z]+[01]$/.test(packed)) throw new Error('Invalid stall record')
   const row = { frame: Number.parseInt(packed.slice(0, 4), 36) }
-  for (let i = 1; i < SLOW_UPDATE_FIELDS.length - 1; i += 1) {
+  for (let i = 1; i <= (packed.length - 5) / 3; i += 1) {
     const offset = 4 + (i - 1) * 3
     const digits = packed.slice(offset, offset + 3)
     row[SLOW_UPDATE_FIELDS[i]] = digits === 'zzz' ? null : Number.parseInt(digits, 36)
@@ -265,7 +266,7 @@ function assembleCompact(runId, chunks) {
     else if (kind === 'phase') putIndexed(kind, data, PHASE_NAMES.length, 5)
     else if (kind === 'group') putIndexed(kind, data, GROUP_NAMES.length, 8)
     else if (kind === 'work' || kind === 'calibration' || kind === 'terminal') {
-      const expected = { work: [8, 11, 13].includes(data.length) ? data.length : 8, calibration: 7, terminal: 6 }[kind]
+      const expected = { work: [8, 11, 13, 14].includes(data.length) ? data.length : 8, calibration: 7, terminal: 6 }[kind]
       validateTuple(data, expected, kind, kind === 'calibration' ? [1, 3] : [])
       if (records.has(kind)) throw new Error(`Duplicate ${kind} record`)
       records.set(kind, data)
@@ -315,7 +316,8 @@ function assembleCompact(runId, chunks) {
     work: { stepCount: work[0], stepsSum: work[1], stepsMax: work[2], objectVisitsSum: work[3], candidatesSum: work[4],
       asteroidsMax: work[5], zeroStepFrames: work[6], pausedFrameCount: work[7],
       fullMaterializations: work[8], fullAsteroidVisits: work[9], sensorReads: work[10],
-      skippedQuanta: work[11], eventQuanta: work[12], ...(impact ? { foldedSwipeMoves: impact[8] } : {}) },
+      skippedQuanta: work[11], eventQuanta: work[12], ...(work.length >= 14 ? { probeQuanta: work[13] } : {}),
+      ...(impact ? { foldedSwipeMoves: impact[8] } : {}) },
     sampling: { names: PHASE_NAMES, steady: phaseSummaries },
     groups: groupSummaries,
     calibration: { reads: calibration[0], spanMs: calibration[1], zeroDeltas: calibration[2],
@@ -334,8 +336,9 @@ function assembleCompact(runId, chunks) {
     ...(slowUpdates.length ? { slowUpdates } : {}),
     trace: { columns: TRACE_COLUMNS, rows: pairs.map(row => row.slice()) },
     caveats: ['Compact export contains selected aggregates and at most four paired trace rows; it does not include full histograms or the full trace.',
-      ...(work.length >= 13 ? ['Phase samples describe executed canonical steps; skipped logical quanta produce no phase samples or object/candidate visits.'] : []),
-      ...(slowUpdates.length ? ['Slow updates are the two highest valid steady update times available. Spawn and contact times are included in stepsMs. Values are rounded to integer milliseconds or counts and capped at 46654, except frame numbers which are capped at 1679615. Null indicates an invalid or unavailable value.'] : [])]
+      ...(work.length >= 13 ? ['Phase samples describe executed canonical steps. Analytic skips contribute logical steps only.'] : []),
+      ...(work.length >= 14 ? ['Contact probes contribute object and candidate visits. probeQuanta counts attempted contact probes across all frames.'] : []),
+      ...(slowUpdates.length ? ['Slow updates are the two highest valid steady update times available. Spawn time is part of stepsMs. Contact timing and counts cover full steps and probes, with contact time already included in stepsMs or probeMs as applicable. Values are rounded to integer milliseconds or counts and capped at 46654, except frame numbers which are capped at 1679615. Null indicates an invalid or unavailable value.'] : [])]
   }
 }
 
