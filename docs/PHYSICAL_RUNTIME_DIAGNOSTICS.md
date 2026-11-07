@@ -171,3 +171,5 @@ redraws, direct vibration call time, and terminal score save and results routing
 Only haptic and terminal operations add timing reads. A separate counter shows
 how often a SWIPE target update left the current frame's trajectory unchanged.
 The haptic mode, HUD animation and score persistence keep their prior behavior.
+
+The Android Bridge installed the 2.3.37 Balance 2 package, version code 88, on November 7, 2026. The installed application uses source commit `d0baaec`. Native Balance 2 runs verified ordinary SWIPE and TOUCH gameplay and complete collision timing records. Physical 2.3.37 gameplay is pending at deployment.
