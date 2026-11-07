@@ -215,3 +215,5 @@ drain duration covers frame-side counter handling. Bounded compaction
 now takes place at native delivery, outside the measured timer callback.
 
 The Android Bridge installed 2.3.39/code 90 on physical Balance 2 on November 7, 2026. The instrumented source commit is `996703a`. A native SWIPE run confirmed both slow-update records survive export and decoding.
+
+The Android Bridge installed 2.3.40/code 91 on the physical Balance 2 on November 7, 2026. The installed application uses source commit `e859368`. Native firmware decoded the new probe fields after an ordinary IMG SWIPE run.
