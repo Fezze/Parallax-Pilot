@@ -194,6 +194,8 @@ function getSpawnNearbyAsteroids(asteroids, grid, spawnFromRight, viewport) {
     return nearby
   }
 
+  if (!grid.slices) return collectSpawnNeighborhood(asteroids, grid, spawnFromRight, viewport)
+
   const nearby = []
   const minSlice = spawnFromRight
     ? getCollisionSliceIndex(viewport.width * 0.55, grid)
@@ -397,6 +399,33 @@ export function createCollisionGrid(
       Array.from({ length: bucketCount }, () => [])
     ),
   }
+}
+
+// Spawn placement needs only the horizontal layout, not maintained buckets.
+// Keep the same clamped slice membership as the legacy grid query: using the
+// raw 45%/55% threshold would omit neighbors in the boundary slice.
+export function createSpawnNeighborhood(
+  viewport,
+  sliceWidth = COLLISION_SLICE_WIDTH,
+  padding = COLLISION_GRID_PADDING
+) {
+  return {
+    sliceWidth,
+    padding,
+    sliceCount: Math.max(1, Math.ceil((viewport.width + padding * 2) / sliceWidth)),
+  }
+}
+
+export function collectSpawnNeighborhood(asteroids, neighborhood, spawnFromRight, viewport) {
+  const minSlice = spawnFromRight ? getCollisionSliceIndex(viewport.width * 0.55, neighborhood) : 0
+  const maxSlice = spawnFromRight ? neighborhood.sliceCount - 1 : getCollisionSliceIndex(viewport.width * 0.45, neighborhood)
+  const nearby = []
+  for (let index = 0; index < asteroids.length; index += 1) {
+    const asteroid = asteroids[index]
+    const slice = getCollisionSliceIndex(asteroid.x, neighborhood)
+    if (slice >= minSlice && slice <= maxSlice) nearby.push(asteroid)
+  }
+  return nearby
 }
 
 export function getCollisionSliceIndex(x, grid) {

@@ -25,7 +25,6 @@ import {
   ROUTES,
 } from '../../shared/constants.js'
 import {
-  addAsteroidToCollisionGrid,
   advanceFrameCollisionCandidates,
   advanceControlScalar,
   anchorAsteroidMotion,
@@ -34,7 +33,7 @@ import {
   clamp,
   collectFrameCollisionCandidates,
   collectCollisionCandidatesFromList,
-  createCollisionGrid,
+  createSpawnNeighborhood,
   createAsteroid,
   createScoreEntry,
   createShipGeometry,
@@ -64,7 +63,7 @@ const CONTROL_BASE_SPEED_FACTOR = 0.46
 const SQUARE_HUD_CORNER_RADIUS = 36
 const HUD_DISPLAY_HP_SPEED = 72
 // Temporary physical-watch diagnostic build; this does not change game timing.
-const DIAGNOSTIC_VERSION = '2.3.33'
+const DIAGNOSTIC_VERSION = '2.3.34'
 
 function moveTowards(current, target, maxDelta) {
   if (current === target) {
@@ -318,7 +317,7 @@ Page({
     this.collisionWindowCount = 0
     this.blockResult = { steps: 0, stopped: false }
     this.simulationFrameActive = false
-    this.collisionGrid = createCollisionGrid(
+    this.spawnNeighborhood = createSpawnNeighborhood(
       this.viewport,
       this.collisionSliceWidth
     )
@@ -330,7 +329,7 @@ Page({
     const diagnosticRun = diagnosticSession.index
     this.diagnosticMetadata = {
       version: DIAGNOSTIC_VERSION,
-      baselineCommit: '07706c6',
+      baselineCommit: 'd44ae0e',
       runIndex: diagnosticRun,
       phaseSampleEvery: diagnosticSession.persisted && diagnosticRun % 2 ? 0 : 13,
       modePersisted: diagnosticSession.persisted,
@@ -381,6 +380,7 @@ Page({
     )
     createShipRect(this.viewport, this.shipCenterY, this.settings.wristSide, this.nextShipRect, this.shipGeometry)
     this.renderShipRect = createShipRect(this.viewport, this.shipCenterY, this.settings.wristSide, {}, this.shipGeometry)
+    this.lastPoseCenterY = this.shipCenterY
   },
 
   build() {
@@ -542,7 +542,7 @@ Page({
     if (this.simulationFrameActive) {
       this.diagnosticMetadata.fullMaterializations += 1
       this.diagnosticMetadata.fullAsteroidVisits += this.asteroids.length
-      materializeAsteroidsAt(this.asteroids, now - SIMULATION_STEP_MS, this.viewport, this.collisionGrid, SIMULATION_STEP_MS)
+      materializeAsteroidsAt(this.asteroids, now - SIMULATION_STEP_MS, this.viewport, undefined, SIMULATION_STEP_MS)
     }
 
     const rawSpawnCount = Math.floor(elapsedSinceSpawn / spawnInterval)
@@ -564,7 +564,7 @@ Page({
         difficulty,
         shipRect,
         asteroids: this.asteroids,
-        grid: this.collisionGrid,
+        grid: this.spawnNeighborhood,
         wristSide: this.settings.wristSide,
       })
 
@@ -573,7 +573,6 @@ Page({
       asteroid.lastHitAt = -Infinity
       anchorAsteroidMotion(asteroid, this.simulationFrameActive ? now - SIMULATION_STEP_MS : this.simulationClock.elapsedMs)
       this.asteroids.push(asteroid)
-      addAsteroidToCollisionGrid(asteroid, this.collisionGrid)
       // Newborns can cross the ship during a long/high-difficulty frame.
       // Keeping them in this small list is conservative at every speed.
       this.frameCollisionCandidates.push(asteroid)
@@ -663,7 +662,7 @@ Page({
       // Damage, cooldown and score still use the original 10 ms step instants.
       this.diagnosticMetadata.fullMaterializations += 1
       this.diagnosticMetadata.fullAsteroidVisits += this.asteroids.length
-      materializeAsteroidsAt(this.asteroids, clock.elapsedMs, this.viewport, this.collisionGrid, SIMULATION_STEP_MS)
+      materializeAsteroidsAt(this.asteroids, clock.elapsedMs, this.viewport, undefined, SIMULATION_STEP_MS)
       this.simulationFrameActive = false
       events.length = 0
     }
@@ -680,17 +679,25 @@ Page({
     if (count <= 0) return
     let before = this.shipCenterY
     let after = before
-    if (this.settings.controlMode === 'touch') {
+    const initial = before
+    if (this.settings.controlMode === 'touch' && (this.touchDirection !== 0 || before < this.shipYLimits.min || before > this.shipYLimits.max)) {
       const velocity = this.touchDirection * this.baseControlSpeed
       before = advanceControlScalar(before, velocity, count - 1, this.shipYLimits.min, this.shipYLimits.max)
       after = advanceControlScalar(before, velocity, 1, this.shipYLimits.min, this.shipYLimits.max)
-    } else if (this.pointerDown && this.swipeStartTouchY !== null && this.swipeCurrentTouchY !== null) {
+    } else if (this.settings.controlMode === 'swipe' && this.pointerDown && this.swipeStartTouchY !== null && this.swipeCurrentTouchY !== null) {
       after = clamp(this.swipeStartShipY + (this.swipeCurrentTouchY - this.swipeStartTouchY), this.shipYLimits.min, this.shipYLimits.max)
       if (count > 1) before = after
     }
     this.shipCenterY = after
-    this.updateCanonicalRect(this.nextShipRect, before)
-    this.updateCanonicalRect(this.shipRect, after)
+    if (before === initial && after === initial && this.lastPoseCenterY === initial) {
+      // Synchronize the first stationary quantum after motion, then leave both
+      // poses untouched. Idle callbacks do not need scalar/geometry helpers.
+      if (this.nextShipRect.y !== this.shipRect.y) this.updateCanonicalRect(this.nextShipRect, after)
+    } else {
+      this.updateCanonicalRect(this.nextShipRect, before)
+      this.updateCanonicalRect(this.shipRect, after)
+    }
+    this.lastPoseCenterY = after
     if (this.displayedHp === this.hp) {
       this.previousDisplayedHp = this.hp
     } else {
@@ -783,6 +790,7 @@ Page({
     this.updateCanonicalRect(shipRect, this.shipCenterY)
     this.nextShipRect = previousShipRect
     this.shipRect = shipRect
+    this.lastPoseCenterY = this.shipCenterY
     const difficulty = calculateDifficulty(
       now,
       this.settings.timeScale

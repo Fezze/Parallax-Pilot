@@ -1,7 +1,7 @@
 import { tiltProfile } from './tilt-fixtures.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { addAsteroidToCollisionGrid, calculateCollisionResult, calculateDifficulty, createShipGeometry, createShipRect } from '../zepp-app/shared/game-core.js'
+import { calculateCollisionResult, calculateDifficulty, createShipGeometry, createShipRect } from '../zepp-app/shared/game-core.js'
 import { __resetDeviceInfo, __setDeviceInfo } from './mocks/zos/device.mjs'
 import { __getRouterCalls, __resetRouter } from './mocks/zos/router.mjs'
 import { __getCanvasWidgets, __resetUI } from './mocks/zos/ui.mjs'
@@ -20,7 +20,6 @@ test('a hit inside an admitted block immediately prevents remaining immune steps
     const asteroid = { id: 'continuous-contact', x: page.shipRect.centerX, y: page.shipRect.centerY,
       radius: 8, vx: 0, lastHitAt: -Infinity }
     page.asteroids.push(asteroid)
-    addAsteroidToCollisionGrid(asteroid, page.collisionGrid)
     tick(200)
     assert.equal(asteroid.lastHitAt, 10)
     assert.equal(page.diagnosticMetadata.eventQuanta, 1)
@@ -43,7 +42,6 @@ test('dense contact during immunity skips dispatch and resumes damage at the exa
       const asteroid = { id: `immune-${index}`, x: page.shipRect.centerX, y: page.shipRect.centerY,
         vx: 0, radius: 8, lastHitAt: 0 }
       page.asteroids.push(asteroid)
-      addAsteroidToCollisionGrid(asteroid, page.collisionGrid)
     }
     tick(200)
     assert.equal(page.hp, 10000)
@@ -72,7 +70,6 @@ test('one asteroid cooldown does not delay another independent contact', async (
     for (const [id, lastHitAt] of [['first', 0], ['second', 130]]) {
       const asteroid = { id, lastHitAt, x: page.shipRect.centerX, y: page.shipRect.centerY, radius: 8, vx: 0 }
       page.asteroids.push(asteroid)
-      addAsteroidToCollisionGrid(asteroid, page.collisionGrid)
     }
     tick(380)
     assert.deepEqual(page.asteroids.map(a => a.lastHitAt), [260, 130])
@@ -87,6 +84,9 @@ test('one asteroid cooldown does not delay another independent contact', async (
 test('an empty idle block advances logical time without world dispatch or unchanged geometry writes', async () => {
   await withGame({}, ({ page, tick }) => {
     let writes = 0
+    let poseUpdates = 0
+    const updatePose = page.updateCanonicalRect
+    page.updateCanonicalRect = function (...args) { poseUpdates += 1; return updatePose.apply(this, args) }
     for (const rect of [page.shipRect, page.nextShipRect]) for (const point of rect.points) {
       let y = point.y
       Object.defineProperty(point, 'y', { get: () => y, set: value => { writes += 1; y = value } })
@@ -97,7 +97,26 @@ test('an empty idle block advances logical time without world dispatch or unchan
     assert.equal(page.diagnosticMetadata.eventQuanta, 0)
     assert.equal(page.runtimeDiagnostics.stepCount, 20)
     assert.equal(writes, 0)
+    assert.equal(poseUpdates, 0)
     assert.equal(page.shipCenterY, 240)
+  })
+})
+
+test('ordinary scene updates and real spawning never access collision-grid membership', async () => {
+  await withGame({}, ({ page, tick }) => {
+    const asteroid = { id: 'no-grid', x: 460, y: 100, radius: 8, vx: -100, lastHitAt: -Infinity }
+    for (const name of ['gridSlotIndex', 'gridSliceIndex', 'gridBucketIndex']) {
+      Object.defineProperty(asteroid, name, {
+        get() { throw new Error(`Unused membership read: ${name}`) },
+        set() { throw new Error(`Unused membership write: ${name}`) },
+      })
+    }
+    page.asteroids.push(asteroid)
+    assert.equal(page.spawnNeighborhood.slices, undefined)
+    for (let at = 200; at <= 1200; at += 200) tick(at)
+    assert.ok(page.asteroidSeed > 0, 'the real birth path must use the flat neighborhood too')
+    assert.equal(asteroid.x, 340)
+    assert.equal(page.simulationClock.elapsedMs, 1200)
   })
 })
 
@@ -134,7 +153,6 @@ test('event batching stops on the same fatal contact quantum as a complete canon
     assert.ok(fatalAt > 10 && fatalAt < 200)
     page.hp = 1
     page.asteroids.push(asteroid)
-    addAsteroidToCollisionGrid(asteroid, page.collisionGrid)
     tick(200)
     assert.equal(page.finished, true)
     assert.equal(page.simulationClock.elapsedMs, fatalAt)
@@ -154,7 +172,6 @@ test('distant asteroid motion is materialized once instead of once per catch-up 
       enumerable: true, get() { return x }, set(value) { writes += 1; x = value },
     })
     page.asteroids.push(asteroid)
-    addAsteroidToCollisionGrid(asteroid, page.collisionGrid)
     tick(200)
     assert.equal(page.simulationClock.elapsedMs, 200)
     assert.equal(page.frameCollisionCandidates.length, 0)
@@ -169,7 +186,6 @@ test('presentation interpolates fractional ship and asteroid positions without c
   await withGame({}, ({ page, canvas, at, tick }) => {
     const asteroid = { id: 'render', x: 460, y: 100, radius: 7, vx: -100, lastHitAt: -Infinity }
     page.asteroids.push(asteroid)
-    addAsteroidToCollisionGrid(asteroid, page.collisionGrid)
     at(1); canvas.__emit('CLICK_DOWN', { y: 100 })
     tick(16)
     const worldShip = structuredClone(page.shipRect)
@@ -420,7 +436,6 @@ test('long stalls freeze the full world, preserve cooldowns and create no spawn 
     page.hp = 1000000
     const asteroid = { id: 'contact', x: page.shipRect.centerX, y: page.shipRect.centerY, radius: 18, vx: 0, lastHitAt: -Infinity }
     page.asteroids.push(asteroid)
-    addAsteroidToCollisionGrid(asteroid, page.collisionGrid)
     tick(20)
     const before = world(page)
     const drawCount = canvas.__getDrawCalls().filter((call) => call.method === 'drawRect').length
@@ -447,7 +462,6 @@ test('a 200 ms callback checks intermediate collisions and renders once', async 
     const asteroid = { id: 'crossing', x: page.shipRect.x + page.shipRect.w + 40,
       y: page.shipRect.centerY, radius: 8, vx: -800, lastHitAt: -Infinity }
     page.asteroids.push(asteroid)
-    addAsteroidToCollisionGrid(asteroid, page.collisionGrid)
     const draws = canvas.__getDrawCalls().filter((call) => call.method === 'drawRect').length
     tick(200)
     assert.ok(page.hp < 100)
@@ -461,7 +475,6 @@ test('fatal catch-up stops immediately without drawing after results navigation'
     page.hp = 1
     const asteroid = { id: 'fatal', x: page.shipRect.centerX, y: page.shipRect.centerY, radius: 18, vx: 0, lastHitAt: -Infinity }
     page.asteroids.push(asteroid)
-    addAsteroidToCollisionGrid(asteroid, page.collisionGrid)
     const draws = canvas.__getDrawCalls().length
     tick(200)
     assert.equal(page.finished, true)
@@ -499,7 +512,6 @@ for (const wristSide of ['left', 'right']) {
       const asteroid = { id: 'extreme-crossing', x: wristSide === 'left' ? 470 : 10,
         y: page.shipRect.centerY, radius: 7, vx: wristSide === 'left' ? -100000 : 100000, lastHitAt: -Infinity }
       page.asteroids.push(asteroid)
-      addAsteroidToCollisionGrid(asteroid, page.collisionGrid)
       tick(10)
       assert.equal(page.hp, 93)
       assert.equal(asteroid.lastHitAt, 10)
@@ -512,7 +524,6 @@ for (const wristSide of ['left', 'right']) {
     await withGame({ settings: { controlMode: 'swipe', wristSide } }, ({ page, canvas, tick }) => {
       const asteroid = { id: 'swipe-crossing', x: page.shipRect.centerX, y: 140, radius: 7, vx: 0, lastHitAt: -Infinity }
       page.asteroids.push(asteroid)
-      addAsteroidToCollisionGrid(asteroid, page.collisionGrid)
       canvas.__emit('CLICK_DOWN', { y: 240 })
       canvas.__emit('MOVE', { y: -1000 })
       tick(10)
@@ -534,7 +545,6 @@ for (const difficulty of [166, 500, 1000]) {
       const asteroid = { id: 'late-speed', x: page.shipRect.x + page.shipRect.w + 10,
         y: page.shipRect.centerY, radius: 18, vx: -(96 + difficulty * 9 + 28), lastHitAt: -Infinity }
       page.asteroids.push(asteroid)
-      addAsteroidToCollisionGrid(asteroid, page.collisionGrid)
       tick(200)
       assert.equal(page.hp, 87)
       assert.ok(asteroid.lastHitAt > 0)
