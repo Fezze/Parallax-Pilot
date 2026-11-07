@@ -143,3 +143,9 @@ Complete sampled physical run 10 advanced 10,550 ms in 10,867 ms wall with zero 
 Candidate 2.3.34 passed 200 Node cases, four browser timing cases and 96 actual-page comparisons with 2.3.33. All 31,056 state pairs matched. Native Balance 2 firmware 1.1.0, API 4.2, source 9568512 completed a hands-off run with spawning, damage and a saved result. The complete report recorded 1,276 logical quanta, 1,246 skipped quanta and 30 executed events. Physical cadence measurement awaits the phone Bridge.
 
 The Android Bridge installed the Balance 2 package for 2.3.34 on November 7, 2026. The package was built from `5eb269a` with version code 85. The deployment record uses a documentation commit with the automatic version bump disabled for that invocation. The physical gameplay measurement follows installation.
+
+## IMG renderer in 2.3.35
+
+The game page selects `GAME_RENDERER = 'img'` during `build()`. The alternative value `canvas` selects the original full Canvas path. The IMG path creates a persistent background, moves reusable native images for the ship and asteroids, and draws the existing HUD on its input canvas when displayed health changes. The generated PNGs use the game geometry for each target and the view positions snap to pixels. The native `PP_RENDERER` marker identifies the active path before the timer starts.
+
+Normal gameplay on Zepp Simulator Balance 2 firmware 1.1.0, API 4.2, source 9568512 selected IMG. The captured frames show asteroid images, held touch in both directions, a partially depleted HUD after contact, and a natural result of 13,990 points. The console contains a complete report and no candidate runtime errors. This run establishes ordinary gameplay behavior in the simulator. Physical rendering cost remains to be measured.

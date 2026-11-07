@@ -55,15 +55,17 @@ import { createPointerInputQueue, enqueuePointerInput } from '../../shared/point
 import { RuntimeDiagnostics } from '../../shared/runtime-diagnostics.js'
 import { normalizeTiltInput } from '../../shared/tilt-calibration.js'
 import { advanceRuntimeDiagnosticRun, appendScore, loadSettings, loadTiltCalibration, saveLastSession, saveSettings } from '../../shared/storage.js'
+import { createSpriteRenderer } from './sprite-renderer.js'
 
 const FRAME_INTERVAL_MS = 16
+const GAME_RENDERER = 'img' // Set to 'canvas' to select the original renderer.
 const GAME_BRIGHT_TIME_MS = 600000
 const MAX_SPAWNS_PER_TICK = 2
 const CONTROL_BASE_SPEED_FACTOR = 0.46
 const SQUARE_HUD_CORNER_RADIUS = 36
 const HUD_DISPLAY_HP_SPEED = 72
 // Temporary physical-watch diagnostic build; this does not change game timing.
-const DIAGNOSTIC_VERSION = '2.3.34'
+const DIAGNOSTIC_VERSION = '2.3.35'
 
 function moveTowards(current, target, maxDelta) {
   if (current === target) {
@@ -329,7 +331,7 @@ Page({
     const diagnosticRun = diagnosticSession.index
     this.diagnosticMetadata = {
       version: DIAGNOSTIC_VERSION,
-      baselineCommit: 'd44ae0e',
+      baselineCommit: '5eb269a',
       runIndex: diagnosticRun,
       phaseSampleEvery: diagnosticSession.persisted && diagnosticRun % 2 ? 0 : 13,
       modePersisted: diagnosticSession.persisted,
@@ -381,6 +383,8 @@ Page({
     createShipRect(this.viewport, this.shipCenterY, this.settings.wristSide, this.nextShipRect, this.shipGeometry)
     this.renderShipRect = createShipRect(this.viewport, this.shipCenterY, this.settings.wristSide, {}, this.shipGeometry)
     this.lastPoseCenterY = this.shipCenterY
+    this.spriteRenderer = null
+    this.lastSpriteHudHp = null
   },
 
   build() {
@@ -391,17 +395,23 @@ Page({
     hideStatusBar()
     keepScreenAwake()
 
-    this.canvas = createWidget(widget.CANVAS, {
+    const surface = {
       x: 0,
       y: 0,
       w: this.viewport.width,
       h: this.viewport.height,
-    })
+    }
+    if (GAME_RENDERER === 'img' && widget.IMG !== undefined && widget.GROUP !== undefined) {
+      this.spriteRenderer = createSpriteRenderer(surface, this.shipRect, this.settings.wristSide)
+    }
+    // With IMG, this transparent top layer keeps the same HUD and input surface.
+    this.canvas = createWidget(widget.CANVAS, surface)
 
-      this.bindCanvasEvents()
-      this.bindGestureEvents()
-      this.bindTiltSensor()
-      this.drawFrame()
+    this.bindCanvasEvents()
+    this.bindGestureEvents()
+    this.bindTiltSensor()
+    console.log(`PP_RENDERER v=${DIAGNOSTIC_VERSION} renderer=${this.spriteRenderer ? 'img' : 'canvas'}`)
+    this.drawFrame()
 
     this.diagnosticMetadata.timerRegisteredAt = Date.now()
     this.loop = setInterval(() => {
@@ -849,10 +859,28 @@ Page({
   drawFrame(shipRect) {
     const interpolate = !shipRect && this.simulationClock.elapsedMs > 0
     const alpha = this.simulationClock.pendingMs / SIMULATION_STEP_MS
+    const renderAtMs = interpolate ? this.simulationClock.elapsedMs - SIMULATION_STEP_MS + this.simulationClock.pendingMs : this.simulationClock.elapsedMs
+    const renderedHp = interpolate ? this.previousDisplayedHp + (this.displayedHp - this.previousDisplayedHp) * alpha : this.displayedHp
+    const hpRatio = renderedHp / HP_MAX
+
+    if (this.spriteRenderer) {
+      const y = interpolate
+        ? this.nextShipRect.y + (this.shipRect.y - this.nextShipRect.y) * alpha
+        : (shipRect || this.shipRect).y
+      this.spriteRenderer.draw(this.asteroids, y, renderAtMs, interpolate)
+      if (renderedHp !== this.lastSpriteHudHp) {
+        if (this.lastSpriteHudHp !== null) {
+          this.canvas.clear({ x: 0, y: 0, w: this.viewport.width, h: this.viewport.height })
+        }
+        this.drawHud(hpRatio)
+        this.lastSpriteHudHp = renderedHp
+      }
+      return
+    }
+
     if (!shipRect) shipRect = interpolate
       ? interpolateShipRect(this.nextShipRect, this.shipRect, alpha, this.renderShipRect)
       : this.shipRect
-    const renderAtMs = interpolate ? this.simulationClock.elapsedMs - SIMULATION_STEP_MS + this.simulationClock.pendingMs : this.simulationClock.elapsedMs
     this.canvas.drawRect({
       x1: 0,
       y1: 0,
@@ -880,8 +908,10 @@ Page({
       shipRect.points
     )
 
-    const renderedHp = interpolate ? this.previousDisplayedHp + (this.displayedHp - this.previousDisplayedHp) * alpha : this.displayedHp
-    const hpRatio = renderedHp / HP_MAX
+    this.drawHud(hpRatio)
+  },
+
+  drawHud(hpRatio) {
     if (this.deviceInfo.screenShape === SCREEN_SHAPE_ROUND) {
       drawRoundHud(this.canvas, this.viewport, hpRatio)
     } else {
