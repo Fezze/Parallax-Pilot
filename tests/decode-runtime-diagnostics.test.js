@@ -133,6 +133,7 @@ test('decodes compact records mixed with legacy reports inside escaped bridge ou
     ['frame', 'atMs', 'gapMs', 'previousCallbackMs', 'callbackMs', 'updateMs', 'drawSubmissionMs', 'steps', 'pausedMs'])
   assert.deepEqual(compactReport.trace.rows, [[10, 100, 20, 18, 25, 15, 2, 3, 0], [11, 125, 25, 25, 30, 16, 3, 4, 0]])
   assert.equal('bins' in compactReport.steady.gapMs, false)
+  assert.equal('damage' in compactReport, false)
   assert.match(compactReport.caveats[0], /does not include full histograms/)
   assert.equal(result.reports[1].schema, 1)
 })
@@ -209,4 +210,63 @@ test('the real compact exporter round-trips boolean metadata, first-frame null t
   assert.equal(decoded.work.eventQuanta, 2)
   assert.match(decoded.caveats[1], /skipped logical quanta produce no phase samples/)
   assert.equal(decoded.trace.rows[0][2], null)
+})
+
+test('compact collision timings distinguish the hit, next arrival, HUD draw and terminal work', () => {
+  const lines = []
+  let now = 1794046955289
+  const meta = {
+    compactExport: true, measureDamage: true, version: '2.3.37', deviceSource: 9568513, runIndex: 22,
+    phaseSampleEvery: 0, controlMode: 'touch', wristSide: 'left',
+    timeScale: 1, spawnMultiplier: 1.1, width: 480, height: 480, modePersisted: true,
+  }
+  const diagnostic = new RuntimeDiagnostics(meta, { now: () => now, emit: line => lines.push(line) })
+  const clock = { elapsedMs: 0, pausedMs: 0, pendingMs: 0 }
+
+  diagnostic.beginFrame(now, clock, false, 4)
+  meta.frameHit = true
+  meta.frameHud = true
+  diagnostic.recordHaptic(now + 3, now + 28)
+  now += 40
+  diagnostic.markUpdate(now)
+  now += 9
+  diagnostic.endFrame(now, clock)
+
+  now += 51
+  diagnostic.beginFrame(now, clock, false, 4)
+  assert.equal(meta.frameHit, false)
+  assert.equal(meta.frameHud, false)
+  meta.frameHud = true
+  now += 7
+  diagnostic.markUpdate(now)
+  now += 5
+  diagnostic.endFrame(now, clock)
+
+  now += 8
+  diagnostic.beginFrame(now, clock, false, 4)
+  meta.frameHit = true
+  diagnostic.recordHaptic(now + 2, now + 10)
+  diagnostic.requestFinish('game-over')
+  meta.scoreSaveMs = 78
+  meta.resultsRouteMs = 114
+  meta.foldedSwipeMoves = 32
+  now += 207
+  diagnostic.markUpdate(now)
+  diagnostic.endFrame(now, clock)
+
+  assert.ok(lines.length <= 27)
+  assert.ok(lines.every(line => line.length <= 160))
+  const result = decodeDiagnostics(lines.join('\n'))
+  assert.deepEqual(result.errors, [])
+  assert.deepEqual(result.incomplete, [])
+  assert.equal(result.reports[0].work.foldedSwipeMoves, 32)
+  assert.deepEqual(result.reports[0].damage, {
+    hitUpdateMs: { count: 1, sum: 40, max: 40 },
+    afterHitGapMs: { count: 1, sum: 100, max: 100 },
+    afterHitResidualMs: { count: 1, sum: 51, max: 51 },
+    hudDrawMs: { count: 2, sum: 14, max: 9 },
+    hapticMs: { count: 2, sum: 33, max: 25 },
+    scoreSaveMs: 78,
+    resultsRouteMs: 114,
+  })
 })

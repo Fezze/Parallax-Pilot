@@ -162,3 +162,12 @@ Normal gameplay on Zepp Simulator Balance 2 firmware 1.1.0, API 4.2, source 9568
 The Android Bridge built and installed the Balance 2 IMG package for 2.3.35, version code 86, on November 7, 2026. It uses application source commit `5703df0`. This documentation commit records deployment with the automatic version bump disabled for that invocation.
 
 The Android Bridge installed the 2.3.36 Balance 2 package, version code 87, on November 7, 2026. The installed application uses source commit `a403b1e`. Native Balance 2 simulator runs verified both TOUCH and SWIPE with IMG. A physical gameplay report is pending.
+
+## Collision timing in 2.3.37
+
+The optional compact damage and impact records distinguish steady hit-frame
+update, the next callback gap and residual, draw submission during IMG health
+redraws, direct vibration call time, and terminal score save and results routing.
+Only haptic and terminal operations add timing reads. A separate counter shows
+how often a SWIPE target update left the current frame's trajectory unchanged.
+The haptic mode, HUD animation and score persistence keep their prior behavior.

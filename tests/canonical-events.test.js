@@ -181,22 +181,30 @@ test('stationary and distant scenes skip all contact work while a fast crossing 
   assert.equal(getCollisionQuantumWindow(crossing, geometry, 0, 250, 240, 0), null)
 })
 
-test('swipe windows preserve the instantaneous first swept step and then the stationary target', () => {
+test('swipe windows cover a speed-limited approach and stop at the selected target', () => {
   for (const wristSide of ['left', 'right']) {
     const geometry = createShipGeometry(viewport, wristSide)
-    const from = geometry.limits.min
-    const target = geometry.limits.max
-    const asteroid = { x: geometry.x + geometry.w / 2, y: 240, radius: 7, vx: 0, lastHitAt: -Infinity }
-    anchorAsteroidMotion(asteroid, 0)
-    const window = getCollisionQuantumWindow(asteroid, geometry, 0, 250, from, 9999, {}, 10, target)
-    assert.deepEqual(window, { firstMs: 10, lastMs: 10 })
-    const previous = createShipRect(viewport, from, wristSide, {}, geometry)
-    const current = createShipRect(viewport, target, wristSide, {}, geometry)
-    assert.equal(calculateCollisionResult({ shipRect: current, previousShipRect: previous, asteroid, now: 10 }).hit, true)
-    assert.equal(calculateCollisionResult({ shipRect: current, asteroid, now: 20 }).hit, false)
-    const atTarget = { ...asteroid, y: target }
-    const targetWindow = getCollisionQuantumWindow(atTarget, geometry, 0, 250, from, 0, {}, 10, target)
-    assert.deepEqual(targetWindow, { firstMs: 10, lastMs: 250 })
+    for (const direction of [-1, 1]) {
+      const from = 240
+      const target = from + direction * 34
+      const velocity = direction * 220.8
+      const asteroid = { x: geometry.x + geometry.w / 2, y: target, radius: 7, vx: 0, lastHitAt: -Infinity }
+      const window = getCollisionQuantumWindow(asteroid, geometry, 0, 250, from, velocity, {}, 10, target)
+      let previous = createShipRect(viewport, from, wristSide, {}, geometry)
+      let hits = 0
+      for (let step = 1; step <= 25; step += 1) {
+        const y = advanceControlScalar(from, velocity, step, Math.min(from, target), Math.max(from, target))
+        const current = createShipRect(viewport, y, wristSide, {}, geometry)
+        if (calculateCollisionResult({ shipRect: current, previousShipRect: previous, asteroid, now: step * 10 }).hit) {
+          hits += 1
+          assert.ok(step * 10 >= window.firstMs && step * 10 <= window.lastMs)
+        }
+        previous = current
+      }
+      assert.ok(hits > 0)
+      const beyondTarget = { ...asteroid, y: target + direction * 25 }
+      assert.equal(getCollisionQuantumWindow(beyondTarget, geometry, 0, 250, from, velocity, {}, 10, target), null)
+    }
   }
 })
 

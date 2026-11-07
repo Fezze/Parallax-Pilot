@@ -71,7 +71,7 @@ const CONTROL_BASE_SPEED_FACTOR = 0.46
 const SQUARE_HUD_CORNER_RADIUS = 36
 const HUD_DISPLAY_HP_SPEED = 72
 // Temporary physical-watch diagnostic build; this does not change game timing.
-const DIAGNOSTIC_VERSION = '2.3.36'
+const DIAGNOSTIC_VERSION = '2.3.37'
 
 function createPresentationFrame() {
   return { ship: {}, asteroids: [], asteroidCount: 0, displayedHp: HP_MAX }
@@ -319,10 +319,10 @@ Page({
     this.touchDirection = 0
     this.pointerDown = false
     this.pointerInbox = createPointerInbox()
-    this.pointerInput = createPointerInputQueue()
+    this.pointerInput = createPointerInputQueue(settings.controlMode === 'swipe')
     this.swipeStartTouchY = null
-    this.swipeCurrentTouchY = null
     this.swipeStartShipY = this.shipCenterY
+    this.swipeTargetY = this.shipCenterY
     this.asteroids = []
     this.collisionCandidates = []
     this.frameCollisionCandidates = []
@@ -342,7 +342,7 @@ Page({
     const diagnosticRun = diagnosticSession.index
     this.diagnosticMetadata = {
       version: DIAGNOSTIC_VERSION,
-      baselineCommit: '5703df0',
+      baselineCommit: 'a403b1e',
       runIndex: diagnosticRun,
       phaseSampleEvery: diagnosticSession.persisted && diagnosticRun % 2 ? 0 : 13,
       modePersisted: diagnosticSession.persisted,
@@ -364,6 +364,8 @@ Page({
       sensorReads: 0,
       skippedQuanta: 0,
       eventQuanta: 0,
+      measureDamage: true,
+      foldedSwipeMoves: 0,
     }
     this.runtimeDiagnostics = new RuntimeDiagnostics(this.diagnosticMetadata)
     // Startup logging and clock calibration happen before the game's clock.
@@ -473,12 +475,16 @@ Page({
     inbox.upCount = 0
   },
 
-  applyPointerInput(input) {
+  getSwipeTarget(y) {
+    return clamp(this.swipeStartShipY + (y - this.swipeStartTouchY),
+      this.shipYLimits.min, this.shipYLimits.max)
+  },
+
+  applyPointerInput(input, swipeTarget) {
     if (input.kind === 'up') {
       this.pointerDown = false
       this.touchDirection = 0
       this.swipeStartTouchY = null
-      this.swipeCurrentTouchY = null
       return
     }
     const y = input.y
@@ -490,8 +496,8 @@ Page({
 
       if (this.settings.controlMode === 'swipe') {
         this.swipeStartTouchY = y
-        this.swipeCurrentTouchY = y
         this.swipeStartShipY = this.shipCenterY
+        this.swipeTargetY = this.shipCenterY
       }
     } else {
       if (this.settings.controlMode === 'touch') {
@@ -502,9 +508,14 @@ Page({
         this.settings.controlMode === 'swipe' &&
         this.swipeStartTouchY !== null
       ) {
-        this.swipeCurrentTouchY = y
+        this.swipeTargetY = swipeTarget ?? this.getSwipeTarget(y)
       }
     }
+  },
+
+  getPointerVelocity() {
+    if (this.settings.controlMode === 'touch') return this.touchDirection * this.baseControlSpeed
+    return Math.sign(this.swipeTargetY - this.shipCenterY) * this.baseControlSpeed
   },
 
   bindGestureEvents() {
@@ -534,15 +545,10 @@ Page({
       this.shipCenterY += this.touchDirection * this.baseControlSpeed * deltaSeconds
     }
 
-    if (
-      this.settings.controlMode === 'swipe' &&
-      this.pointerDown &&
-      this.swipeStartTouchY !== null &&
-      this.swipeCurrentTouchY !== null
-    ) {
-      this.shipCenterY = this.swipeStartShipY + (
-        this.swipeCurrentTouchY - this.swipeStartTouchY
-      )
+    if (this.settings.controlMode === 'swipe') {
+      const y = this.shipCenterY
+      this.shipCenterY = clamp(y + this.getPointerVelocity() * deltaSeconds,
+        Math.min(y, this.swipeTargetY), Math.max(y, this.swipeTargetY))
     }
 
     this.shipCenterY = clamp(this.shipCenterY, this.shipYLimits.min, this.shipYLimits.max)
@@ -632,12 +638,15 @@ Page({
       asteroid.lastHitAt = now
     }
 
+    if (didDamage) this.diagnosticMetadata.frameHit = true
     if (didDamage && now - this.lastDamageAt > 90) {
       this.lastDamageAt = now
       this.diagnosticMetadata.vibrations += 1
+      const startedAt = this.runtimeDiagnostics.enabled ? Date.now() : undefined
       this.vibrator.start({
         mode: VIBRATOR_SCENE_SHORT_MIDDLE,
       })
+      if (startedAt !== undefined) this.runtimeDiagnostics.recordHaptic(startedAt, Date.now())
     }
 
     if (this.hp <= 0) {
@@ -653,10 +662,16 @@ Page({
     this.finished = true
     this.flushPointerDiagnostics()
     this.runtimeDiagnostics.requestFinish('game-over')
+    const startedAt = this.runtimeDiagnostics.enabled ? Date.now() : undefined
     const scoreEntry = createScoreEntry(this.simulationClock.elapsedMs, this.settings, now)
     saveLastSession(scoreEntry)
     appendScore(scoreEntry)
+    const savedAt = startedAt === undefined ? undefined : Date.now()
     replace({ url: ROUTES.RESULTS, params: JSON.stringify({ mode: 'summary', session: scoreEntry }) })
+    if (savedAt !== undefined) {
+      this.diagnosticMetadata.scoreSaveMs = savedAt - startedAt
+      this.diagnosticMetadata.resultsRouteMs = Date.now() - savedAt
+    }
   },
 
   advanceSimulation(now) {
@@ -678,9 +693,26 @@ Page({
         for (let index = 0; index < events.length; index++) this.applyPointerInput(events[index])
       } else {
         for (let index = 0; index < events.length; index++) {
-          advanceSimulationClockBatched(clock, Math.min(now, events[index].at), this.simulationUpdate)
+          const input = events[index]
+          let swipeTarget
+          if (input.kind === 'move' && this.settings.controlMode === 'swipe' && this.swipeStartTouchY !== null) {
+            swipeTarget = this.getSwipeTarget(input.y)
+            // A target farther than this frame can reach cannot change its
+            // path while both targets point the same way. Keep one spare step
+            // in the bound to cover rounding and the final partial step.
+            const budget = (throughMs - clock.elapsedMs + SIMULATION_STEP_MS) * this.baseControlSpeed / 1000
+            const y = this.shipCenterY
+            if (swipeTarget === this.swipeTargetY ||
+                Math.min(swipeTarget, this.swipeTargetY) - y > budget ||
+                y - Math.max(swipeTarget, this.swipeTargetY) > budget) {
+              this.swipeTargetY = swipeTarget
+              this.diagnosticMetadata.foldedSwipeMoves += 1
+              continue
+            }
+          }
+          advanceSimulationClockBatched(clock, Math.min(now, input.at), this.simulationUpdate)
           if (this.finished || this.destroyed) break
-          this.applyPointerInput(events[index])
+          this.applyPointerInput(input, swipeTarget)
         }
         if (!this.finished && !this.destroyed) advanceSimulationClockBatched(clock, now, this.simulationUpdate)
       }
@@ -711,9 +743,12 @@ Page({
       const velocity = this.touchDirection * this.baseControlSpeed
       before = advanceControlScalar(before, velocity, count - 1, this.shipYLimits.min, this.shipYLimits.max)
       after = advanceControlScalar(before, velocity, 1, this.shipYLimits.min, this.shipYLimits.max)
-    } else if (this.settings.controlMode === 'swipe' && this.pointerDown && this.swipeStartTouchY !== null && this.swipeCurrentTouchY !== null) {
-      after = clamp(this.swipeStartShipY + (this.swipeCurrentTouchY - this.swipeStartTouchY), this.shipYLimits.min, this.shipYLimits.max)
-      if (count > 1) before = after
+    } else if (this.settings.controlMode === 'swipe' && before !== this.swipeTargetY) {
+      const velocity = this.getPointerVelocity()
+      const min = Math.min(before, this.swipeTargetY)
+      const max = Math.max(before, this.swipeTargetY)
+      before = advanceControlScalar(before, velocity, count - 1, min, max)
+      after = advanceControlScalar(before, velocity, 1, min, max)
     }
     this.shipCenterY = after
     if (before === initial && after === initial && this.lastPoseCenterY === initial) {
@@ -740,10 +775,8 @@ Page({
   },
 
   prepareCollisionWindows(fromMs, throughMs) {
-    const velocity = this.settings.controlMode === 'touch' ? this.touchDirection * this.baseControlSpeed : 0
-    const instantCenter = this.settings.controlMode === 'swipe' && this.pointerDown && this.swipeStartTouchY !== null && this.swipeCurrentTouchY !== null
-      ? clamp(this.swipeStartShipY + (this.swipeCurrentTouchY - this.swipeStartTouchY), this.shipYLimits.min, this.shipYLimits.max)
-      : undefined
+    const velocity = this.getPointerVelocity()
+    const stopCenter = this.settings.controlMode === 'swipe' ? this.swipeTargetY : undefined
     let count = 0
     for (let index = 0; index < this.frameCollisionCandidates.length; index += 1) {
       const asteroid = this.frameCollisionCandidates[index]
@@ -752,7 +785,7 @@ Page({
       // Its analytic position still advances at the usual scene boundaries.
       if (asteroid.lastHitAt + COLLISION_COOLDOWN_MS > throughMs) continue
       const slot = this.collisionWindows[count] || (this.collisionWindows[count] = {})
-      if (getCollisionQuantumWindow(asteroid, this.shipGeometry, fromMs, throughMs, this.shipCenterY, velocity, slot, SIMULATION_STEP_MS, instantCenter)) {
+      if (getCollisionQuantumWindow(asteroid, this.shipGeometry, fromMs, throughMs, this.shipCenterY, velocity, slot, SIMULATION_STEP_MS, stopCenter)) {
         slot.asteroid = asteroid
         count += 1
       }
@@ -915,6 +948,7 @@ Page({
     if (this.spriteRenderer) {
       this.spriteRenderer.draw(frame)
       if (frame.displayedHp !== this.lastSpriteHudHp) {
+        this.diagnosticMetadata.frameHud = true
         if (this.lastSpriteHudHp !== null) {
           this.canvas.clear({ x: 0, y: 0, w: this.viewport.width, h: this.viewport.height })
         }

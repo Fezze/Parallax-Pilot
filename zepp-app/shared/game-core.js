@@ -532,9 +532,8 @@ export function getRenderAsteroidXAt(asteroid, atMs) {
   return getAsteroidXAt(asteroid, atMs)
 }
 
-// Conservative event window for one constant-control segment. Only the caller's
-// canonical narrow phase decides actual contact. A swipe target applies in the
-// first quantum and stays fixed thereafter; input reversals start a new call.
+// Conservative event window for monotonic motion that can stop at a target.
+// Only the caller's canonical narrow phase decides actual contact.
 export function getCollisionQuantumWindow(
   asteroid,
   geometry,
@@ -544,7 +543,7 @@ export function getCollisionQuantumWindow(
   velocityY,
   out = {},
   stepMs = 10,
-  instantCenterY
+  stopCenterY
 ) {
   if (asteroid.motionRemoved || throughMs < fromMs + stepMs) return null
   anchorAsteroidMotion(asteroid, fromMs)
@@ -580,35 +579,26 @@ export function getCollisionQuantumWindow(
   let firstMs = xFirst
   let lastMs = xLast
 
-  if (instantCenterY !== undefined && instantCenterY !== null) {
-    const target = clamp(instantCenterY, limits.min, limits.max)
-    if (target < lowCenter || target > highCenter) {
-      // The target itself is clear, but the first swept move can cross the
-      // entire playfield. Do not replace that chord with the target endpoint.
-      if (Math.max(start, target) < lowCenter || Math.min(start, target) > highCenter ||
-          xFirst > fromMs + stepMs) return null
-      firstMs = fromMs + stepMs
-      lastMs = firstMs
+  let end = clamp(startCenterY + velocityY * (duration / 1000), limits.min, limits.max)
+  if (stopCenterY !== undefined) {
+    end = clamp(end, Math.min(start, stopCenterY), Math.max(start, stopCenterY))
+  }
+  if (Math.max(start, end) < lowCenter || Math.min(start, end) > highCenter) return null
+  if (velocityY !== 0) {
+    const speed = velocityY / 1000
+    let enter = 0
+    let exit = duration
+    if (velocityY > 0) {
+      if (start < lowCenter) enter = (lowCenter - startCenterY) / speed
+      if (end > highCenter) exit = (highCenter - startCenterY) / speed
+    } else {
+      if (start > highCenter) enter = (highCenter - startCenterY) / speed
+      if (end < lowCenter) exit = (lowCenter - startCenterY) / speed
     }
-  } else {
-    const end = clamp(startCenterY + velocityY * (duration / 1000), limits.min, limits.max)
-    if (Math.max(start, end) < lowCenter || Math.min(start, end) > highCenter) return null
-    if (velocityY !== 0) {
-      const speed = velocityY / 1000
-      let enter = 0
-      let exit = duration
-      if (velocityY > 0) {
-        if (start < lowCenter) enter = (lowCenter - startCenterY) / speed
-        if (end > highCenter) exit = (highCenter - startCenterY) / speed
-      } else {
-        if (start > highCenter) enter = (highCenter - startCenterY) / speed
-        if (end < lowCenter) exit = (lowCenter - startCenterY) / speed
-      }
-      enter = Math.max(0, Math.min(duration, enter))
-      exit = Math.max(0, Math.min(duration, exit))
-      firstMs = Math.max(firstMs, fromMs + Math.floor(enter / stepMs) * stepMs)
-      lastMs = Math.min(lastMs, fromMs + (Math.floor(exit / stepMs) + 2) * stepMs)
-    }
+    enter = Math.max(0, Math.min(duration, enter))
+    exit = Math.max(0, Math.min(duration, exit))
+    firstMs = Math.max(firstMs, fromMs + Math.floor(enter / stepMs) * stepMs)
+    lastMs = Math.min(lastMs, fromMs + (Math.floor(exit / stepMs) + 2) * stepMs)
   }
 
   if (firstMs > lastMs) return null

@@ -253,6 +253,13 @@ function assembleCompact(runId, chunks) {
       validateTuple(data, 9, kind, [1, 2, 3, 4, 5, 6])
       if (pairs.length >= 4) throw new Error('Too many pair records')
       pairs.push(data)
+    } else if (kind === 'damage' || kind === 'impact') {
+      const nullable = kind === 'impact' ? [6, 7] : []
+      validateTuple(data, 9, kind, nullable)
+      if (data.some((value, index) => !(value === null && nullable.includes(index)) &&
+        (!isFiniteNumber(value) || value < 0))) throw new Error(`Invalid ${kind} duration`)
+      if (records.has(kind)) throw new Error(`Duplicate ${kind} record`)
+      records.set(kind, data)
     } else throw new Error(`Unknown compact record kind ${kind}`)
   }
   const meta = requireRecord(records, 'meta')
@@ -261,6 +268,10 @@ function assembleCompact(runId, chunks) {
   const work = requireRecord(records, 'work')
   const calibration = requireRecord(records, 'calibration')
   const terminal = requireRecord(records, 'terminal')
+  const damage = records.get('damage')
+  const impact = records.get('impact')
+  if (Boolean(damage) !== Boolean(impact)) throw new Error('Missing compact damage or impact record')
+  const duration = (row, index) => ({ count: row[index], sum: row[index + 1], max: row[index + 2] })
   const metrics = METRIC_NAMES.map((_, index) => requireRecord(records, `metric:${index}`))
   const phases = PHASE_NAMES.map((_, index) => requireRecord(records, `phase:${index}`))
   const groups = GROUP_NAMES.map((_, index) => requireRecord(records, `group:${index}`))
@@ -281,13 +292,22 @@ function assembleCompact(runId, chunks) {
     work: { stepCount: work[0], stepsSum: work[1], stepsMax: work[2], objectVisitsSum: work[3], candidatesSum: work[4],
       asteroidsMax: work[5], zeroStepFrames: work[6], pausedFrameCount: work[7],
       fullMaterializations: work[8], fullAsteroidVisits: work[9], sensorReads: work[10],
-      skippedQuanta: work[11], eventQuanta: work[12] },
+      skippedQuanta: work[11], eventQuanta: work[12], ...(impact ? { foldedSwipeMoves: impact[8] } : {}) },
     sampling: { names: PHASE_NAMES, steady: phaseSummaries },
     groups: groupSummaries,
     calibration: { reads: calibration[0], spanMs: calibration[1], zeroDeltas: calibration[2],
       minPositiveMs: calibration[3], rollbacks: calibration[4], invalidReads: calibration[5], invalidFrames: calibration[6] },
     terminal: { callbackCount: terminal[0], callbackSum: terminal[1], callbackMax: terminal[2],
       updateSum: terminal[3], drawSubmissionSum: terminal[4], stepsSum: terminal[5] },
+    ...(damage ? { damage: {
+      hitUpdateMs: duration(damage, 0),
+      afterHitGapMs: duration(damage, 3),
+      afterHitResidualMs: duration(damage, 6),
+      hudDrawMs: duration(impact, 0),
+      hapticMs: duration(impact, 3),
+      scoreSaveMs: impact[6],
+      resultsRouteMs: impact[7],
+    } } : {}),
     trace: { columns: TRACE_COLUMNS, rows: pairs.map(row => row.slice()) },
     caveats: ['Compact export contains selected aggregates and at most four paired trace rows; it does not include full histograms or the full trace.',
       ...(work.length >= 13 ? ['Phase samples describe executed canonical steps; skipped logical quanta produce no phase samples or object/candidate visits.'] : [])]

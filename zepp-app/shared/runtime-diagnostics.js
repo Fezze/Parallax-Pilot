@@ -44,6 +44,21 @@ function addScalar(hist, value) {
   if (value > hist.max) hist.max = value
 }
 
+function durationSummary() {
+  return { count: 0, sum: 0, max: 0 }
+}
+
+function recordDuration(summary, value) {
+  if (!Number.isFinite(value) || value < 0) return
+  summary.count += 1
+  summary.sum += value
+  if (value > summary.max) summary.max = value
+}
+
+function durationTuple({ count, sum, max }) {
+  return [count, sum, max]
+}
+
 function metrics() {
   const result = {}
   for (let i = 0; i < METRICS.length; i += 1) result[METRICS[i]] = histogram()
@@ -134,6 +149,12 @@ function compactRecords(report) {
   const terminal = report.terminal
   record('terminal', [terminal.callbackMs.count, terminal.callbackMs.sum, terminal.callbackMs.max,
     terminal.updateMs.sum, terminal.drawSubmissionMs.sum, terminal.steps.sum])
+  if (report.damage) {
+    const { hitUpdateMs, afterHitGapMs, afterHitResidualMs, hudDrawMs, hapticMs } = report.damage
+    record('damage', [...durationTuple(hitUpdateMs), ...durationTuple(afterHitGapMs), ...durationTuple(afterHitResidualMs)])
+    record('impact', [...durationTuple(hudDrawMs), ...durationTuple(hapticMs),
+      report.damage.scoreSaveMs, report.damage.resultsRouteMs, meta.foldedSwipeMoves || 0])
+  }
   return records
 }
 
@@ -170,6 +191,14 @@ export class RuntimeDiagnostics {
     this.previousArrival = NaN
     this.previousCallback = NaN
     this.previousCallbackValid = false
+    this.previousFrameHit = false
+    this.damage = meta.measureDamage === true ? {
+      hitUpdateMs: durationSummary(),
+      afterHitGapMs: durationSummary(),
+      afterHitResidualMs: durationSummary(),
+      hudDrawMs: durationSummary(),
+      hapticMs: durationSummary(),
+    } : null
     this.finalElapsed = 0
     this.finalPaused = 0
     this.finalPending = 0
@@ -234,6 +263,10 @@ export class RuntimeDiagnostics {
     this.observe(at)
     this.frameAt = at
     this.updateAt = NaN
+    if (this.damage) {
+      this.meta.frameHit = false
+      this.meta.frameHud = false
+    }
     this.startElapsed = clock.elapsedMs
     this.startPaused = clock.pausedMs
     this.startPending = clock.pendingMs
@@ -261,6 +294,11 @@ export class RuntimeDiagnostics {
     if (!this.enabled || !this.active) return
     this.observe(at)
     this.updateAt = at
+  }
+
+  recordHaptic(startedAt, endedAt) {
+    if (!this.enabled || !this.active || !this.damage) return
+    recordDuration(this.damage.hapticMs, endedAt - startedAt)
   }
 
   pointer(kind, count = 1) {
@@ -383,6 +421,15 @@ export class RuntimeDiagnostics {
       values[1] = NaN
       values[2] = NaN
     }
+    if (this.damage) {
+      if (this.previousFrameHit) {
+        recordDuration(this.damage.afterHitGapMs, values[0])
+        recordDuration(this.damage.afterHitResidualMs, values[2])
+      }
+      this.previousFrameHit = !terminal && this.meta.frameHit === true
+      if (this.previousFrameHit) recordDuration(this.damage.hitUpdateMs, values[4])
+      if (!terminal && this.meta.frameHud) recordDuration(this.damage.hudDrawMs, values[5])
+    }
     for (let i = 0; i < 7; i += 1) {
       accumulateTiming(target[METRICS[i]], values[i])
       if (!terminal) accumulateWork(group[METRICS[i]], values[i])
@@ -440,6 +487,14 @@ export class RuntimeDiagnostics {
         'Object visits count the caller-supplied per-step work set, not CPU instructions; candidate count is supplied by the caller.',
         'Clock rollback invalidates affected wall timings without changing simulation time; null trace values denote invalid or unavailable measurements.'
       ]
+    }
+    if (this.damage) {
+      const { scoreSaveMs, resultsRouteMs } = this.meta
+      report.damage = {
+        ...this.damage,
+        scoreSaveMs: Number.isFinite(scoreSaveMs) && scoreSaveMs >= 0 ? scoreSaveMs : null,
+        resultsRouteMs: Number.isFinite(resultsRouteMs) && resultsRouteMs >= 0 ? resultsRouteMs : null,
+      }
     }
     if (this.meta.compactExport === true) {
       report.caveats.push('Phase sampling follows executed canonical steps, independently of logical step totals; analytically skipped quanta have no phase sample or object/candidate visits.')

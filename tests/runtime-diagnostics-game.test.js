@@ -37,7 +37,7 @@ async function game(run, runIndex = 0) {
 }
 
 function observer(overrides = {}) {
-  return { enabled: true, pointer() {}, beginFrame() {}, markUpdate() {}, endFrame() {},
+  return { enabled: true, pointer() {}, beginFrame() {}, markUpdate() {}, endFrame() {}, recordHaptic() {},
     beginStep() { return false }, markStepPhase() {}, endStep() {}, recordSkippedSteps() {}, requestFinish() {}, ...overrides }
 }
 

@@ -4,7 +4,7 @@ import { createPointerInputQueue, enqueuePointerInput, MAX_POINTER_COMMANDS } fr
 import { createSimulationClock } from '../zepp-app/shared/simulation-clock.js'
 
 test('coalescing keeps the final swipe anchor and movement within a simulation quantum', () => {
-  const queue = createPointerInputQueue()
+  const queue = createPointerInputQueue(true)
   const clock = createSimulationClock(0)
   for (const [kind, y, at] of [['down',100,151],['move',120,152],['up',undefined,153],['down',200,154],['move',240,155]]) {
     enqueuePointerInput(queue,kind,y,at,clock)
@@ -33,7 +33,7 @@ test('high-rate input is bounded and reuses the same command storage', () => {
 })
 
 test('long waits retain only the final pointer state and its swipe anchor', () => {
-  const queue = createPointerInputQueue()
+  const queue = createPointerInputQueue(true)
   const clock = createSimulationClock(0)
   enqueuePointerInput(queue,'down',123,100,clock)
   for(let at=101;at<=10000;at++) enqueuePointerInput(queue,'move',at,at,clock)
@@ -42,8 +42,8 @@ test('long waits retain only the final pointer state and its swipe anchor', () =
   assert.equal(queue.events[0].y,123)
   assert.equal(queue.events[1].y,10000)
   enqueuePointerInput(queue,'up',undefined,10001,clock)
-  assert.equal(queue.events.length,1)
-  assert.equal(queue.events[0].kind,'up')
+  assert.deepEqual(queue.events.map(command => command.kind), ['down', 'move', 'up'])
+  assert.equal(queue.events[1].y,10000)
   assert.equal(queue.down,false)
 })
 

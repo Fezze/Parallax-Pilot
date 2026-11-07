@@ -520,19 +520,35 @@ for (const wristSide of ['left', 'right']) {
       assert.equal(page.asteroids.length, 0, 'exited object removed on following step')
     })
   })
-  test(`actual swipe motion crosses a stationary asteroid and clamps to the visible envelope (${wristSide})`, async () => {
-    await withGame({ settings: { controlMode: 'swipe', wristSide } }, ({ page, canvas, tick }) => {
+  test(`a quick swipe keeps its target at touch speed and checks its swept collisions (${wristSide})`, async () => {
+    await withGame({ settings: { controlMode: 'swipe', wristSide } }, ({ page, canvas, at, tick }) => {
       const asteroid = { id: 'swipe-crossing', x: page.shipRect.centerX, y: 140, radius: 7, vx: 0, lastHitAt: -Infinity }
       page.asteroids.push(asteroid)
+      const initial = page.shipCenterY
+      const touchStep = page.baseControlSpeed * 0.01
       canvas.__emit('CLICK_DOWN', { y: 240 })
       canvas.__emit('MOVE', { y: -1000 })
+      canvas.__emit('CLICK_UP')
       tick(10)
+      assert.equal(page.shipCenterY, initial - touchStep)
+      assert.equal(page.hp, 100, 'the ship has not reached the asteroid yet')
+      assert.equal(page.pointerDown, false)
+      let wall = 10
+      while (page.hp === 100 && wall < 600) tick(wall += 10)
       assert.equal(page.hp, 93)
-      assert.equal(page.shipCenterY, page.shipYLimits.min)
-      assert.equal(page.shipRect.centerY, page.shipCenterY)
+      assert.ok(page.shipCenterY > page.shipYLimits.min)
+      const hitAt = asteroid.lastHitAt
+      const turn = page.shipCenterY
+      canvas.__emit('CLICK_DOWN', { y: 140 })
       canvas.__emit('MOVE', { y: 2000 })
-      tick(20)
-      assert.equal(page.hp, 93, 'cooldown blocks a second sweep through the same contact')
+      tick(wall += 10)
+      assert.equal(page.shipCenterY, turn + touchStep)
+      at(wall + 1); canvas.__emit('MOVE', { y: 2100 })
+      at(wall + 2); canvas.__emit('CLICK_UP')
+      tick(wall += 10)
+      assert.equal(page.diagnosticMetadata.foldedSwipeMoves, 1)
+      assert.equal(asteroid.lastHitAt, hitAt, 'cooldown blocks a second contact during reversal')
+      while (page.shipCenterY < page.shipYLimits.max && wall < 2500) tick(wall += 100)
       assert.equal(page.shipCenterY, page.shipYLimits.max)
       assert.equal(page.shipRect.centerY, page.shipCenterY)
     })

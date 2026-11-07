@@ -1000,7 +1000,7 @@ test('game square HUD uses rounded corner arc segments', async () => {
   }
 })
 
-test('game swipe input moves relatively and does not teleport on touch down', async () => {
+test('game swipe follows a relative target at the shared speed limit', async () => {
   resetEnv()
   __seedLocalStorage({
     tilt_calibration_v1: JSON.stringify(tiltProfile()),
@@ -1036,10 +1036,17 @@ test('game swipe input moves relatively and does not teleport on touch down', as
     assert.equal(page.shipCenterY, initialCenterY)
     now += 16
     page.tick()
-    assert.equal(page.shipCenterY, initialCenterY + 60)
+    assert.equal(page.shipCenterY, initialCenterY + page.baseControlSpeed * 0.01)
 
     canvas.__emit('CLICK_UP')
+    for (let i = 0; i < 4; i += 1) {
+      now += 100
+      page.tick()
+    }
+    assert.equal(page.shipCenterY, initialCenterY + 60)
     canvas.__emit('CLICK_DOWN', { y: 300 })
+    now += 16
+    page.tick()
     assert.equal(page.shipCenterY, initialCenterY + 60)
 
     page.onDestroy()
