@@ -1,6 +1,7 @@
 import { readFile, mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { SLOW_UPDATE_FIELDS } from '../zepp-app/shared/runtime-diagnostics.js'
 
 const MARKER = 'PP_DIAG '
 const METRIC_MARKER = 'PP_METRIC '
@@ -218,9 +219,28 @@ function validateTuple(tuple, length, label, nullable = []) {
   }
 }
 
+function decodeSlowUpdate(data) {
+  const [packed] = data
+  const expectedLength = 4 + (SLOW_UPDATE_FIELDS.length - 2) * 3 + 1
+  if (data.length !== 1 || typeof packed !== 'string' || packed.length !== expectedLength ||
+      !/^[0-9a-z]+[01]$/.test(packed)) throw new Error('Invalid stall record')
+  const row = { frame: Number.parseInt(packed.slice(0, 4), 36) }
+  for (let i = 1; i < SLOW_UPDATE_FIELDS.length - 1; i += 1) {
+    const offset = 4 + (i - 1) * 3
+    const digits = packed.slice(offset, offset + 3)
+    row[SLOW_UPDATE_FIELDS[i]] = digits === 'zzz' ? null : Number.parseInt(digits, 36)
+  }
+  if (row.frame === 0 || row.updateMs === null || row.logicalQuanta === null) {
+    throw new Error('Missing stall frame, update or logical quanta')
+  }
+  row.hit = packed[packed.length - 1] === '1'
+  return row
+}
+
 function assembleCompact(runId, chunks) {
   const records = new Map()
   const pairs = []
+  const slowUpdates = []
   const putIndexed = (kind, data, limit, length) => {
     validateTuple(data, length, kind, kind === 'metric' ? [5] : [])
     const index = data[0]
@@ -253,6 +273,9 @@ function assembleCompact(runId, chunks) {
       validateTuple(data, 9, kind, [1, 2, 3, 4, 5, 6])
       if (pairs.length >= 4) throw new Error('Too many pair records')
       pairs.push(data)
+    } else if (kind === 'stall') {
+      if (slowUpdates.length >= 2) throw new Error('Too many stall records')
+      slowUpdates.push(decodeSlowUpdate(data))
     } else if (kind === 'damage' || kind === 'impact') {
       const nullable = kind === 'impact' ? [6, 7] : []
       validateTuple(data, 9, kind, nullable)
@@ -308,9 +331,11 @@ function assembleCompact(runId, chunks) {
       scoreSaveMs: impact[6],
       resultsRouteMs: impact[7],
     } } : {}),
+    ...(slowUpdates.length ? { slowUpdates } : {}),
     trace: { columns: TRACE_COLUMNS, rows: pairs.map(row => row.slice()) },
     caveats: ['Compact export contains selected aggregates and at most four paired trace rows; it does not include full histograms or the full trace.',
-      ...(work.length >= 13 ? ['Phase samples describe executed canonical steps; skipped logical quanta produce no phase samples or object/candidate visits.'] : [])]
+      ...(work.length >= 13 ? ['Phase samples describe executed canonical steps; skipped logical quanta produce no phase samples or object/candidate visits.'] : []),
+      ...(slowUpdates.length ? ['Slow updates are the two highest valid steady update times available. Spawn and contact times are included in stepsMs. Values are rounded to integer milliseconds or counts and capped at 46654, except frame numbers which are capped at 1679615. Null indicates an invalid or unavailable value.'] : [])]
   }
 }
 

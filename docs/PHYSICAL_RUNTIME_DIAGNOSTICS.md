@@ -185,3 +185,20 @@ asteroids passed to the exact damage check. Difficulty calculation now
 belongs to the spawn phase.
 
 The Android Bridge installed the 2.3.38 Balance 2 package, version code 89, on November 7, 2026. The installed application uses source commit `11274b6`. Physical gameplay timing is pending at deployment.
+
+## Slow-update capture in 2.3.39
+
+This diagnostic build retains the two slowest ordinary update callbacks
+across the observed run, including their following arrival gaps when
+available. It separates input drain, frame candidate scan, collision
+window construction, full event steps, quiet advancement and final materialization. Spawn and
+exact contact durations are nested within event steps. The associated
+counts distinguish logical quanta from full event dispatch and raw inbox
+samples from admitted pointer commands. Legacy periodic phase sampling is
+disabled in this build so it does not add competing timestamp work.
+
+Use ordinary play on the physical watch. Durations are watch-side wall
+time, including any preemption. An isolated long span localizes where to
+investigate. A repeated long span correlated with its workload is stronger
+evidence of a computation bottleneck. Game rules and the timing policy use
+the same admission timestamp as 2.3.38.

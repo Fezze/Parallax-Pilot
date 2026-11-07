@@ -134,6 +134,7 @@ test('decodes compact records mixed with legacy reports inside escaped bridge ou
   assert.deepEqual(compactReport.trace.rows, [[10, 100, 20, 18, 25, 15, 2, 3, 0], [11, 125, 25, 25, 30, 16, 3, 4, 0]])
   assert.equal('bins' in compactReport.steady.gapMs, false)
   assert.equal('damage' in compactReport, false)
+  assert.equal('slowUpdates' in compactReport, false)
   assert.match(compactReport.caveats[0], /does not include full histograms/)
   assert.equal(result.reports[1].schema, 1)
 })
@@ -178,6 +179,75 @@ test('compact trace exports only the paired numeric measurements', () => {
   assert.equal(line.startsWith('PP_METRIC '), true)
   assert.equal(traceCsv(result.reports[0]),
     'frame,atMs,gapMs,previousCallbackMs,callbackMs,updateMs,drawSubmissionMs,steps,pausedMs\n10,100,20,18,25,15,2,3,0\n11,125,25,25,30,16,3,4,0\n')
+})
+
+test('compact slow updates keep the two worst valid steady updates across the run', () => {
+  const lines = []
+  let now = 1794046955289
+  let reads = 0
+  const stallFrame = {
+    inputMs: 1, scanMs: 2, windowsMs: 3, quietMs: 4, stepsMs: 20, spawnMs: 6,
+    contactMs: 7, materializeMs: 8, inbox: 9, commands: 10, blocks: 11,
+    eventSteps: 12, contactChecks: 13,
+  }
+  const meta = {
+    compactExport: true, measureDamage: true, stallFrame, version: '2.3.37', deviceSource: 9568513,
+    runIndex: 22, phaseSampleEvery: 0, controlMode: 'touch', wristSide: 'left',
+    timeScale: 1, spawnMultiplier: 1.1, width: 480, height: 480, modePersisted: true,
+  }
+  const diagnostic = new RuntimeDiagnostics(meta, {
+    now: () => { reads += 1; return now }, emit: line => lines.push(line),
+  })
+  const clock = { elapsedMs: 0, pausedMs: 0, pendingMs: 0 }
+  for (let frame = 1; frame <= 71; frame += 1) {
+    const arrival = now
+    diagnostic.beginFrame(arrival, clock, false, 0)
+    if (frame === 1) {
+      meta.frameHit = true
+      diagnostic.beginStep(0)
+      diagnostic.recordSkippedSteps(5)
+    }
+    if (frame === 70) {
+      stallFrame.contactMs = -1
+      stallFrame.contactChecks = 1e100
+    }
+    const update = frame === 1 ? 41 : frame === 2 ? 40 : frame === 3 ? 52 :
+      frame === 70 ? 45 : frame === 71 ? 80 : 1
+    now += update
+    diagnostic.markUpdate(now)
+    now += 4
+    const drawComplete = frame === 3 ? NaN : now
+    diagnostic.endFrame(drawComplete, clock, frame === 71)
+    now = arrival + (frame === 20 || frame === 21 ? 65 : 60 + frame % 2)
+  }
+
+  assert.equal(reads, 64 + 71, 'retaining rows adds no clock reads')
+  assert.equal(lines.length, 29)
+  assert.ok(lines.every(line => line.length < 160 && /^[\x20-\x7e]+$/.test(line)))
+  const result = decodeDiagnostics(lines.join('\n'))
+  assert.deepEqual(result.errors, [])
+  assert.deepEqual(result.incomplete, [])
+  assert.ok(result.reports[0].trace.rows.every(row => row[0] !== 1))
+  assert.deepEqual(result.reports[0].slowUpdates, [
+    { frame: 70, incomingGapMs: 61, updateMs: 45, drawSubmissionMs: 4, nextGapMs: 60, logicalQuanta: 0,
+      ...stallFrame, contactMs: null, contactChecks: 46654, hit: false },
+    { frame: 1, incomingGapMs: null, updateMs: 41, drawSubmissionMs: 4, nextGapMs: 61, logicalQuanta: 6,
+      ...stallFrame, contactMs: 7, contactChecks: 13, hit: true },
+  ])
+})
+
+test('compact slow updates use null for a missing next arrival and reject malformed records', () => {
+  const records = compactRecords()
+  const packed = '0001' + 'zzz005002zzz000' + '000'.repeat(13) + '0'
+  records.push(['stall', [packed]])
+  const result = decodeDiagnostics(compactLines(records).join('\n'))
+  assert.deepEqual(result.errors, [])
+  assert.equal(result.reports[0].slowUpdates[0].nextGapMs, null)
+
+  records.push(['stall', [packed.slice(1)]])
+  const malformed = decodeDiagnostics(compactLines(records).join('\n'))
+  assert.equal(malformed.reports.length, 0)
+  assert.match(malformed.errors[0].message, /Invalid stall record/)
 })
 
 test('the real compact exporter round-trips boolean metadata, first-frame null timings and batching counts', () => {

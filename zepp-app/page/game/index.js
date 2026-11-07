@@ -71,7 +71,23 @@ const CONTROL_BASE_SPEED_FACTOR = 0.46
 const SQUARE_HUD_CORNER_RADIUS = 36
 const HUD_DISPLAY_HP_SPEED = 72
 // Temporary physical-watch diagnostic build; this does not change game timing.
-const DIAGNOSTIC_VERSION = '2.3.38'
+const DIAGNOSTIC_VERSION = '2.3.39'
+
+function resetStallFrame(frame, inbox) {
+  frame.inputMs = 0
+  frame.scanMs = 0
+  frame.windowsMs = 0
+  frame.stepsMs = 0
+  frame.quietMs = 0
+  frame.spawnMs = 0
+  frame.contactMs = 0
+  frame.materializeMs = 0
+  frame.inbox = inbox
+  frame.commands = 0
+  frame.blocks = 0
+  frame.eventSteps = 0
+  frame.contactChecks = 0
+}
 
 function createPresentationFrame() {
   return { ship: {}, asteroids: [], asteroidCount: 0, displayedHp: HP_MAX }
@@ -350,9 +366,9 @@ Page({
     const diagnosticRun = diagnosticSession.index
     this.diagnosticMetadata = {
       version: DIAGNOSTIC_VERSION,
-      baselineCommit: 'd0baaec',
+      baselineCommit: '11274b6',
       runIndex: diagnosticRun,
-      phaseSampleEvery: diagnosticSession.persisted && diagnosticRun % 2 ? 0 : 13,
+      phaseSampleEvery: 0,
       modePersisted: diagnosticSession.persisted,
       width: deviceInfo.width,
       height: deviceInfo.height,
@@ -374,7 +390,9 @@ Page({
       eventQuanta: 0,
       measureDamage: true,
       foldedSwipeMoves: 0,
+      stallFrame: {},
     }
+    this.stallProbe = null
     this.runtimeDiagnostics = new RuntimeDiagnostics(this.diagnosticMetadata)
     // Startup logging and clock calibration happen before the game's clock.
     console.log(`PP_DIAG_START v=${DIAGNOSTIC_VERSION} run=${diagnosticRun} sampling=${this.diagnosticMetadata.phaseSampleEvery} control=${settings.controlMode} wrist=${settings.wristSide} time=${settings.timeScale} spawn=${settings.spawnMultiplier}`)
@@ -578,6 +596,8 @@ Page({
 
   spawnAsteroids(now, shipRect) {
     if (now < this.nextSpawnAt) return
+    const probe = this.stallProbe
+    const startedAt = probe ? Date.now() : 0
     const difficulty = calculateDifficulty(now, this.settings.timeScale)
     const spawnInterval =
       getSpawnIntervalMs(
@@ -586,6 +606,7 @@ Page({
       ) * this.spawnIntervalFactor
     const elapsedSinceSpawn = now - this.lastSpawnAt
     if (elapsedSinceSpawn < spawnInterval) {
+      if (probe) probe.spawnMs += Date.now() - startedAt
       return
     }
 
@@ -629,9 +650,12 @@ Page({
     this.nextSpawnAt = Math.max(now + SIMULATION_STEP_MS, getNextSpawnQuantum(
       this.lastSpawnAt, this.settings.timeScale, this.settings.spawnMultiplier, this.viewport.isRound
     ))
+    if (probe) probe.spawnMs += Date.now() - startedAt
   },
 
   handleCollisions(now, shipRect, previousShipRect) {
+    const probe = this.stallProbe
+    const startedAt = probe ? Date.now() : 0
     let didDamage = false
 
     for (let index = 0; index < this.collisionCandidates.length; index += 1) {
@@ -642,6 +666,10 @@ Page({
       didDamage = true
       this.hp = Math.max(0, this.hp - damage)
       asteroid.lastHitAt = now
+    }
+    if (probe) {
+      probe.contactChecks += this.collisionCandidates.length
+      probe.contactMs += Date.now() - startedAt
     }
 
     if (didDamage) this.diagnosticMetadata.frameHit = true
@@ -709,7 +737,10 @@ Page({
     const gap = Math.max(0, now - clock.lastFrameAt)
     const throughMs = gap > MAX_SIMULATION_GAP_MS ? clock.elapsedMs :
       clock.elapsedMs + Math.floor((clock.pendingMs + gap) / SIMULATION_STEP_MS) * SIMULATION_STEP_MS
+    const probe = this.stallProbe
+    const scanAt = probe ? Date.now() : 0
     collectFrameCollisionCandidates(this.asteroids, this.shipRect, clock.elapsedMs, throughMs, this.frameCollisionCandidates)
+    if (probe) probe.scanMs = Date.now() - scanAt
     this.simulationFrameActive = true
     // Only the presentation owner admits elapsed time. A burst of touch events
     // must not turn a paused frame gap into repeated simulation catch-up.
@@ -745,11 +776,13 @@ Page({
     } finally {
       // Full list/grid work occurs once per callback (plus actual spawn events).
       // Damage, cooldown and score still use the original 10 ms step instants.
+      const materializeAt = probe ? Date.now() : 0
       this.diagnosticMetadata.fullMaterializations += 1
       this.diagnosticMetadata.fullAsteroidVisits += this.asteroids.length
       materializeAsteroidsAt(this.asteroids, clock.elapsedMs, this.viewport, undefined, SIMULATION_STEP_MS, false)
       this.simulationFrameActive = false
       events.length = 0
+      if (probe) probe.materializeMs = Date.now() - materializeAt
     }
   },
 
@@ -767,6 +800,8 @@ Page({
 
   advanceQuietSteps(count) {
     if (count <= 0) return
+    const probe = this.stallProbe
+    const startedAt = probe ? Date.now() : 0
     let before = this.shipCenterY
     let after = before
     const initial = before
@@ -807,9 +842,12 @@ Page({
     this.simulationClock.elapsedMs += count * SIMULATION_STEP_MS
     this.diagnosticMetadata.skippedQuanta += count
     this.runtimeDiagnostics.recordSkippedSteps(count)
+    if (probe) probe.quietMs += Date.now() - startedAt
   },
 
   prepareCollisionWindows(fromMs, throughMs) {
+    const probe = this.frameCollisionCandidates.length ? this.stallProbe : null
+    const startedAt = probe ? Date.now() : 0
     const velocity = this.getPointerVelocity()
     const stopCenter = this.settings.controlMode === 'swipe' ? this.swipeTargetY : undefined
     let count = 0
@@ -826,9 +864,11 @@ Page({
       }
     }
     this.collisionWindowCount = count
+    if (probe) probe.windowsMs += Date.now() - startedAt
   },
 
   advanceSimulationBlock(count, fromMs) {
+    if (this.stallProbe) this.stallProbe.blocks += 1
     const clock = this.simulationClock
     const throughMs = fromMs + count * SIMULATION_STEP_MS
     clock.elapsedMs = fromMs
@@ -876,6 +916,8 @@ Page({
   },
 
   stepSimulation(deltaSeconds, now) {
+    const probe = this.stallProbe
+    const startedAt = probe ? Date.now() : 0
     this.diagnosticMetadata.eventQuanta += 1
     const sampled = this.runtimeDiagnostics.beginStep(this.frameCollisionCandidates.length)
     const previousShipRect = this.shipRect
@@ -914,15 +956,26 @@ Page({
     )
     if (sampled) this.runtimeDiagnostics.markStepPhase(5)
     this.runtimeDiagnostics.endStep(this.collisionCandidates.length)
+    if (probe) {
+      probe.eventSteps += 1
+      probe.stepsMs += Date.now() - startedAt
+    }
   },
 
   tick() {
     if (this.finished || this.destroyed) return
     const now = Date.now()
     const diagnostics = this.runtimeDiagnostics
+    const probe = diagnostics.enabled ? this.diagnosticMetadata.stallFrame : null
+    this.stallProbe = probe
+    if (probe) resetStallFrame(probe, this.pointerInbox.length)
     this.flushPointerDiagnostics()
     consumePointerSamples(this.pointerInbox, this.pointerInput, this.simulationClock,
       this.settings.controlMode, this.viewportHalfHeight)
+    if (probe) {
+      probe.inputMs = Date.now() - now
+      probe.commands = this.pointerInput.events.length
+    }
     if (!diagnostics.enabled) {
       this.advanceSimulation(now)
       if (!this.finished && !this.destroyed) this.drawFrame()
@@ -939,6 +992,7 @@ Page({
       diagnostics.requestFinish('callback-error')
       throw error
     } finally {
+      this.stallProbe = null
       diagnostics.endFrame(Date.now(), this.simulationClock, this.finished || this.destroyed)
     }
   },

@@ -149,14 +149,33 @@ test('fatal gameplay defers the single durable save until the timer returns or t
   }
 })
 
-test('successive sessions alternate basic and sampled modes without changing saved game settings', async () => {
-  for (const [previous, expected] of [[0, 0], [1, 13]]) {
+test('the stall build uses the same observation mode on successive sessions', async () => {
+  for (const previous of [0, 1]) {
     await game(({ page, settings }) => {
-      assert.equal(page.diagnosticMetadata.phaseSampleEvery, expected)
+      assert.equal(page.diagnosticMetadata.phaseSampleEvery, 0)
       assert.equal(page.diagnosticMetadata.runIndex, previous + 1)
       assert.deepEqual(JSON.parse(__readLocalStorage('settings_v1')), settings)
     }, previous)
   }
+})
+
+test('the stall probe measures collision window work outside executed physics steps', async () => {
+  await game(({ page, at, advanceWall }) => {
+    possibleContact(page)
+    const getPointerVelocity = page.getPointerVelocity
+    page.getPointerVelocity = function () {
+      advanceWall(25)
+      return getPointerVelocity.call(this)
+    }
+    at(20); page.tick()
+    const probe = page.diagnosticMetadata.stallFrame
+    assert.equal(probe.windowsMs, 25)
+    assert.equal(probe.stepsMs, 0)
+    assert.equal(probe.blocks, 1)
+    assert.equal(probe.eventSteps, 1)
+    assert.equal(probe.contactChecks, 1)
+    assert.equal(page.simulationClock.elapsedMs, 20)
+  })
 })
 
 test('diagnostic counter and score writes share the same cached LocalStorage instance', async () => {

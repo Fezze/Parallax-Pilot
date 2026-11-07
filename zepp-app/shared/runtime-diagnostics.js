@@ -12,12 +12,23 @@ const COMPACT_TERMINAL_TIMING = [3, 4, 5]
 const COMPACT_GROUP_TIMING = [0, 3, 4, 5]
 const COMPACT_TRACE_COLUMNS = ['frame', 'atMs', 'gapMs', 'previousCallbackMs', 'callbackMs',
   'updateMs', 'drawSubmissionMs', 'steps', 'pausedMs']
+const STALL_WORK_FIELDS = ['inputMs', 'scanMs', 'windowsMs', 'quietMs', 'stepsMs', 'spawnMs',
+  'contactMs', 'materializeMs', 'inbox', 'commands', 'blocks', 'eventSteps', 'contactChecks']
+export const SLOW_UPDATE_FIELDS = ['frame', 'incomingGapMs', 'updateMs', 'drawSubmissionMs',
+  'nextGapMs', 'logicalQuanta', ...STALL_WORK_FIELDS, 'hit']
 let nextRun = 0
 
 function numericArray(length) {
   const values = new Array(length)
   for (let i = 0; i < length; i += 1) values[i] = 0
   return values
+}
+
+function slowUpdateRow() {
+  const row = {}
+  for (const field of SLOW_UPDATE_FIELDS) row[field] = 0
+  row.updateMs = -1
+  return row
 }
 
 function histogram() {
@@ -109,7 +120,19 @@ function mergeAndClear(target, source) {
   }
 }
 
-// Export-only summaries: all selection and allocation happens after measurement.
+// Three base-36 digits per value keep each stall record within the native line
+// limit. Reserve zzz for unavailable values and use four digits for the frame.
+function encodeSlowUpdate(row) {
+  let packed = Math.min(row.frame, 36 ** 4 - 1).toString(36).padStart(4, '0')
+  for (let i = 1; i < SLOW_UPDATE_FIELDS.length - 1; i += 1) {
+    const value = row[SLOW_UPDATE_FIELDS[i]]
+    packed += Number.isFinite(value) && value >= 0
+      ? Math.min(Math.round(value), 36 ** 3 - 2).toString(36).padStart(3, '0') : 'zzz'
+  }
+  return packed + (row.hit ? '1' : '0')
+}
+
+// Allocate serialized records after measurement.
 function compactRecords(report) {
   const records = []
   const record = (kind, data) => records.push({ k: kind, d: data })
@@ -171,6 +194,11 @@ function compactRecords(report) {
     record('impact', [...durationTuple(hudDrawMs), ...durationTuple(hapticMs),
       report.damage.scoreSaveMs, report.damage.resultsRouteMs, meta.foldedSwipeMoves || 0])
   }
+  if (report.slowUpdates) {
+    for (const row of report.slowUpdates) {
+      if (row.frame !== 0) record('stall', [encodeSlowUpdate(row)])
+    }
+  }
   return records
 }
 
@@ -219,6 +247,8 @@ export class RuntimeDiagnostics {
     this.previousCallback = NaN
     this.previousCallbackValid = false
     this.previousFrameHit = false
+    this.slowUpdates = this.compactExport && meta.stallFrame ? [slowUpdateRow(), slowUpdateRow()] : null
+    this.pendingSlowUpdate = null
     this.damage = meta.measureDamage === true ? {
       hitUpdateMs: durationSummary(),
       afterHitGapMs: durationSummary(),
@@ -287,13 +317,15 @@ export class RuntimeDiagnostics {
     if (!this.enabled || this.active || this.exportPending) return
     this.active = true
     this.timingInvalid = false
-    this.observe(at)
+    const validArrival = this.observe(at)
+    if (this.pendingSlowUpdate) {
+      if (validArrival) this.pendingSlowUpdate.nextGapMs = at - this.previousArrival
+      this.pendingSlowUpdate = null
+    }
     this.frameAt = at
     this.updateAt = NaN
-    if (this.damage) {
-      this.meta.frameHit = false
-      this.meta.frameHud = false
-    }
+    if (this.damage || this.slowUpdates) this.meta.frameHit = false
+    if (this.damage) this.meta.frameHud = false
     this.startElapsed = clock.elapsedMs
     this.startPaused = clock.pausedMs
     this.startPending = clock.pendingMs
@@ -391,6 +423,30 @@ export class RuntimeDiagnostics {
     this.sampleActive = false
   }
 
+  retainSlowUpdate(values) {
+    const rows = this.slowUpdates
+    const updateMs = values[4]
+    if (!Number.isFinite(updateMs) || updateMs < 0 || updateMs <= rows[1].updateMs) return
+    const row = rows[1]
+    row.frame = this.frameCount + 1
+    row.incomingGapMs = values[0]
+    row.updateMs = updateMs
+    row.drawSubmissionMs = values[5]
+    row.nextGapMs = NaN
+    row.logicalQuanta = this.frameSteps
+    row.hit = this.meta.frameHit === true
+    const work = this.meta.stallFrame
+    for (let i = 0; i < STALL_WORK_FIELDS.length; i += 1) {
+      const field = STALL_WORK_FIELDS[i]
+      row[field] = work[field]
+    }
+    if (updateMs > rows[0].updateMs) {
+      rows[1] = rows[0]
+      rows[0] = row
+    }
+    this.pendingSlowUpdate = row
+  }
+
   endFrame(at, clock, terminal = false) {
     if (!this.enabled || !this.active) return
     // A synchronous route may request teardown before the caller can mark it.
@@ -461,6 +517,7 @@ export class RuntimeDiagnostics {
       values[1] = NaN
       values[2] = NaN
     }
+    if (this.slowUpdates && !terminal) this.retainSlowUpdate(values)
     if (this.damage) {
       if (this.previousFrameHit) {
         recordDuration(this.damage.afterHitGapMs, values[0])
@@ -571,6 +628,7 @@ export class RuntimeDiagnostics {
       }
     }
     if (this.compactExport) {
+      report.slowUpdates = this.slowUpdates
       report.caveats.push('Phase sampling follows executed canonical steps, independently of logical step totals; analytically skipped quanta have no phase sample or object/candidate visits.')
       const records = compactRecords(report)
       for (let part = 0; part < records.length; part += 1) {
