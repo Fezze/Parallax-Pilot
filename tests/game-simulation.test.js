@@ -302,30 +302,43 @@ async function withGame(options, run) {
   }) })
   await import(`../zepp-app/page/game/index.js?simulation=${++importId}`)
   const page = globalThis.__zeppPageDefinition
-  const original = { now: Date.now, random: Math.random, set: globalThis.setInterval, clear: globalThis.clearInterval }
+  const original = { now: Date.now, random: Math.random, set: globalThis.setInterval, clear: globalThis.clearInterval,
+    timeout: globalThis.setTimeout, clearTimeout: globalThis.clearTimeout }
   let now = EPOCH
   let timer
+  let resultTask
   let seed = 137
   Date.now = () => now
   Math.random = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296 }
   globalThis.setInterval = (callback) => { timer = callback; return 1 }
   globalThis.clearInterval = () => {}
+  globalThis.setTimeout = callback => { resultTask = callback; return 2 }
+  globalThis.clearTimeout = () => { resultTask = null }
   try {
     page.onInit()
     page.build()
-    await run({ page, canvas: __getCanvasWidgets()[0], at: (ms) => { now = EPOCH + ms }, tick: (ms) => { now = EPOCH + ms; timer() } })
+    await run({ page, canvas: __getCanvasWidgets()[0], at: (ms) => { now = EPOCH + ms }, tick: (ms) => {
+      now = EPOCH + ms
+      timer()
+      const complete = resultTask
+      resultTask = null
+      complete?.()
+    } })
   } finally {
     page.onDestroy()
     Date.now = original.now
     Math.random = original.random
     globalThis.setInterval = original.set
     globalThis.clearInterval = original.clear
+    globalThis.setTimeout = original.timeout
+    globalThis.clearTimeout = original.clearTimeout
   }
 }
 
 function savedEntry() {
-  const entry = JSON.parse(__readSessionStorage('last_session_v1'))
-  assert.deepEqual(JSON.parse(__readLocalStorage('scores_v1'))[0], entry)
+  const entry = JSON.parse(__readLocalStorage('scores_v1'))[0]
+  assert.equal(__readSessionStorage('last_session_v1'), undefined)
+  assert.deepEqual(JSON.parse(__getRouterCalls().at(-1).payload.params).session, entry)
   return entry
 }
 
@@ -334,10 +347,9 @@ function world(page) {
     difficulty: calculateDifficulty(page.simulationClock.elapsedMs, page.settings.timeScale),
     hp: page.hp, displayedHp: page.displayedHp, spawned: page.asteroidSeed,
     lastSpawnAt: page.lastSpawnAt, lastDamageAt: page.lastDamageAt,
-    // Grid slots are acceleration-structure bookkeeping, not world state.
-    // Their ordering may depend on materialization batching; geometry, motion
-    // anchors, damage/cooldowns and actual membership are checked separately.
-    asteroids: page.asteroids.map(({ gridSliceIndex, gridBucketIndex, gridSlotIndex, ...physical }) => physical), finished: page.finished })
+    // Grid slots and previousX are refreshed as needed for individual queries.
+    // Compare canonical positions, motion anchors, damage and membership.
+    asteroids: page.asteroids.map(({ gridSliceIndex, gridBucketIndex, gridSlotIndex, previousX, ...physical }) => physical), finished: page.finished })
 }
 
 async function replay(schedule, options = {}) {

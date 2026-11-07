@@ -6,7 +6,6 @@ import {
   readSettings,
   readTiltCalibration,
   readTiltCalibrationReport,
-  writeLastSession,
   writeSettings,
   writeTiltCalibration,
   writeTiltCalibrationReport,
@@ -63,10 +62,6 @@ export function appendScore(entry) {
 
 export function loadLastSession() {
   return readLastSession(getSessionStorage())
-}
-
-export function saveLastSession(session) {
-  return writeLastSession(getSessionStorage(), session)
 }
 
 export function loadTiltCalibration() {

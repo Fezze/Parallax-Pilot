@@ -42,8 +42,10 @@ import {
 } from '../zepp-app/shared/device.js'
 import {
   buildTiltCalibrationReport,
+  normalizePreparedTiltInput,
   normalizeTiltInput,
   orientTiltY,
+  prepareTiltInput,
 } from '../zepp-app/shared/tilt-calibration.js'
 import {
   __resetLanguage,
@@ -197,6 +199,44 @@ test('tilt calibration derives stable ranges and softens normalized input near c
   assert.ok(normalizeTiltInput(report.profile.offset + 12, report.profile) <= 1)
   assert.equal(orientTiltY(5, 'left'), 5)
   assert.equal(orientTiltY(5, 'right'), -5)
+})
+
+test('prepared tilt preserves wrist orientation, asymmetric gains and the run calibration snapshot', () => {
+  const { profile } = buildTiltCalibrationReport({
+    center: Array(24).fill(11.25),
+    down: Array(12).fill(102.5),
+    up: Array(12).fill(-177.25),
+  })
+  assert.ok(profile)
+
+  for (const [wristSide, sign] of [['left', 1], ['right', -1]]) {
+    const calibration = { ...profile, wristSide }
+    const prepared = prepareTiltInput(calibration, wristSide)
+    assert.ok(prepared)
+    const { offset, deadzone, negativeRange, positiveRange } = calibration
+    const samples = [
+      [-400, -1],
+      [-47.31, -(47.31 - deadzone) / (negativeRange - deadzone)],
+      [-deadzone / 2, -0],
+      [0, 0],
+      [22.59, (22.59 - deadzone) / (positiveRange - deadzone)],
+      [400, 1],
+    ]
+    for (const [delta, expected] of samples) {
+      const currentY = sign * (offset + delta)
+      const direct = normalizeTiltInput(currentY, calibration, wristSide)
+      assert.ok(Math.abs(direct - expected) < 1e-12)
+      assert.equal(normalizePreparedTiltInput(currentY, prepared), direct)
+    }
+    assert.equal(normalizePreparedTiltInput(sign * (offset - deadzone / 2), prepared), -0)
+    assert.equal(normalizePreparedTiltInput(NaN, prepared), 0)
+    assert.equal(normalizePreparedTiltInput(Infinity, prepared), 0)
+    const otherWrist = wristSide === 'left' ? 'right' : 'left'
+    assert.equal(normalizePreparedTiltInput(100, prepareTiltInput(calibration, otherWrist)), 0)
+
+    calibration.offset += 100
+    assert.equal(normalizePreparedTiltInput(sign * offset, prepared), 0)
+  }
 })
 
 test('asteroid helpers keep movement logic consistent across immutable and in-place paths', () => {

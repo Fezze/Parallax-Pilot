@@ -28,11 +28,9 @@ import {
   advanceFrameCollisionCandidates,
   advanceControlScalar,
   anchorAsteroidMotion,
-  calculateCollisionResult,
   calculateDifficulty,
   clamp,
   collectFrameCollisionCandidates,
-  collectCollisionCandidatesFromList,
   createSpawnNeighborhood,
   createAsteroid,
   createScoreEntry,
@@ -42,6 +40,9 @@ import {
   getNextSpawnQuantum,
   getCollisionQuantumWindow,
   getAsteroidXAt,
+  getSweptCollisionDamage,
+  getSweptShipBounds,
+  isAsteroidInSweptBounds,
   updateShipPoints,
   materializeAsteroidsAt,
   ROUND_HUD_MARGIN,
@@ -59,19 +60,18 @@ import {
   recordPointerSample,
 } from '../../shared/pointer-input.js'
 import { RuntimeDiagnostics } from '../../shared/runtime-diagnostics.js'
-import { normalizeTiltInput } from '../../shared/tilt-calibration.js'
-import { advanceRuntimeDiagnosticRun, appendScore, loadSettings, loadTiltCalibration, saveLastSession, saveSettings } from '../../shared/storage.js'
+import { normalizePreparedTiltInput, prepareTiltInput } from '../../shared/tilt-calibration.js'
+import { advanceRuntimeDiagnosticRun, appendScore, loadSettings, loadTiltCalibration, saveSettings } from '../../shared/storage.js'
 import { createSpriteRenderer } from './sprite-renderer.js'
 
 const FRAME_INTERVAL_MS = 16
 const GAME_RENDERER = 'img' // Set to 'canvas' to select the original renderer.
 const GAME_BRIGHT_TIME_MS = 600000
-const MAX_SPAWNS_PER_TICK = 2
 const CONTROL_BASE_SPEED_FACTOR = 0.46
 const SQUARE_HUD_CORNER_RADIUS = 36
 const HUD_DISPLAY_HP_SPEED = 72
 // Temporary physical-watch diagnostic build; this does not change game timing.
-const DIAGNOSTIC_VERSION = '2.3.37'
+const DIAGNOSTIC_VERSION = '2.3.38'
 
 function createPresentationFrame() {
   return { ship: {}, asteroids: [], asteroidCount: 0, displayedHp: HP_MAX }
@@ -137,7 +137,7 @@ function drawHudLineSegment(canvas, segment, length, color) {
   })
 }
 
-function drawSquareHud(canvas, viewport, hpRatio) {
+function createSquareHudLayout(viewport) {
   const thickness = HUD_STROKE_WIDTH
   const inset = thickness / 2
   const radius = SQUARE_HUD_CORNER_RADIUS
@@ -219,6 +219,11 @@ function drawSquareHud(canvas, viewport, hpRatio) {
     },
   ]
   const perimeter = segments.reduce((sum, segment) => sum + segment.length, 0)
+  return { segments, perimeter }
+}
+
+function drawSquareHud(canvas, { segments, perimeter }, hpRatio) {
+  const thickness = HUD_STROKE_WIDTH
   let remaining = perimeter * hpRatio
 
   canvas.setPaint({
@@ -244,26 +249,25 @@ function drawSquareHud(canvas, viewport, hpRatio) {
   }
 }
 
-function drawRoundHud(canvas, viewport, hpRatio) {
-  const margin = ROUND_HUD_MARGIN
+function createRoundHudLayout(viewport) {
+  const x = viewport.width / 2
+  const y = viewport.height / 2
+  return { center_x: x, center_y: y, radius_x: x - ROUND_HUD_MARGIN, radius_y: y - ROUND_HUD_MARGIN }
+}
+
+function drawRoundHud(canvas, layout, hpRatio) {
   canvas.setPaint({
     color: COLORS.hudInactive,
     line_width: HUD_STROKE_WIDTH,
   })
   canvas.strokeArc({
-    center_x: viewport.width / 2,
-    center_y: viewport.height / 2,
-    radius_x: viewport.width / 2 - margin,
-    radius_y: viewport.height / 2 - margin,
+    ...layout,
     start_angle: -90,
     end_angle: 270,
     color: COLORS.hudInactive,
   })
   canvas.strokeArc({
-    center_x: viewport.width / 2,
-    center_y: viewport.height / 2,
-    radius_x: viewport.width / 2 - margin,
-    radius_y: viewport.height / 2 - margin,
+    ...layout,
     start_angle: -90,
     end_angle: -90 + hpRatio * 360,
     color: COLORS.hudActive,
@@ -311,7 +315,10 @@ Page({
     }
     this.viewportHalfHeight = this.viewport.height / 2
     this.settings = settings
-    this.tiltCalibration = loadTiltCalibration()
+    this.tiltCalibration = settings.controlMode === 'tilt' ? loadTiltCalibration() : null
+    this.preparedTilt = prepareTiltInput(this.tiltCalibration, settings.wristSide)
+    this.hudLayout = this.viewport.isRound ? createRoundHudLayout(this.viewport) : createSquareHudLayout(this.viewport)
+    this.spawnIntervalFactor = this.viewport.isRound ? 1 : SQUARE_SPAWN_INTERVAL_FACTOR
     this.collisionSliceWidth = COLLISION_SLICE_WIDTH
     this.shipGeometry = createShipGeometry(this.viewport, settings.wristSide)
     this.shipYLimits = this.shipGeometry.limits
@@ -325,6 +332,7 @@ Page({
     this.swipeTargetY = this.shipCenterY
     this.asteroids = []
     this.collisionCandidates = []
+    this.sweptShipBounds = {}
     this.frameCollisionCandidates = []
     this.collisionWindows = []
     this.collisionWindowCount = 0
@@ -342,7 +350,7 @@ Page({
     const diagnosticRun = diagnosticSession.index
     this.diagnosticMetadata = {
       version: DIAGNOSTIC_VERSION,
-      baselineCommit: 'a403b1e',
+      baselineCommit: 'd0baaec',
       runIndex: diagnosticRun,
       phaseSampleEvery: diagnosticSession.persisted && diagnosticRun % 2 ? 0 : 13,
       modePersisted: diagnosticSession.persisted,
@@ -378,6 +386,9 @@ Page({
     this.lastDamageAt = -Infinity
     this.finished = false
     this.destroyed = false
+    this.loop = null
+    this.resultTimer = null
+    this.completedRun = null
     this.simulationUpdate = (count, fromMs) => this.advanceSimulationBlock(count, fromMs)
     this.accelerometer = null
     this.vibrator = new Vibrator()
@@ -441,9 +452,10 @@ Page({
     this.pointerInput.events.length = 0
     restoreScreenTimeout()
 
-    if (this.loop) {
-      clearInterval(this.loop)
-      this.loop = null
+    this.stopGameLoop()
+    if (this.resultTimer !== null) {
+      clearTimeout(this.resultTimer)
+      this.resultTimer = null
     }
 
     offGesture()
@@ -452,7 +464,17 @@ Page({
       this.accelerometer.stop()
       this.accelerometer = null
     }
-    this.runtimeDiagnostics.requestFinish('destroy')
+    try {
+      this.completeRun()
+    } finally {
+      this.runtimeDiagnostics.requestFinish('destroy')
+    }
+  },
+
+  stopGameLoop() {
+    if (this.loop === null) return
+    clearInterval(this.loop)
+    this.loop = null
   },
 
   bindCanvasEvents() {
@@ -537,7 +559,7 @@ Page({
   updateShip(deltaSeconds) {
     if (this.settings.controlMode === 'tilt' && this.accelerometer) {
       this.diagnosticMetadata.sensorReads += 1
-      const normalized = normalizeTiltInput(this.accelerometer.getCurrent()?.y || 0, this.tiltCalibration, this.settings.wristSide)
+      const normalized = normalizePreparedTiltInput(this.accelerometer.getCurrent()?.y || 0, this.preparedTilt)
       this.shipCenterY += normalized * this.baseControlSpeed * deltaSeconds
     }
 
@@ -554,16 +576,14 @@ Page({
     this.shipCenterY = clamp(this.shipCenterY, this.shipYLimits.min, this.shipYLimits.max)
   },
 
-  spawnAsteroids(now, shipRect, difficulty) {
+  spawnAsteroids(now, shipRect) {
     if (now < this.nextSpawnAt) return
+    const difficulty = calculateDifficulty(now, this.settings.timeScale)
     const spawnInterval =
       getSpawnIntervalMs(
         difficulty,
         this.settings.spawnMultiplier
-      ) *
-      (this.deviceInfo.screenShape === SCREEN_SHAPE_ROUND
-        ? 1
-        : SQUARE_SPAWN_INTERVAL_FACTOR)
+      ) * this.spawnIntervalFactor
     const elapsedSinceSpawn = now - this.lastSpawnAt
     if (elapsedSinceSpawn < spawnInterval) {
       return
@@ -574,14 +594,10 @@ Page({
     if (this.simulationFrameActive) {
       this.diagnosticMetadata.fullMaterializations += 1
       this.diagnosticMetadata.fullAsteroidVisits += this.asteroids.length
-      materializeAsteroidsAt(this.asteroids, now - SIMULATION_STEP_MS, this.viewport, undefined, SIMULATION_STEP_MS)
+      materializeAsteroidsAt(this.asteroids, now - SIMULATION_STEP_MS, this.viewport, undefined, SIMULATION_STEP_MS, false)
     }
 
-    const rawSpawnCount = Math.floor(elapsedSinceSpawn / spawnInterval)
-    const spawnCount = Math.min(
-      MAX_SPAWNS_PER_TICK,
-      Math.max(1, rawSpawnCount)
-    )
+    const spawnCount = elapsedSinceSpawn >= 2 * spawnInterval ? 2 : 1
     const remainingDebt = Math.max(
       0,
       elapsedSinceSpawn - spawnInterval * spawnCount
@@ -615,26 +631,16 @@ Page({
     ))
   },
 
-  handleCollisions(now, shipRect, difficulty, previousShipRect = shipRect) {
+  handleCollisions(now, shipRect, previousShipRect) {
     let didDamage = false
 
     for (let index = 0; index < this.collisionCandidates.length; index += 1) {
       const asteroid = this.collisionCandidates[index]
-      const collision = calculateCollisionResult({
-        shipRect,
-        previousShipRect,
-        asteroid,
-        difficulty,
-        now,
-        cooldownMs: COLLISION_COOLDOWN_MS,
-      })
-
-      if (!collision.hit) {
-        continue
-      }
+      const damage = getSweptCollisionDamage(shipRect, previousShipRect, asteroid)
+      if (damage === 0) continue
 
       didDamage = true
-      this.hp = Math.max(0, this.hp - collision.damage)
+      this.hp = Math.max(0, this.hp - damage)
       asteroid.lastHitAt = now
     }
 
@@ -655,22 +661,42 @@ Page({
   },
 
   finishRun(now = Date.now()) {
-    if (this.finished) {
-      return
-    }
+    if (this.finished || this.destroyed) return
 
     this.finished = true
+    this.stopGameLoop()
+    this.completedRun = { survivedMs: this.simulationClock.elapsedMs, timestamp: now }
     this.flushPointerDiagnostics()
+    this.diagnosticMetadata.deferExport = true
     this.runtimeDiagnostics.requestFinish('game-over')
-    const startedAt = this.runtimeDiagnostics.enabled ? Date.now() : undefined
-    const scoreEntry = createScoreEntry(this.simulationClock.elapsedMs, this.settings, now)
-    saveLastSession(scoreEntry)
-    appendScore(scoreEntry)
-    const savedAt = startedAt === undefined ? undefined : Date.now()
-    replace({ url: ROUTES.RESULTS, params: JSON.stringify({ mode: 'summary', session: scoreEntry }) })
-    if (savedAt !== undefined) {
-      this.diagnosticMetadata.scoreSaveMs = savedAt - startedAt
-      this.diagnosticMetadata.resultsRouteMs = Date.now() - savedAt
+    if (!this.simulationFrameActive) {
+      this.completeRun()
+      return
+    }
+    // The one-shot callback runs after the final simulation frame returns.
+    this.resultTimer = setTimeout(() => {
+      this.resultTimer = null
+      this.completeRun()
+    }, 1)
+  },
+
+  completeRun() {
+    const completed = this.completedRun
+    if (!completed) return
+    this.completedRun = null
+    const diagnostics = this.runtimeDiagnostics
+    try {
+      const entry = createScoreEntry(completed.survivedMs, this.settings, completed.timestamp)
+      const startedAt = diagnostics.enabled ? Date.now() : undefined
+      appendScore(entry)
+      if (startedAt !== undefined) this.diagnosticMetadata.scoreSaveMs = Date.now() - startedAt
+      if (!this.destroyed) {
+        const routingAt = diagnostics.enabled ? Date.now() : undefined
+        replace({ url: ROUTES.RESULTS, params: JSON.stringify({ mode: 'summary', session: entry }) })
+        if (routingAt !== undefined) this.diagnosticMetadata.resultsRouteMs = Date.now() - routingAt
+      }
+    } finally {
+      diagnostics.finishDeferred()
     }
   },
 
@@ -721,7 +747,7 @@ Page({
       // Damage, cooldown and score still use the original 10 ms step instants.
       this.diagnosticMetadata.fullMaterializations += 1
       this.diagnosticMetadata.fullAsteroidVisits += this.asteroids.length
-      materializeAsteroidsAt(this.asteroids, clock.elapsedMs, this.viewport, undefined, SIMULATION_STEP_MS)
+      materializeAsteroidsAt(this.asteroids, clock.elapsedMs, this.viewport, undefined, SIMULATION_STEP_MS, false)
       this.simulationFrameActive = false
       events.length = 0
     }
@@ -731,7 +757,12 @@ Page({
     // Dimensions and x never change during a run. Stationary steps must not
     // rewrite the same five points, but both temporal buffers stay independent.
     const y = Math.round(clamp(centerY, this.shipYLimits.min, this.shipYLimits.max) - this.shipGeometry.h / 2)
-    if (rect.y !== y) createShipRect(this.viewport, centerY, this.settings.wristSide, rect, this.shipGeometry)
+    if (rect.y === y) return
+    rect.y = y
+    rect.centerY = y + rect.h / 2
+    rect.points[0].y = rect.points[2].y = rect.points[4].y = rect.centerY
+    rect.points[1].y = y
+    rect.points[3].y = y + rect.h
   },
 
   advanceQuietSteps(count) {
@@ -767,6 +798,10 @@ Page({
       for (let index = 0; index < count; index += 1) {
         this.previousDisplayedHp = this.displayedHp
         this.displayedHp = moveTowards(this.displayedHp, this.hp, HUD_DISPLAY_HP_SPEED * (SIMULATION_STEP_MS / 1000))
+        if (this.displayedHp === this.hp && index + 1 < count) {
+          this.previousDisplayedHp = this.hp
+          break
+        }
       }
     }
     this.simulationClock.elapsedMs += count * SIMULATION_STEP_MS
@@ -851,26 +886,25 @@ Page({
     this.nextShipRect = previousShipRect
     this.shipRect = shipRect
     this.lastPoseCenterY = this.shipCenterY
-    const difficulty = calculateDifficulty(
-      now,
-      this.settings.timeScale
-    )
     if (sampled) this.runtimeDiagnostics.markStepPhase(0)
 
-    this.spawnAsteroids(now, shipRect, difficulty)
+    this.spawnAsteroids(now, shipRect)
     if (sampled) this.runtimeDiagnostics.markStepPhase(1)
     if (this.frameCollisionCandidates.length) advanceFrameCollisionCandidates(this.frameCollisionCandidates, now, SIMULATION_STEP_MS)
     if (sampled) this.runtimeDiagnostics.markStepPhase(2)
-    if (this.frameCollisionCandidates.length) collectCollisionCandidatesFromList(
-      this.frameCollisionCandidates,
-      shipRect,
-      this.settings.wristSide,
-      this.collisionCandidates,
-      previousShipRect
-    )
-    else this.collisionCandidates.length = 0
+    this.collisionCandidates.length = 0
+    if (this.frameCollisionCandidates.length) {
+      const bounds = getSweptShipBounds(shipRect, previousShipRect, this.sweptShipBounds)
+      for (let index = 0; index < this.frameCollisionCandidates.length; index += 1) {
+        const asteroid = this.frameCollisionCandidates[index]
+        if (!asteroid.motionRemoved && now - asteroid.lastHitAt >= COLLISION_COOLDOWN_MS &&
+            isAsteroidInSweptBounds(asteroid, bounds)) {
+          this.collisionCandidates.push(asteroid)
+        }
+      }
+    }
     if (sampled) this.runtimeDiagnostics.markStepPhase(3)
-    if (this.collisionCandidates.length) this.handleCollisions(now, shipRect, difficulty, previousShipRect)
+    if (this.collisionCandidates.length) this.handleCollisions(now, shipRect, previousShipRect)
     if (sampled) this.runtimeDiagnostics.markStepPhase(4)
     this.previousDisplayedHp = this.displayedHp
     this.displayedHp = moveTowards(
@@ -944,7 +978,6 @@ Page({
   },
 
   presentFrame(frame) {
-    const hpRatio = frame.displayedHp / HP_MAX
     if (this.spriteRenderer) {
       this.spriteRenderer.draw(frame)
       if (frame.displayedHp !== this.lastSpriteHudHp) {
@@ -952,7 +985,7 @@ Page({
         if (this.lastSpriteHudHp !== null) {
           this.canvas.clear({ x: 0, y: 0, w: this.viewport.width, h: this.viewport.height })
         }
-        this.drawHud(hpRatio)
+        this.drawHud(frame.displayedHp / HP_MAX)
         this.lastSpriteHudHp = frame.displayedHp
       }
       return
@@ -985,14 +1018,14 @@ Page({
       updateShipPoints(this.canvasShipPoints, frame.ship)
     )
 
-    this.drawHud(hpRatio)
+    this.drawHud(frame.displayedHp / HP_MAX)
   },
 
   drawHud(hpRatio) {
-    if (this.deviceInfo.screenShape === SCREEN_SHAPE_ROUND) {
-      drawRoundHud(this.canvas, this.viewport, hpRatio)
+    if (this.viewport.isRound) {
+      drawRoundHud(this.canvas, this.hudLayout, hpRatio)
     } else {
-      drawSquareHud(this.canvas, this.viewport, hpRatio)
+      drawSquareHud(this.canvas, this.hudLayout, hpRatio)
     }
   },
 })

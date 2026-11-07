@@ -173,3 +173,13 @@ how often a SWIPE target update left the current frame's trajectory unchanged.
 The haptic mode, HUD animation and score persistence keep their prior behavior.
 
 The Android Bridge installed the 2.3.37 Balance 2 package, version code 88, on November 7, 2026. The installed application uses source commit `d0baaec`. Native Balance 2 runs verified ordinary SWIPE and TOUCH gameplay and complete collision timing records. Physical 2.3.37 gameplay is pending at deployment.
+
+## Loop work and score completion in 2.3.38
+
+The terminal callback measurement ends before the separate score completion
+task. Its scoreSaveMs field times only the authoritative history operation.
+The earlier measurement combined the session and history writes inside the
+terminal callback. Compact diagnostics emit the same fields using fewer
+trace columns and aggregate updates. The candidate count covers eligible
+asteroids passed to the exact damage check. Difficulty calculation now
+belongs to the spawn phase.

@@ -7,6 +7,11 @@ const METRICS = ['gapMs', 'previousCallbackMs', 'residualMs', 'callbackMs', 'upd
 const PHASES = ['controlGeometryDifficulty', 'spawn', 'moveGrid', 'candidates', 'collisionDamage', 'hud']
 const TRACE_COLUMNS = ['frame', 'atMs', 'group', 'terminal', ...METRICS,
   'down', 'move', 'up', 'cancel', 'other', 'startElapsedMs', 'startPausedMs', 'startPendingMs']
+const COMPACT_STEADY_WORK = [7, 9, 12, 13, 14]
+const COMPACT_TERMINAL_TIMING = [3, 4, 5]
+const COMPACT_GROUP_TIMING = [0, 3, 4, 5]
+const COMPACT_TRACE_COLUMNS = ['frame', 'atMs', 'gapMs', 'previousCallbackMs', 'callbackMs',
+  'updateMs', 'drawSubmissionMs', 'steps', 'pausedMs']
 let nextRun = 0
 
 function numericArray(length) {
@@ -38,7 +43,7 @@ function addScalar(hist, value) {
     return
   }
   // Compact work summaries export zero-step and nonzero-pause frame counts.
-  if (value === 0) hist.counts[0] += 1
+  if (hist.counts && value === 0) hist.counts[0] += 1
   hist.count += 1
   hist.sum += value
   if (value > hist.max) hist.max = value
@@ -65,13 +70,25 @@ function metrics() {
   return result
 }
 
-function phaseMetrics() {
-  const result = new Array(PHASES.length + 2)
-  for (let i = 0; i < result.length; i += 1) result[i] = histogram()
+function scalarMetrics(indices, trackZeros = false) {
+  const result = {}
+  for (let i = 0; i < indices.length; i += 1) {
+    const index = indices[i]
+    result[METRICS[index]] = { count: 0, sum: 0, max: 0, invalid: 0,
+      counts: trackZeros && (index === 7 || index === 9) ? [0] : null }
+  }
   return result
 }
 
-function mergeAndClear(target, source, scalarOnly = false) {
+function phaseMetrics(compact = false) {
+  const result = new Array(PHASES.length + (compact ? 0 : 2))
+  for (let i = 0; i < result.length; i += 1) {
+    result[i] = compact ? { count: 0, sum: 0, max: 0, invalid: 0 } : histogram()
+  }
+  return result
+}
+
+function mergeAndClear(target, source) {
   for (let i = 0; i < source.length; i += 1) {
     const from = source[i]
     const to = target[i]
@@ -79,10 +96,11 @@ function mergeAndClear(target, source, scalarOnly = false) {
     to.sum += from.sum
     to.invalid += from.invalid
     if (from.max > to.max) to.max = from.max
-    const binCount = scalarOnly ? 1 : from.counts.length
-    for (let bin = 0; bin < binCount; bin += 1) {
-      to.counts[bin] += from.counts[bin]
-      from.counts[bin] = 0
+    if (from.counts) {
+      for (let bin = 0; bin < from.counts.length; bin += 1) {
+        to.counts[bin] += from.counts[bin]
+        from.counts[bin] = 0
+      }
     }
     from.count = 0
     from.sum = 0
@@ -135,16 +153,14 @@ function compactRecords(report) {
     report.anomalies.invalidFrames])
   const rows = report.trace.rows
   const selected = rows.slice(-2)
-  const gapColumn = TRACE_COLUMNS.indexOf('gapMs')
+  const gapColumn = 2
   const largest = rows.filter(row => Number.isFinite(row[gapColumn]))
     .sort((left, right) => right[gapColumn] - left[gapColumn] || right[0] - left[0]).slice(0, 2)
   for (let index = 0; index < largest.length; index += 1) {
     if (selected.indexOf(largest[index]) < 0) selected.push(largest[index])
   }
-  const pairColumns = ['frame', 'atMs', 'gapMs', 'previousCallbackMs', 'callbackMs',
-    'updateMs', 'drawSubmissionMs', 'steps', 'pausedMs'].map(name => TRACE_COLUMNS.indexOf(name))
   for (let index = 0; index < selected.length; index += 1) {
-    record('pair', pairColumns.map(column => selected[index][column]))
+    record('pair', selected[index])
   }
   const terminal = report.terminal
   record('terminal', [terminal.callbackMs.count, terminal.callbackMs.sum, terminal.callbackMs.max,
@@ -167,6 +183,8 @@ export class RuntimeDiagnostics {
     this.enabled = true
     this.active = false
     this.reason = ''
+    this.exportPending = false
+    this.finishWallMs = undefined
     this.frameCount = 0
     this.stepCount = 0
     this.executedStepCount = 0
@@ -178,15 +196,24 @@ export class RuntimeDiagnostics {
     this.pointerCounts = numericArray(5)
     this.pendingPointers = numericArray(5)
     this.framePointers = numericArray(5)
-    this.steady = metrics()
-    this.terminal = metrics()
-    this.groups = [metrics(), metrics(), metrics()]
-    this.phases = phaseMetrics()
-    this.terminalPhases = phaseMetrics()
-    this.framePhases = phaseMetrics()
+    if (this.compactExport) {
+      this.steady = scalarMetrics(COMPACT_STEADY_WORK, true)
+      for (let i = 0; i < 7; i += 1) this.steady[METRICS[i]] = histogram()
+      this.terminal = scalarMetrics([...COMPACT_TERMINAL_TIMING, 7])
+      this.groups = [scalarMetrics(COMPACT_GROUP_TIMING), scalarMetrics(COMPACT_GROUP_TIMING),
+        scalarMetrics(COMPACT_GROUP_TIMING)]
+    } else {
+      this.steady = metrics()
+      this.terminal = metrics()
+      this.groups = [metrics(), metrics(), metrics()]
+    }
+    this.phases = phaseMetrics(this.compactExport)
+    this.terminalPhases = this.compactExport ? null : phaseMetrics()
+    this.framePhases = phaseMetrics(this.compactExport)
     this.sampleDurations = numericArray(PHASES.length)
     this.values = numericArray(METRICS.length)
-    this.trace = new Array(TRACE_COLUMNS.length)
+    this.traceColumns = this.compactExport ? COMPACT_TRACE_COLUMNS : TRACE_COLUMNS
+    this.trace = new Array(this.traceColumns.length)
     for (let i = 0; i < this.trace.length; i += 1) this.trace[i] = numericArray(TRACE_LIMIT)
     this.previousArrival = NaN
     this.previousCallback = NaN
@@ -257,7 +284,7 @@ export class RuntimeDiagnostics {
   }
 
   beginFrame(at, clock, held, asteroidCount) {
-    if (!this.enabled || this.active) return
+    if (!this.enabled || this.active || this.exportPending) return
     this.active = true
     this.timingInvalid = false
     this.observe(at)
@@ -357,8 +384,10 @@ export class RuntimeDiagnostics {
     for (let i = 0; i < PHASES.length; i += 1) {
       accumulate(this.framePhases[i], valid ? this.sampleDurations[i] : NaN)
     }
-    accumulate(this.framePhases[6], valid ? at - this.sampleStart : NaN)
-    accumulate(this.framePhases[7], valid ? at - this.phaseAt : NaN)
+    if (!this.compactExport) {
+      add(this.framePhases[6], valid ? at - this.sampleStart : NaN)
+      add(this.framePhases[7], valid ? at - this.phaseAt : NaN)
+    }
     this.sampleActive = false
   }
 
@@ -367,11 +396,7 @@ export class RuntimeDiagnostics {
     // A synchronous route may request teardown before the caller can mark it.
     terminal = terminal || this.reason !== ''
     this.observe(at)
-    const elapsed = clock.elapsedMs - this.startElapsed
     const paused = clock.pausedMs - this.startPaused
-    const admitted = elapsed + clock.pendingMs - this.startPending
-    if (!Number.isFinite(elapsed) || !Number.isFinite(paused) || !Number.isFinite(admitted) ||
-        elapsed < 0 || paused < 0 || admitted < 0) this.anomalies.invalidClockDeltas += 1
     this.finalElapsed = clock.elapsedMs
     this.finalPaused = clock.pausedMs
     this.finalPending = clock.pendingMs
@@ -380,33 +405,48 @@ export class RuntimeDiagnostics {
     values[1] = this.previousCallbackValid ? this.previousCallback : NaN
     values[2] = values[0] - values[1]
     values[7] = this.frameSteps
-    values[8] = elapsed
     values[9] = paused
-    values[10] = admitted
-    values[11] = clock.pendingMs
     values[12] = this.frameVisits
     values[13] = this.frameCandidates
     values[14] = this.frameAsteroids
     const target = terminal ? this.terminal : this.steady
     const group = this.groups[this.group]
-    const accumulateWork = this.compactExport ? addScalar : add
-    const accumulateTiming = this.compactExport && terminal ? addScalar : add
-    // Bulk count bookkeeping occurs before the final wall-clock read.
-    for (let i = 7; i < METRICS.length; i += 1) {
-      accumulateWork(target[METRICS[i]], values[i])
-      if (!terminal) accumulateWork(group[METRICS[i]], values[i])
-    }
-    if (this.frameSamples > 0) mergeAndClear(terminal ? this.terminalPhases : this.phases, this.framePhases, this.compactExport)
     const slot = this.frameCount % TRACE_LIMIT
     this.trace[0][slot] = this.frameCount + 1
     this.trace[1][slot] = this.frameAt - this.startedAt
-    this.trace[2][slot] = this.group
-    this.trace[3][slot] = terminal ? 1 : 0
-    for (let i = 7; i < METRICS.length; i += 1) this.trace[i + 4][slot] = values[i]
-    for (let i = 0; i < 5; i += 1) this.trace[METRICS.length + 4 + i][slot] = this.framePointers[i]
-    this.trace[METRICS.length + 9][slot] = this.startElapsed
-    this.trace[METRICS.length + 10][slot] = this.startPaused
-    this.trace[METRICS.length + 11][slot] = this.startPending
+    // Bulk count bookkeeping occurs before the final wall-clock read.
+    if (this.compactExport) {
+      if (terminal) addScalar(target.steps, this.frameSteps)
+      else {
+        for (let i = 0; i < COMPACT_STEADY_WORK.length; i += 1) {
+          const index = COMPACT_STEADY_WORK[i]
+          addScalar(target[METRICS[index]], values[index])
+        }
+        if (this.frameSamples > 0) mergeAndClear(this.phases, this.framePhases)
+      }
+      this.trace[7][slot] = this.frameSteps
+      this.trace[8][slot] = paused
+    } else {
+      const elapsed = clock.elapsedMs - this.startElapsed
+      const admitted = elapsed + clock.pendingMs - this.startPending
+      if (!Number.isFinite(elapsed) || !Number.isFinite(paused) || !Number.isFinite(admitted) ||
+          elapsed < 0 || paused < 0 || admitted < 0) this.anomalies.invalidClockDeltas += 1
+      values[8] = elapsed
+      values[10] = admitted
+      values[11] = clock.pendingMs
+      this.trace[2][slot] = this.group
+      this.trace[3][slot] = terminal ? 1 : 0
+      for (let i = 7; i < METRICS.length; i += 1) {
+        add(target[METRICS[i]], values[i])
+        if (!terminal) add(group[METRICS[i]], values[i])
+        this.trace[i + 4][slot] = values[i]
+      }
+      if (this.frameSamples > 0) mergeAndClear(terminal ? this.terminalPhases : this.phases, this.framePhases)
+      for (let i = 0; i < 5; i += 1) this.trace[METRICS.length + 4 + i][slot] = this.framePointers[i]
+      this.trace[METRICS.length + 9][slot] = this.startElapsed
+      this.trace[METRICS.length + 10][slot] = this.startPaused
+      this.trace[METRICS.length + 11][slot] = this.startPending
+    }
 
     const completedAt = this.now()
     this.observe(completedAt)
@@ -430,43 +470,76 @@ export class RuntimeDiagnostics {
       if (this.previousFrameHit) recordDuration(this.damage.hitUpdateMs, values[4])
       if (!terminal && this.meta.frameHud) recordDuration(this.damage.hudDrawMs, values[5])
     }
-    for (let i = 0; i < 7; i += 1) {
-      accumulateTiming(target[METRICS[i]], values[i])
-      if (!terminal) accumulateWork(group[METRICS[i]], values[i])
-      this.trace[i + 4][slot] = values[i]
+    if (this.compactExport) {
+      if (terminal) {
+        for (let i = 0; i < COMPACT_TERMINAL_TIMING.length; i += 1) {
+          const index = COMPACT_TERMINAL_TIMING[i]
+          addScalar(target[METRICS[index]], values[index])
+        }
+      } else {
+        for (let i = 0; i < 7; i += 1) add(target[METRICS[i]], values[i])
+        for (let i = 0; i < COMPACT_GROUP_TIMING.length; i += 1) {
+          const index = COMPACT_GROUP_TIMING[i]
+          addScalar(group[METRICS[index]], values[index])
+        }
+      }
+      this.trace[2][slot] = values[0]
+      this.trace[3][slot] = values[1]
+      this.trace[4][slot] = values[3]
+      this.trace[5][slot] = values[4]
+      this.trace[6][slot] = values[5]
+    } else {
+      for (let i = 0; i < 7; i += 1) {
+        add(target[METRICS[i]], values[i])
+        if (!terminal) add(group[METRICS[i]], values[i])
+        this.trace[i + 4][slot] = values[i]
+      }
     }
     this.previousArrival = this.frameAt
     this.previousCallback = values[3]
     this.previousCallbackValid = valid
     this.frameCount += 1
     this.active = false
-    this.lastCompletedAt = completedAt
     if (terminal && !this.reason) this.reason = 'terminal'
     if (!this.reason && completedAt - this.startedAt >= 30000) this.reason = 'wall-time-limit'
     if (this.reason) this.finish(completedAt)
   }
 
   requestFinish(reason) {
-    if (!this.enabled) return
-    if (!this.reason) this.reason = reason || 'requested'
+    if (!this.enabled || this.reason) return
+    this.reason = reason || 'requested'
+    this.exportPending = this.meta.deferExport === true
     if (!this.active) this.finish(this.now())
+  }
+
+  finishDeferred() {
+    if (!this.enabled || !this.exportPending) return
+    this.exportPending = false
+    // Synchronous teardown can release the hold while the terminal frame is active.
+    // In that case endFrame captures the final timestamp and emits the report.
+    if (!this.active) this.finish()
   }
 
   finish(at) {
     if (!this.enabled || this.active) return
-    const validWallTime = this.observe(at)
+    if (this.finishWallMs === undefined) {
+      const validWallTime = this.observe(at)
+      const wallMs = at - this.startedAt
+      this.finishWallMs = validWallTime && Number.isFinite(wallMs) && wallMs >= 0 ? wallMs : null
+    }
+    if (this.exportPending) return
     this.enabled = false
     const rows = []
     const count = this.frameCount < TRACE_LIMIT ? this.frameCount : TRACE_LIMIT
     const first = this.frameCount - count
     for (let frame = first; frame < this.frameCount; frame += 1) {
-      const row = new Array(TRACE_COLUMNS.length)
+      const row = new Array(this.traceColumns.length)
       for (let col = 0; col < row.length; col += 1) row[col] = this.trace[col][frame % TRACE_LIMIT]
       rows.push(row)
     }
     const report = {
       schema: 1, runId: this.runId, meta: this.meta, reason: this.reason,
-      wallMs: validWallTime && Number.isFinite(at - this.startedAt) && at >= this.startedAt ? at - this.startedAt : null,
+      wallMs: this.finishWallMs,
       frames: this.frameCount, steps: this.stepCount,
       clock: { elapsedMs: this.finalElapsed, pausedMs: this.finalPaused, pendingMs: this.finalPending,
         observedElapsedMs: this.finalElapsed - this.initialElapsed, observedPausedMs: this.finalPaused - this.initialPaused },
@@ -475,9 +548,10 @@ export class RuntimeDiagnostics {
       groupNames: ['idle', 'heldOrTransition', 'moving'], groups: this.groups,
       steady: this.steady, terminal: this.terminal,
       sampling: { every: this.sampleEvery, count: this.sampleCount,
-        names: [...PHASES, 'sampledStep', 'afterHud'], steady: this.phases, terminal: this.terminalPhases },
+        names: this.compactExport ? PHASES : [...PHASES, 'sampledStep', 'afterHud'],
+        steady: this.phases, terminal: this.terminalPhases },
       calibration: this.calibration, anomalies: this.anomalies,
-      trace: { limit: TRACE_LIMIT, columns: TRACE_COLUMNS, rows },
+      trace: { limit: TRACE_LIMIT, columns: this.traceColumns, rows },
       caveats: [
         'Both frame-only and phased modes are instrumented; compare matching input/workload runs to assess overhead.',
         'Date.now calibration is 64 bounded reads; span includes loop/read overhead and does not establish resolution when all reads are equal.',
@@ -496,7 +570,7 @@ export class RuntimeDiagnostics {
         resultsRouteMs: Number.isFinite(resultsRouteMs) && resultsRouteMs >= 0 ? resultsRouteMs : null,
       }
     }
-    if (this.meta.compactExport === true) {
+    if (this.compactExport) {
       report.caveats.push('Phase sampling follows executed canonical steps, independently of logical step totals; analytically skipped quanta have no phase sample or object/candidate visits.')
       const records = compactRecords(report)
       for (let part = 0; part < records.length; part += 1) {

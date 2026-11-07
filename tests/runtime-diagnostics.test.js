@@ -513,6 +513,57 @@ test('compact export escapes Unicode and deduplicates latest and largest-gap row
   assert.equal(records.filter(record => record.k === 'pair').length, 2)
 })
 
+test('deferred export keeps the terminal callback timestamp and includes later result timings', () => {
+  const h = harness({ compactExport: true, measureDamage: true, phaseSampleEvery: 0 })
+  emptyFrame(h, 10)
+  h.set(20)
+  h.diag.beginFrame(20, h.clock, false, 0)
+  h.diag.meta.deferExport = true
+  h.diag.requestFinish('game-over')
+  h.set(23)
+  h.diag.markUpdate(23)
+  h.set(24)
+  h.diag.endFrame(24, h.clock, true)
+  h.diag.requestFinish('destroy')
+  const reads = h.reads()
+  emptyFrame(h, 500)
+  assert.equal(h.diag.enabled, true)
+  assert.equal(h.lines.length, 0)
+  h.diag.meta.scoreSaveMs = 7
+  h.diag.meta.resultsRouteMs = 12
+  h.diag.finishDeferred()
+  assert.equal(h.diag.enabled, false)
+  assert.equal(h.reads(), reads)
+  const records = compactReport(h)
+  const one = kind => records.find(record => record.k === kind).d
+  assert.deepEqual(one('clock'), [24, 2, 0, 0, 0, 0, 'game-over'])
+  assert.deepEqual(one('terminal'), [1, 4, 4, 3, 1, 0])
+  assert.deepEqual(one('impact').slice(6), [7, 12, 0])
+  h.diag.finishDeferred()
+  assert.equal(h.lines.length, records.length)
+})
+
+test('releasing a deferred export during a callback still includes the complete terminal frame', () => {
+  const h = harness({ measureDamage: true, phaseSampleEvery: 0 })
+  h.set(20)
+  h.diag.beginFrame(20, h.clock, false, 0)
+  h.diag.meta.deferExport = true
+  h.diag.requestFinish('game-over')
+  h.diag.requestFinish('destroy')
+  h.diag.meta.scoreSaveMs = 5
+  h.diag.finishDeferred()
+  assert.equal(h.lines.length, 0)
+  h.set(30)
+  h.diag.markUpdate(30)
+  h.diag.endFrame(30, h.clock, true)
+  const result = report(h)
+  assert.equal(result.reason, 'game-over')
+  assert.equal(result.wallMs, 30)
+  assert.equal(result.terminal.callbackMs.sum, 10)
+  assert.equal(result.damage.scoreSaveMs, 5)
+  assert.equal(result.damage.resultsRouteMs, null)
+})
+
 test('skipped logical quanta preserve work totals while compact phases follow executed steps', () => {
   const full = harness({ phaseSampleEvery: 3 })
   const compact = harness({ phaseSampleEvery: 3, compactExport: true })
@@ -557,15 +608,12 @@ test('skipped logical quanta preserve work totals while compact phases follow ex
   assert.deepEqual(records.find(record => record.k === 'clock').d.slice(1, 6), [3, 10, 100, 430, 0])
   assert.deepEqual(records.find(record => record.k === 'work').d, [2, 7, 7, 14, 6, 7, 1, 1, 0, 0, 0, 0, 0])
   assert.deepEqual(records.find(record => record.k === 'terminal').d, [1, 0, 0, 0, 0, 3])
-  for (const name of Object.keys(full.diag.steady)) {
-    for (const collection of ['steady', 'terminal']) {
+  for (const collection of ['steady', 'terminal']) {
+    for (const name of Object.keys(compact.diag[collection])) {
       for (const field of ['count', 'sum', 'max', 'invalid']) {
         assert.equal(compact.diag[collection][name][field], full.diag[collection][name][field], `${collection}.${name}.${field}`)
       }
     }
-    full.diag.groups.forEach((group, index) => {
-      for (const field of ['count', 'sum', 'max', 'invalid']) assert.equal(compact.diag.groups[index][name][field], group[name][field])
-    })
   }
   records.filter(record => record.k === 'phase').forEach((record, index) => {
     assert.deepEqual(record.d, [index, 1, index + 1, index + 1, 0])
@@ -573,9 +621,11 @@ test('skipped logical quanta preserve work totals while compact phases follow ex
   assert.deepEqual(compact.diag.steady.callbackMs.counts, full.diag.steady.callbackMs.counts, 'timing p95 retains full bins')
   assert.equal(full.diag.steady.steps.counts.reduce((sum, count) => sum + count, 0), 2, 'legacy work bins remain complete')
   assert.equal(compact.diag.steady.steps.counts[0], 1, 'compact work retains exact zero counts')
-  assert.equal(compact.diag.steady.steps.counts.slice(1).reduce((sum, count) => sum + count, 0), 0, 'compact work skips positive bin scans')
-  assert.equal(compact.diag.groups[0].callbackMs.counts.slice(1).reduce((sum, count) => sum + count, 0), 0)
-  assert.equal(compact.diag.phases[0].counts.slice(1).reduce((sum, count) => sum + count, 0), 0)
+  assert.equal(compact.diag.steady.steps.counts.length, 1, 'compact work stores only the zero bin')
+  assert.equal(compact.diag.steady.elapsedMs, undefined)
+  assert.equal(compact.diag.groups[0].callbackMs.counts, null)
+  assert.equal(compact.diag.phases[0].counts, undefined)
+  assert.equal(compact.diag.trace.length, 9)
 })
 
 test('compact scalar accumulation preserves invalid observations without creating zero counts', () => {
@@ -591,15 +641,21 @@ test('compact scalar accumulation preserves invalid observations without creatin
     h.diag.requestFinish('invalid-clock')
   }
   for (const name of ['elapsedMs', 'pausedMs', 'admittedMs']) {
-    for (const target of [compact.diag.steady, compact.diag.groups[0]]) {
+    for (const target of [full.diag.steady, full.diag.groups[0]]) {
       assert.equal(target[name].invalid, 1)
       assert.equal(target[name].count, 0)
       assert.equal(target[name].counts[0], 0)
     }
   }
+  const paused = compact.diag.steady.pausedMs
+  assert.equal(paused.invalid, 1)
+  assert.equal(paused.count, 0)
+  assert.equal(paused.counts[0], 0)
+  assert.equal(compact.diag.steady.elapsedMs, undefined)
+  assert.equal(compact.diag.steady.admittedMs, undefined)
+  assert.equal(compact.diag.groups[0].pausedMs, undefined)
   const records = compactReport(compact)
   assert.equal(records.find(record => record.k === 'work').d[7], 0)
-  assert.deepEqual(compact.diag.steady.pausedMs, full.diag.steady.pausedMs)
 })
 
 test('compact phase cadence samples rare canonical events even when logical indices all miss modulo 13', () => {

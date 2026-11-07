@@ -1090,7 +1090,7 @@ test('game spawn catch-up is capped to avoid burst walls after a delayed frame',
     }
 
     page.lastSpawnAt = 0
-    page.spawnAsteroids(10000, shipRect, 30)
+    page.spawnAsteroids(10000, shipRect)
 
     assert.ok(page.asteroids.length <= 2)
 

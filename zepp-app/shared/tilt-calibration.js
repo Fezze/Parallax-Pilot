@@ -87,7 +87,30 @@ export function normalizeTiltInput(currentY, calibration, wristSide = 'left') {
   if (!Number.isFinite(currentY) || !hasTiltCalibration(calibration, wristSide)) return 0
   const raw = orientTiltY(currentY, wristSide) - calibration.offset
   const range = raw < 0 ? calibration.negativeRange : calibration.positiveRange
-  const normalized = clamp((Math.abs(raw) - calibration.deadzone) / (range - calibration.deadzone), 0, 1)
+  return normalizeTiltDelta(raw, calibration.deadzone, range - calibration.deadzone)
+}
+
+export function prepareTiltInput(calibration, wristSide = 'left') {
+  if (!hasTiltCalibration(calibration, wristSide)) return null
+  const { offset, deadzone, negativeRange, positiveRange } = calibration
+  return {
+    wristSide,
+    offset,
+    deadzone,
+    negativeSpan: negativeRange - deadzone,
+    positiveSpan: positiveRange - deadzone,
+  }
+}
+
+export function normalizePreparedTiltInput(currentY, prepared) {
+  if (!prepared || !Number.isFinite(currentY)) return 0
+  const raw = orientTiltY(currentY, prepared.wristSide) - prepared.offset
+  const span = raw < 0 ? prepared.negativeSpan : prepared.positiveSpan
+  return normalizeTiltDelta(raw, prepared.deadzone, span)
+}
+
+function normalizeTiltDelta(raw, deadzone, span) {
+  const normalized = clamp((Math.abs(raw) - deadzone) / span, 0, 1)
   return raw < 0 ? -normalized : normalized
 }
 

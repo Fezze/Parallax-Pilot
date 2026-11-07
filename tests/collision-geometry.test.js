@@ -3,7 +3,8 @@ import assert from 'node:assert/strict'
 import {
   addAsteroidToCollisionGrid, advanceAsteroidsInCollisionGrid,
   calculateCollisionResult, collectCollisionCandidatesFromGrid,
-  createCollisionGrid, createShipRect, getShipYLimits,
+  createCollisionGrid, createShipRect, getShipYLimits, getSweptCollisionDamage,
+  isAsteroidInCollisionBand,
 } from '../zepp-app/shared/game-core.js'
 
 const viewports = [416, 454, 466, 480].map(width => ({ width, height: width }))
@@ -125,7 +126,23 @@ test('continuous relative-motion hits agree with independent convex-distance min
       y: random() * viewport.height, radius: 7 + random() * 11, lastHitAt: -Infinity }
     const distance = oracleSweptDistance(rect, previous, circle)
     if (Math.abs(distance - circle.radius) < 1e-6) continue
-    assert.equal(hit(rect, circle, previous), distance < circle.radius, JSON.stringify({ rect, previous, circle, distance }))
+    const result = calculateCollisionResult({ shipRect: rect, previousShipRect: previous, asteroid: circle, now: 1000 })
+    assert.equal(result.hit, distance < circle.radius, JSON.stringify({ rect, previous, circle, distance }))
+    if (isAsteroidInCollisionBand(circle, rect, wrist, previous)) {
+      assert.equal(getSweptCollisionDamage(rect, previous, circle), result.damage)
+    }
+  }
+})
+
+test('damage-only sweep preserves strict tangency and uncached ship geometry', () => {
+  const rect = { x: 10, y: 20, w: 20, h: 20, wristSide: 'left' }
+  for (const radius of [7, 12, 18]) {
+    const tangent = { x: 30 + radius, y: 30, radius, lastHitAt: -Infinity }
+    const overlapping = { ...tangent, x: tangent.x - 1e-7 }
+    assert.equal(getSweptCollisionDamage(rect, rect, tangent), 0)
+    const result = calculateCollisionResult({ shipRect: rect, asteroid: overlapping, now: 1000 })
+    assert.ok(result.damage > 0)
+    assert.equal(getSweptCollisionDamage(rect, rect, overlapping), result.damage)
   }
 })
 

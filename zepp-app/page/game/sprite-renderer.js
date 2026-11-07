@@ -19,10 +19,13 @@ export function createSpriteRenderer(surface, shipRect, wristSide) {
   const available = []
   let frameNumber = 0
 
-  function showAsteroid(asteroid, x, y) {
+  function showAsteroid(asteroid) {
     const { id, radius } = asteroid
+    // An asteroid only moves horizontally during its lifetime.
+    const offset = radius + SPRITE_PADDING
     const size = radius * 2 + SPRITE_PADDING * 2 + 1
-    const options = { x, y, w: size, h: size }
+    const x = Math.round(asteroid.x) - offset
+    const options = { x, y: Math.round(asteroid.y) - offset, w: size, h: size }
     const slot = available.pop()
     if (slot) {
       if (slot.radius !== radius) options.src = `game-sprites/asteroid-${radius}.png`
@@ -31,12 +34,12 @@ export function createSpriteRenderer(surface, shipRect, wristSide) {
       slot.id = id
       slot.radius = radius
       slot.x = x
-      slot.y = y
+      slot.offset = offset
       return slot
     }
 
     options.src = `game-sprites/asteroid-${radius}.png`
-    return { id, radius, x, y, seen: 0, image: asteroidLayer.createWidget(widget.IMG, options) }
+    return { id, radius, x, offset, seen: 0, image: asteroidLayer.createWidget(widget.IMG, options) }
   }
 
   return {
@@ -44,18 +47,17 @@ export function createSpriteRenderer(surface, shipRect, wristSide) {
       const seen = ++frameNumber
       for (let i = 0; i < frame.asteroidCount; i += 1) {
         const asteroid = frame.asteroids[i]
-        const offset = asteroid.radius + SPRITE_PADDING
-        const x = Math.round(asteroid.x) - offset
-        const y = Math.round(asteroid.y) - offset
         let slot = views.get(asteroid.id)
         if (!slot) {
-          slot = showAsteroid(asteroid, x, y)
+          slot = showAsteroid(asteroid)
           active.push(slot)
           views.set(asteroid.id, slot)
-        } else if (slot.x !== x || slot.y !== y) {
-          slot.image.setProperty(prop.MORE, slot.y === y ? { x } : { x, y })
-          slot.x = x
-          slot.y = y
+        } else {
+          const x = Math.round(asteroid.x) - slot.offset
+          if (slot.x !== x) {
+            slot.image.setProperty(prop.MORE, { x })
+            slot.x = x
+          }
         }
         slot.seen = seen
       }

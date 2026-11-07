@@ -1,9 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { __getCanvasWidgets, __resetUI } from './mocks/zos/ui.mjs'
-import { LocalStorage, __resetStorage, __seedLocalStorage, __readLocalStorage } from './mocks/zos/storage.mjs'
+import { LocalStorage, __resetStorage, __seedLocalStorage, __readLocalStorage, __readSessionStorage } from './mocks/zos/storage.mjs'
 import { __resetDeviceInfo } from './mocks/zos/device.mjs'
-import { __resetRouter } from './mocks/zos/router.mjs'
+import { __getRouterCalls, __resetRouter } from './mocks/zos/router.mjs'
 import { __resetInteraction } from './mocks/zos/interaction.mjs'
 import { __resetSensors } from './mocks/zos/sensor.mjs'
 import { __resetDisplay } from './mocks/zos/display.mjs'
@@ -15,24 +15,34 @@ async function game(run, runIndex = 0) {
   __resetInteraction(); __resetSensors(); __resetDisplay()
   const settings = { controlMode: 'touch', wristSide: 'left', timeScale: 1, spawnMultiplier: 1, tiltSensitivity: 1 }
   __seedLocalStorage({ settings_v1: JSON.stringify(settings), runtime_diagnostic_run_v1: String(runIndex) })
-  const original = { now: Date.now, set: globalThis.setInterval, clear: globalThis.clearInterval, log: console.log }
+  const original = { now: Date.now, set: globalThis.setInterval, clear: globalThis.clearInterval,
+    timeout: globalThis.setTimeout, clearTimeout: globalThis.clearTimeout, log: console.log }
   let now = EPOCH
+  let resultTask
   const logs = []
   Date.now = () => now
   globalThis.setInterval = () => 1
   globalThis.clearInterval = () => {}
+  globalThis.setTimeout = callback => { resultTask = callback; return 2 }
+  globalThis.clearTimeout = () => { resultTask = null }
   console.log = line => logs.push(line)
   let page
   try {
     await import(`../zepp-app/page/game/index.js?runtime-integration=${++sequence}`)
     page = globalThis.__zeppPageDefinition
     page.onInit(); page.build()
-    await run({ page, canvas: __getCanvasWidgets()[0], logs,
+    await run({ page, canvas: __getCanvasWidgets()[0], logs, runResult: () => {
+      const complete = resultTask
+      resultTask = null
+      complete?.()
+    },
       at: ms => { now = EPOCH + ms }, advanceWall: ms => { now += ms }, settings })
   } finally {
     if (page) page.onDestroy()
     Date.now = original.now; globalThis.setInterval = original.set
     globalThis.clearInterval = original.clear; console.log = original.log
+    globalThis.setTimeout = original.timeout
+    globalThis.clearTimeout = original.clearTimeout
   }
 }
 
@@ -110,6 +120,33 @@ test('natural finish and synchronous destruction defer reporting until the termi
     page.onDestroy(); page.tick()
     assert.equal(reports().length, count)
   })
+})
+
+test('fatal gameplay defers the single durable save until the timer returns or the page is destroyed', async () => {
+  for (const destroyFirst of [false, true]) {
+    await game(({ page, logs, at, runResult }) => {
+      page.hp = 1
+      possibleContact(page)
+      at(16); page.tick()
+      assert.equal(page.finished, true)
+      assert.equal(page.loop, null)
+      assert.equal(__readLocalStorage('scores_v1'), undefined)
+      assert.equal(__getRouterCalls().length, 0)
+      assert.ok(!logs.some(line => line.startsWith('PP_METRIC ')))
+
+      if (destroyFirst) page.onDestroy()
+      at(90); runResult(); runResult()
+      const [entry] = JSON.parse(__readLocalStorage('scores_v1'))
+      assert.equal(entry.timestamp, EPOCH + 16)
+      assert.equal(entry.survivedMs, 10)
+      assert.equal(__readSessionStorage('last_session_v1'), undefined)
+      assert.equal(__getRouterCalls().length, destroyFirst ? 0 : 1)
+      if (!destroyFirst) assert.deepEqual(JSON.parse(__getRouterCalls()[0].payload.params).session, entry)
+      page.onDestroy()
+      assert.equal(JSON.parse(__readLocalStorage('scores_v1')).length, 1)
+      assert.ok(logs.some(line => line.startsWith('PP_METRIC ')))
+    })
+  }
 })
 
 test('successive sessions alternate basic and sampled modes without changing saved game settings', async () => {

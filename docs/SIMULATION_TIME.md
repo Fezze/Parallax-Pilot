@@ -111,3 +111,25 @@ share the block when both old and new targets are in the same direction and
 beyond the maximum distance the ship could travel for the rest of the frame,
 with one extra quantum of margin. Reversals and reachable targets retain their
 timed boundaries. No additional timer runs for swipes.
+
+## Fixed geometry and terminal scoring
+
+The 2.3.38 gameplay path needs only damage or zero from a swept contact.
+It shares the existing polygon and threshold math, rejects ineligible
+asteroids before the exact test and stops at the first qualifying edge.
+The overlap-ratio helper remains available for callers that need it.
+Difficulty is evaluated when a spawn becomes due. The exact spawn
+selection, random sequence and damage cooldown remain tied to game time.
+
+The viewport and wrist determine the round or square HUD geometry, static
+ship coordinates, and the tilt normalization parameters before the run.
+Asteroid sprites are packaged assets. Their vertical position is fixed when
+the IMG view first receives an asteroid. Runtime retention uses previous X
+only where the current X does not decide it, while contact checks still use
+both canonical positions.
+
+The fatal step captures the exact elapsed simulation time and wall
+timestamp and stops the game timer. A one-shot callback calculates the
+score and writes the existing history format before opening results.
+Teardown consumes an outstanding result before the page exits. Normal
+results receive the completed entry through route parameters.
