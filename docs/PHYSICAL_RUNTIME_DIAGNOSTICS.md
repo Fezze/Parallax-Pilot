@@ -183,3 +183,5 @@ terminal callback. Compact diagnostics emit the same fields using fewer
 trace columns and aggregate updates. The candidate count covers eligible
 asteroids passed to the exact damage check. Difficulty calculation now
 belongs to the spawn phase.
+
+The Android Bridge installed the 2.3.38 Balance 2 package, version code 89, on November 7, 2026. The installed application uses source commit `11274b6`. Physical gameplay timing is pending at deployment.
