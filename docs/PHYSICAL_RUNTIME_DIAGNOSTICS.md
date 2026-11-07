@@ -160,3 +160,5 @@ The game page selects `GAME_RENDERER = 'img'` during `build()`. The alternative 
 Normal gameplay on Zepp Simulator Balance 2 firmware 1.1.0, API 4.2, source 9568512 selected IMG. The captured frames show asteroid images, held touch in both directions, a partially depleted HUD after contact, and a natural result of 13,990 points. The console contains a complete report and no candidate runtime errors. This run establishes ordinary gameplay behavior in the simulator. Physical rendering cost remains to be measured.
 
 The Android Bridge built and installed the Balance 2 IMG package for 2.3.35, version code 86, on November 7, 2026. It uses application source commit `5703df0`. This documentation commit records deployment with the automatic version bump disabled for that invocation.
+
+The Android Bridge installed the 2.3.36 Balance 2 package, version code 87, on November 7, 2026. The installed application uses source commit `a403b1e`. Native Balance 2 simulator runs verified both TOUCH and SWIPE with IMG. A physical gameplay report is pending.
