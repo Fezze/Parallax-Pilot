@@ -1,12 +1,16 @@
-# Physical runtime diagnostics and event segments: 2.3.32
+# Archived physical runtime diagnostics
+
+Shipping gameplay from 2.3.42 leaves the archived observer disconnected. The
+standalone recorder and decoder remain available for historical evidence.
+Displayed cadence for 2.3.42 is measured with external video of the physical
+watch. The sections below describe the earlier instrumented builds.
 
 Version 2.3.29 observed the former full-world simulation architecture. Version
 2.3.31 batches distant asteroid motion and adds separate interpolated display
 state, while preserving the requested 16 ms timer, canonical 10 ms simulation,
 collision geometry, input commands, damage/scoring timeline and visual detail.
 The 250 ms interruption policy is still observed, rather than silently removed.
-Diagnostics must be removed or disabled before the ordinary release following
-this study. See SIMULATION_TIME.md for batching and presentation assumptions.
+See SIMULATION_TIME.md for the current batching and presentation path.
 
 ## Actual target and evidence limits
 

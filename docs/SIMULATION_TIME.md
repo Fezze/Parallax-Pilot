@@ -10,19 +10,22 @@ API or dependency is required (manifest v3, target API 4.0, minimum API 3.6).
 
 The 10 ms timeline does not require a full asteroid-array/grid update on every
 quantum. Asteroids retain an immutable birth position/time and constant velocity.
-Each callback selects a conservative horizontal sweep set once. Only that set
-is advanced and tested against the ship at the original canonical instants;
-vertical input reversals and clamping cannot escape this horizontal selection.
-The complete scene is materialized once after the callback and immediately
-before an actual spawn. Spawning sees the preceding quantum, then the newborn
-receives its first 10 ms movement, preserving the original operation order.
-Grid slot ordering is bookkeeping; independent membership/contact tests cover it.
+Each admitted callback selects a conservative horizontal sweep set once.
+TOUCH and SWIPE test that set against cached exact ship poses at canonical
+instants. TILT reads the sensor and tests its sweep at each canonical step.
+A single traversal after the callback updates canonical positions, prunes
+departed bodies and prepares asteroid images. At a real spawn, one additional
+traversal commits the preceding scene instant and collects the spawn
+neighborhood. Newborns receive their first 10 ms movement in the spawn step.
 
 The renderer interpolates the previous/current canonical ship and health state,
 and evaluates asteroid positions at the same presentation instant. This adds
 at most one simulation quantum of presentation delay and removes alternating
 10/20 ms displayed motion under regular 16 ms callbacks. Floating render points
 never feed back into collision geometry, control positions, damage or scoring.
+A changed fractional remainder prepares a new image without advancing the
+scene. An unchanged paused frame does no scene work. IMG views are attached
+to presentation records and returned to the pool through a retirement queue.
 Static preview callers can still draw an explicitly supplied ship rectangle.
 
 Analytic positions avoid callback-dependent accumulation error. Comparison with
@@ -47,9 +50,8 @@ contact/cooldown/fatal-step events remain tested independently.
   their existing wall-clock meaning. A callback ending the run does not render
   after navigating to results.
 
-Ten milliseconds gives two to twenty collision checks across the audited
-ordinary 16–200 ms callbacks, rather than replacing them with a large motion
-jump. The 250 ms admission limit covers the required 200 ms schedule with a
+The 10 ms lattice preserves intermediate contacts across ordinary 16–200 ms
+callbacks, including sweeps whose endpoints at the presentation cadence miss. The 250 ms admission limit covers the required 200 ms schedule with a
 small jitter allowance while keeping a hard work bound. These are correctness
 and interruption-policy choices, not measured optimal watch-performance values.
 R3 adds conservative swept grid queries and continuous relative-motion collision
@@ -78,28 +80,36 @@ time by less than 10 ms. Input changes are applied at the next simulation step;
 there is no added interpolation or alteration of swipe semantics.
 
 `tests/game-simulation.test.js` exercises the actual page, timer, UI events,
-collision grid, spawning, damage, navigation and persisted score at 16, 33, 50,
+spawning, damage, navigation and persisted score at 16, 33, 50,
 100, 200 ms and irregular callback intervals. Full-minute probes retain actual
 damage with extra HP to expose progression; a separate normal-HP replay checks
 natural game over. Browser tests exercise the page with mocked Zepp APIs and
 the existing screenshot matrix remains applicable. Neither browser tests nor
 builds establish physical watch FPS, CPU use, energy cost or sensor feel.
 
-## Canonical event segments
+## Contact batches
 
-The clock can admit one block of whole10ms quanta with the same carry, rollback and250ms pause rules. The page processes touch/swipe input segments at exact spawn/contact boundaries and advances quiet intervals using repeated scalar control additions. No physics event is moved to a presentation boundary. Newborns receive their first movement quantum immediately; a fatal event stops the block and clears pending time.
+Effective input changes and spawn quanta bound each TOUCH or SWIPE segment.
+The game computes conservative collision windows, clips them to each asteroid's
+260 ms cooldown and discards whole windows that are provably clear. When any
+window survives, it computes each rounded ship pose and swept bound once,
+using the same repeated scalar additions as 10 ms stepping.
 
-An unchanged ship pose no longer rewrites five vertices every quantum. Quiet segments preserve separate previous/current canonical rectangles and the final two HP values, including the first stationary quantum after movement. Tilt retains per-quantum reads because sensor traces are part of its existing control contract; geometry caching and scheduled spawning still apply.
+The exact arrow/circle sweep finds the first hit for each eligible asteroid.
+A 250 ms admission cannot contain two hits on the same body. Hits are grouped
+by canonical quantum in candidate order. Committing a group applies all its
+damage and cooldown changes before checking for game over. The displayed HP
+advances once for that quantum, even when fatal. Hit-free spans retain the
+last two canonical poses and HP values for interpolation.
 
-The next spawn quantum is solved from the current difficulty/interval equation, then checked at adjacent lattice points using the original predicate. Retained debt schedules at the next unprocessed quantum. Collision windows conservatively include both spatial rounding and the preceding sweep; only the existing10ms narrow phase determines damage. Logical steps include quiet quanta, while eventQuanta/skippedQuanta expose how much full dispatch was avoided.
-
-## Damage eligibility inside contact windows
-
-A spatial contact window does not wake a full step while that asteroid remains inside its 260 ms damage cooldown. Cached windows keep the asteroid reference, so a hit immediately moves the next eligible quantum even within the same admitted block. The inclusive readiness boundary is rounded up to the canonical lattice. Each asteroid keeps its own deadline; births and other ready contacts still wake independently. Motion and HUD continue analytically between those events.
+Spawn quanta keep the original operation order and exact sweep. TILT retains
+per-quantum sensor sampling and shares the spawn, scene and presentation
+paths. The spawn deadline uses the original difficulty and interval predicate
+on the 10 ms lattice.
 
 ## Swipe speed and input work
 
-In 2.3.37, a swipe selects a position relative to its press anchor. The ship
+A swipe selects a position relative to its press anchor. The ship
 approaches that target at the same maximum speed as touch and stops there.
 Release keeps the target, even for a gesture fully delivered between two
 simulation steps. A new press anchors at the actual position and can cancel or
@@ -133,36 +143,3 @@ timestamp and stops the game timer. A one-shot callback calculates the
 score and writes the existing history format before opening results.
 Teardown consumes an outstanding result before the page exits. Normal
 results receive the completed entry through route parameters.
-
-## Contact-only quanta in 2.3.40
-
-The existing window scheduler still selects a canonical candidate instant.
-At a non-spawn instant, the game advances one ship pose and checks only
-eligible windows using the exact swept collision test. It no longer runs
-the complete spawn and world-dispatch path for a miss or a hit. Spawning
-keeps its original complete step and checks newborns immediately. If
-time remains in the block, the scheduler appends windows for newborns
-and retains conservative windows for the rest of the scene.
-
-TILT retains its per-quantum sensor reads and uses the lighter path on
-non-spawn quanta. Native touch delivery stages commands directly into the
-bounded pool, preserving existing coalescing and timestamp rules. Only the
-timer advances time and submits the picture. A truly frozen callback
-skips the same-time scene scans and publication; a changed interpolation
-remainder still draws.
-
-## Whole-window rejection in 2.3.41
-
-After finding a conservative candidate window and clipping it to initial
-cooldown readiness, TOUCH and SWIPE can reject a multi-quantum interval
-as a unit. The asteroid sweep starts one quantum before the first
-possible test. For stationary motion it is checked against the fixed
-rounded polygon. For moving segments a relative endpoint chord is
-expanded by the bound for canonical Y rounding, numerical error and a
-possible bend at the stop or movement limit.
-
-Every canonical sweep lies in that expanded path because its endpoints
-are covered and the interpolation between them is linear. A positive
-separation can remove the window. Remaining candidates use the original
-exact tests at the original quanta. Input segment boundaries, spawning,
-TILT reads, damage, and fatal scoring retain their chronology.

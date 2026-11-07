@@ -144,7 +144,36 @@ function createTextEventWidget(type, props) {
   return instance
 }
 
+export function __enableSpriteWidgets() {
+  widget.IMG = 'IMG'
+  widget.GROUP = 'GROUP'
+  prop.VISIBLE = 'VISIBLE'
+}
+
+function createSpriteWidget(type, props, parent) {
+  const instance = createEventWidget(type, props)
+  const calls = []
+  const set = instance.setProperty
+  instance.setProperty = (name, value) => {
+    calls.push({ name, value })
+    set.call(instance, name, value)
+  }
+  instance.__propertyCalls = calls
+  instance.__parent = parent
+  return instance
+}
+
 export function createWidget(type, props) {
+  if (type === 'IMG' || type === 'GROUP') {
+    const instance = createSpriteWidget(type, props, null)
+    widgets.push(instance)
+    if (type === 'GROUP') instance.createWidget = (childType, childProps) => {
+      const child = createSpriteWidget(childType, childProps, instance)
+      widgets.push(child)
+      return child
+    }
+    return instance
+  }
   const instance =
     type === widget.CANVAS
       ? createCanvasWidget(type, props)
@@ -189,5 +218,8 @@ export function __isStatusBarVisible() {
 
 export function __resetUI() {
   widgets.length = 0
+  delete widget.IMG
+  delete widget.GROUP
+  delete prop.VISIBLE
   statusBarVisible = true
 }

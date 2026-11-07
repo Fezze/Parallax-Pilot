@@ -1,3 +1,4 @@
+import { createCanonicalGame, seededRandom } from './support/canonical-game-driver.js'
 import { tiltProfile } from './tilt-fixtures.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -12,6 +13,16 @@ import { __readLocalStorage, __readSessionStorage, __resetStorage, __seedLocalSt
 
 const EPOCH = 1700000000000
 let importId = 0
+function spyMethod(target, name) {
+  const calls = []
+  const method = target[name]
+  target[name] = function (...args) {
+    calls.push(args)
+    return method.apply(this, args)
+  }
+  return { calls }
+}
+
 const schedules = [[16], [33], [50], [100], [200], [7, 211, 38, 149, 3, 249, 52]]
 
 test('a hit inside an admitted block immediately prevents remaining immune steps from waking the world', async () => {
@@ -20,19 +31,19 @@ test('a hit inside an admitted block immediately prevents remaining immune steps
     const asteroid = { id: 'continuous-contact', x: page.shipRect.centerX, y: page.shipRect.centerY,
       radius: 8, vx: 0, lastHitAt: -Infinity }
     page.asteroids.push(asteroid)
+    const commits = spyMethod(page, 'finishContactQuantum')
+    const spawn = spyMethod(page, 'stepSpawnQuantum')
     tick(200)
     assert.equal(asteroid.lastHitAt, 10)
-    assert.equal(page.diagnosticMetadata.eventQuanta, 0)
-    assert.equal(page.diagnosticMetadata.probeQuanta, 1)
-    assert.equal(page.diagnosticMetadata.skippedQuanta, 20)
+    assert.deepEqual(commits.calls, [[10, true]])
+    assert.equal(spawn.calls.length, 0)
     const afterHit = page.hp
     tick(260)
     assert.equal(page.hp, afterHit)
-    assert.equal(page.diagnosticMetadata.probeQuanta, 1)
     tick(270)
     assert.equal(asteroid.lastHitAt, 270)
     assert.ok(page.hp < afterHit)
-    assert.equal(page.diagnosticMetadata.probeQuanta, 2)
+    assert.deepEqual(commits.calls, [[10, true], [270, true]])
   })
 })
 
@@ -44,25 +55,21 @@ test('dense contact during immunity skips dispatch and resumes damage at the exa
         vx: 0, radius: 8, lastHitAt: 0 }
       page.asteroids.push(asteroid)
     }
+    const commits = spyMethod(page, 'finishContactQuantum')
+    const quiet = spyMethod(page, 'advanceQuietSteps')
     tick(200)
+    assert.deepEqual(quiet.calls, [[20]])
     assert.equal(page.hp, 10000)
-    assert.equal(page.diagnosticMetadata.eventQuanta, 0)
-    assert.equal(page.diagnosticMetadata.skippedQuanta, 20)
     tick(260)
     assert.ok(page.hp < 10000)
-    assert.equal(page.diagnosticMetadata.eventQuanta, 0)
-    assert.equal(page.diagnosticMetadata.probeQuanta, 1)
     assert.ok(page.asteroids.every(a => a.lastHitAt === 260))
     const afterHit = page.hp
     tick(510)
     assert.equal(page.hp, afterHit)
-    assert.equal(page.diagnosticMetadata.probeQuanta, 1)
     tick(520)
     assert.ok(page.hp < afterHit)
     assert.ok(page.asteroids.every(a => a.lastHitAt === 520))
-    assert.equal(page.diagnosticMetadata.eventQuanta, 0)
-    assert.equal(page.diagnosticMetadata.probeQuanta, 2)
-    assert.equal(page.diagnosticMetadata.skippedQuanta, 52)
+    assert.deepEqual(commits.calls, [[260, true], [520, true]])
   })
 })
 
@@ -74,14 +81,14 @@ test('one asteroid cooldown does not delay another independent contact', async (
       const asteroid = { id, lastHitAt, x: page.shipRect.centerX, y: page.shipRect.centerY, radius: 8, vx: 0 }
       page.asteroids.push(asteroid)
     }
+    const commits = spyMethod(page, 'finishContactQuantum')
     tick(380)
     assert.deepEqual(page.asteroids.map(a => a.lastHitAt), [260, 130])
     const afterFirst = page.hp
     tick(400)
     assert.deepEqual(page.asteroids.map(a => a.lastHitAt), [260, 390])
     assert.ok(page.hp < afterFirst)
-    assert.equal(page.diagnosticMetadata.eventQuanta, 0)
-    assert.equal(page.diagnosticMetadata.probeQuanta, 2)
+    assert.deepEqual(commits.calls, [[260, true], [390, true]])
   })
 })
 
@@ -94,17 +101,16 @@ test('a stationary 25-quantum near miss clears the whole window without a contac
       const asteroid = { id: 'corner-pass', x, y: ship.y - 7, radius: 8, vx: 0, lastHitAt: -Infinity }
       page.asteroids.push(asteroid)
       assert.equal(calculateCollisionResult({ shipRect: ship, asteroid, now: 10 }).hit, false)
+      const quiet = spyMethod(page, 'advanceQuietSteps')
+      const shipSteps = spyMethod(page, 'advanceShipPose')
       tick(250)
+      assert.deepEqual(quiet.calls, [[25]])
+      assert.equal(shipSteps.calls.length, 0)
+      assert.equal(page.contactBatch.windowCount, 0)
       assert.equal(page.simulationClock.elapsedMs, 250)
       assert.equal(page.shipCenterY, initialY)
       assert.equal(page.hp, 100)
       assert.equal(asteroid.lastHitAt, -Infinity)
-      assert.equal(page.diagnosticMetadata.eventQuanta, 0)
-      assert.equal(page.diagnosticMetadata.probeQuanta, 0)
-      assert.equal(page.diagnosticMetadata.clearWindows, 1)
-      assert.equal(page.diagnosticMetadata.clearWindowQuanta, 25)
-      assert.equal(page.runtimeDiagnostics.frameCandidates, 0)
-      assert.equal(page.diagnosticMetadata.fullMaterializations, 1)
     })
   }
 })
@@ -118,13 +124,14 @@ test('a moving corner near miss rejects the interval without changing the ship t
       page.asteroids.push({ id: 'moving-away', x, y: ship.y - 7, radius: 8, vx: 0, lastHitAt: -Infinity })
       canvas.__emit('CLICK_DOWN', { y: 330 })
       if (controlMode === 'swipe') canvas.__emit('MOVE', { y: 410 })
+      const quiet = spyMethod(page, 'advanceQuietSteps')
+      const shipSteps = spyMethod(page, 'advanceShipPose')
       tick(250)
+      assert.deepEqual(quiet.calls, [[25]])
+      assert.equal(shipSteps.calls.length, 0)
+      assert.equal(page.contactBatch.windowCount, 0)
       assert.ok(Math.abs(page.shipCenterY - (initialY + page.baseControlSpeed * 0.25)) < 1e-9)
       assert.equal(page.hp, 100)
-      assert.equal(page.diagnosticMetadata.eventQuanta, 0)
-      assert.equal(page.diagnosticMetadata.probeQuanta, 0)
-      assert.equal(page.diagnosticMetadata.clearWindows, 1)
-      assert.ok(page.diagnosticMetadata.clearWindowQuanta > 1)
     })
   }
 })
@@ -132,18 +139,20 @@ test('a moving corner near miss rejects the interval without changing the ship t
 test('empty TILT catch-up keeps every sensor read without dispatching the world', async () => {
   await withGame({ settings: { controlMode: 'tilt' } }, ({ page, tick }) => {
     const initialY = page.shipCenterY
-    page.accelerometer.current.y = 0.4
+    let reads = 0
+    page.accelerometer.getCurrent = () => { reads += 1; return { y: 0.4 } }
+    const spawn = spyMethod(page, 'stepSpawnQuantum')
     tick(250)
+    assert.equal(reads, 25)
+    assert.equal(spawn.calls.length, 0)
     assert.equal(page.simulationClock.elapsedMs, 250)
     assert.notEqual(page.shipCenterY, initialY)
-    assert.equal(page.diagnosticMetadata.sensorReads, 25)
-    assert.equal(page.diagnosticMetadata.eventQuanta, 0)
-    assert.equal(page.runtimeDiagnostics.frameCandidates, 0)
   })
 })
 
 test('an empty idle block advances logical time without world dispatch or unchanged geometry writes', async () => {
   await withGame({}, ({ page, tick }) => {
+    const quiet = spyMethod(page, 'advanceQuietSteps')
     let writes = 0
     let poseUpdates = 0
     const updatePose = page.updateCanonicalRect
@@ -154,9 +163,7 @@ test('an empty idle block advances logical time without world dispatch or unchan
     }
     tick(200)
     assert.equal(page.simulationClock.elapsedMs, 200)
-    assert.equal(page.diagnosticMetadata.skippedQuanta, 20)
-    assert.equal(page.diagnosticMetadata.eventQuanta, 0)
-    assert.equal(page.runtimeDiagnostics.stepCount, 20)
+    assert.deepEqual(quiet.calls, [[20]])
     assert.equal(writes, 0)
     assert.equal(poseUpdates, 0)
     assert.equal(page.shipCenterY, 240)
@@ -214,13 +221,14 @@ test('event batching stops on the same fatal contact quantum as a complete canon
     assert.ok(fatalAt > 10 && fatalAt < 200)
     page.hp = 1
     page.asteroids.push(asteroid)
+    const commits = spyMethod(page, 'finishContactQuantum')
     tick(200)
+    assert.deepEqual(commits.calls, [[fatalAt, true]])
+    assert.equal(asteroid.x, startX + asteroid.vx * (fatalAt / 1000))
     assert.equal(page.finished, true)
     assert.equal(page.simulationClock.elapsedMs, fatalAt)
     assert.equal(page.simulationClock.pendingMs, 0)
     assert.equal(savedEntry().survivedMs, fatalAt)
-    assert.ok(page.diagnosticMetadata.skippedQuanta > 0)
-    assert.equal(page.diagnosticMetadata.skippedQuanta + page.diagnosticMetadata.eventQuanta, fatalAt / 10)
   })
 })
 
@@ -228,7 +236,9 @@ test('distant asteroid motion is materialized once instead of once per catch-up 
   await withGame({}, ({ page, tick }) => {
     let x = 460
     let writes = 0
-    const asteroid = { id: 'distant', y: 100, radius: 7, vx: -100, lastHitAt: -Infinity }
+    let anchorReads = 0
+    const asteroid = { id: 'distant', y: 100, radius: 7, vx: -100, lastHitAt: -Infinity, motionBaseAt: 0 }
+    Object.defineProperty(asteroid, 'motionBaseX', { get() { anchorReads += 1; return 460 } })
     Object.defineProperty(asteroid, 'x', {
       enumerable: true, get() { return x }, set(value) { writes += 1; x = value },
     })
@@ -238,8 +248,14 @@ test('distant asteroid motion is materialized once instead of once per catch-up 
     assert.equal(page.frameCollisionCandidates.length, 0)
     assert.equal(writes, 1, 'twenty canonical steps must not perform twenty distant-position writes')
     assert.equal(asteroid.x, 440)
-    assert.equal(page.diagnosticMetadata.fullMaterializations, 1)
-    assert.equal(page.diagnosticMetadata.fullAsteroidVisits, 1)
+    assert.equal(anchorReads, 4, 'one candidate sweep plus canonical and render X')
+    const spawnAt = page.nextSpawnAt
+    for (let at = 400; at < spawnAt - 200; at += 200) tick(at)
+    tick(spawnAt - 200)
+    anchorReads = writes = 0
+    tick(spawnAt)
+    assert.equal(writes, 2, 'actual spawning adds one canonical traversal')
+    assert.equal(anchorReads, 5, 'spawn neighborhood shares its canonical traversal')
   })
 })
 
@@ -267,8 +283,8 @@ test('pointer handlers never run the world; a short held input is preserved unti
   await withGame({}, ({page,canvas,at,tick})=>{
     const initial=page.shipCenterY
     let updates=0
-    const originalUpdate=page.stepSimulation
-    page.stepSimulation=function(...args){updates++;return originalUpdate.apply(this,args)}
+    const originalUpdate=page.stepSpawnQuantum
+    page.stepSpawnQuantum=function(...args){updates++;return originalUpdate.apply(this,args)}
     at(135);canvas.__emit('CLICK_DOWN',{y:100})
     for(let ms=136;ms<155;ms++){at(ms);canvas.__emit('MOVE',{y:101})}
     at(155);canvas.__emit('CLICK_UP')
@@ -278,7 +294,6 @@ test('pointer handlers never run the world; a short held input is preserved unti
     tick(200)
     assert.equal(updates,0, 'input boundaries preserve the held interval without twenty full world dispatches')
     assert.equal(page.simulationClock.elapsedMs,200)
-    assert.equal(page.diagnosticMetadata.skippedQuanta,20)
     assert.ok(Math.abs(page.shipCenterY-(initial-page.baseControlSpeed*.02))<1e-9)
     assert.equal(page.pointerDown,false)
     assert.equal(page.pointerInput.events.length,0)
@@ -511,12 +526,10 @@ test('long stalls freeze the full world, preserve cooldowns and create no spawn 
     page.asteroids.push(asteroid)
     tick(20)
     const before = world(page)
-    const materializations = page.diagnosticMetadata.fullMaterializations
     const drawCount = canvas.__getDrawCalls().filter((call) => call.method === 'drawRect').length
     tick(60020)
     assert.deepEqual(world(page), before)
     assert.equal(page.simulationClock.pausedMs, 60000)
-    assert.equal(page.diagnosticMetadata.fullMaterializations, materializations)
     assert.equal(canvas.__getDrawCalls().filter((call) => call.method === 'drawRect').length, drawCount)
     tick(60030)
     assert.equal(page.hp, before.hp)
@@ -618,10 +631,11 @@ for (const wristSide of ['left', 'right']) {
       canvas.__emit('MOVE', { y: 2000 })
       tick(wall += 10)
       assert.equal(page.shipCenterY, turn + touchStep)
+      const applied = spyMethod(page, 'applyPointerInput')
       at(wall + 1); canvas.__emit('MOVE', { y: 2100 })
       at(wall + 2); canvas.__emit('CLICK_UP')
       tick(wall += 10)
-      assert.equal(page.diagnosticMetadata.foldedSwipeMoves, 1)
+      assert.deepEqual(applied.calls.map(([input]) => input.kind), ['up'])
       assert.equal(asteroid.lastHitAt, hitAt, 'cooldown blocks a second contact during reversal')
       while (page.shipCenterY < page.shipYLimits.max && wall < 2500) tick(wall += 100)
       assert.equal(page.shipCenterY, page.shipYLimits.max)
@@ -642,3 +656,208 @@ for (const difficulty of [166, 500, 1000]) {
     })
   })
 }
+
+test('spawn quantum commits between batch hits and tests all same-quantum contacts before fatal completion', async () => {
+  await withGame({}, ({ page, tick, canvas }) => {
+    page.lastSpawnAt = page.scheduledLastSpawnAt = -1200
+    page.nextSpawnAt = 20
+    page.hp = page.displayedHp = 8
+    const hits = []
+    const makeBody = (id, contactAt) => {
+      let lastHitAt = -Infinity
+      const asteroid = {
+        id, radius: 7, vx: -8000, y: page.shipRect.centerY,
+        x: page.shipRect.centerX + (contactAt / 10 - 0.5) * 80,
+        get lastHitAt() { return lastHitAt },
+        set lastHitAt(at) { lastHitAt = at; hits.push([id, at]) },
+      }
+      page.asteroids.push(asteroid)
+      return asteroid
+    }
+    makeBody('early', 10)
+    makeBody('first-fatal', 20)
+    makeBody('second-fatal', 20)
+    makeBody('too-late', 30)
+    const finish = page.finishRun
+    page.finishRun = function () {
+      assert.deepEqual(hits, [['early', 10], ['first-fatal', 20], ['second-fatal', 20]])
+      assert.equal(this.hp, 0)
+      assert.equal(this.displayedHp, 8 - 0.72)
+      finish.call(this)
+    }
+    const draws = canvas.__getDrawCalls().length
+    tick(50)
+    assert.equal(page.asteroidSeed, 1)
+    assert.equal(savedEntry().survivedMs, 20)
+    assert.equal(canvas.__getDrawCalls().length, draws)
+    assert.equal(page.previousDisplayedHp, 8 - 0.72)
+    assert.equal(page.displayedHp, 8 - 0.72 - 0.72)
+  })
+})
+
+test('250 ms is admitted, 251 ms is paused, and fractional-only presentation performs no canonical work', async () => {
+  await withGame({}, ({ page, tick }) => {
+    let x = 460
+    let writes = 0
+    const asteroid = { id: 'fractional', y: 100, radius: 7, vx: -100, lastHitAt: -Infinity,
+      get x() { return x }, set x(value) { writes += 1; x = value } }
+    page.asteroids.push(asteroid)
+    const blocks = spyMethod(page, 'advanceSimulationBlock')
+    const frames = spyMethod(page, 'presentFrame')
+    const snapshots = spyMethod(page, 'drawFrame')
+    tick(250)
+    assert.equal(page.simulationClock.elapsedMs, 250)
+    assert.equal(writes, 1)
+    assert.equal(frames.calls.length, 1)
+    tick(501)
+    assert.equal(page.simulationClock.pausedMs, 251)
+    assert.equal(writes, 1)
+    assert.equal(frames.calls.length, 1)
+    tick(507)
+    assert.equal(page.simulationClock.elapsedMs, 250)
+    assert.equal(page.simulationClock.pendingMs, 6)
+    assert.equal(blocks.calls.length, 1)
+    assert.equal(writes, 1)
+    assert.equal(frames.calls.length, 2)
+    assert.equal(snapshots.calls.length, 0)
+    assert.equal(page.publishedFrame.asteroids[0].x, 435.4)
+    assert.equal(asteroid.x, 435)
+  })
+})
+
+function seededCommands() {
+  const random = seededRandom(672)
+  const trace = []
+  for (let at = 23; at < 120000; at += 360 + Math.floor(random() * 150)) {
+    const y = random() < 0.5 ? 120 : 360
+    trace.push({ at, kind: 'down', y }, { at: at + 51, kind: 'move', y: 480 - y },
+      { at: at + 141, kind: 'move', y }, { at: at + 265, kind: 'up' })
+  }
+  return trace
+}
+
+function trackCanonicalEvents(page) {
+  const hits = []
+  const births = []
+  const spawn = page.spawnAsteroids
+  page.spawnAsteroids = function (...args) {
+    const before = this.asteroidSeed
+    spawn.apply(this, args)
+    const count = this.asteroidSeed - before
+    if (!count) return
+    const newborns = this.asteroids.slice(-count)
+    for (const asteroid of newborns) {
+      const { id, x, y, vx, radius } = asteroid
+      births.push({ id, x, y, vx, radius })
+      let lastHitAt = asteroid.lastHitAt
+      Object.defineProperty(asteroid, 'lastHitAt', {
+        enumerable: true,
+        get: () => lastHitAt,
+        set: at => { lastHitAt = at; hits.push([id, at]) },
+      })
+    }
+  }
+  return { hits, births }
+}
+
+for (const controlMode of ['touch', 'swipe']) {
+  test(`optimized ${controlMode} matches independent per-quantum gameplay at every callback schedule`, async () => {
+    const commands = seededCommands()
+    for (const schedule of schedules) {
+      await withGame({ settings: { controlMode, wristSide: controlMode === 'swipe' ? 'right' : 'left' } },
+        ({ page, canvas, at, tick }) => {
+          const random = seededRandom(821)
+          Math.random = random
+          const canonicalRandom = seededRandom(821)
+          const canonical = createCanonicalGame({ viewport: page.viewport, settings: page.settings,
+            baseControlSpeed: page.baseControlSpeed, random: canonicalRandom })
+          const { births, hits } = trackCanonicalEvents(page)
+          const event = { down: 'CLICK_DOWN', move: 'MOVE', up: 'CLICK_UP' }
+          let wall = 0
+          let frame = 0
+          let commandIndex = 0
+          while (!page.finished && wall < 120000) {
+            wall += schedule[frame++ % schedule.length]
+            while (commandIndex < commands.length && commands[commandIndex].at <= wall) {
+              const command = commands[commandIndex++]
+              canonical.advanceTo(command.at)
+              canonical.apply(command)
+              at(command.at)
+              canvas.__emit(event[command.kind], command)
+            }
+            canonical.advanceTo(wall)
+            tick(wall)
+            const actual = world(page)
+            const expected = canonical.state()
+            assert.equal(actual.age, expected.age, `fatal or elapsed quantum at wall ${wall}`)
+            assert.equal(actual.finished, expected.finished)
+            assert.ok(Math.abs(actual.shipY - expected.shipY) < 1e-9)
+            assert.equal(actual.hp, expected.hp)
+            assert.equal(actual.displayedHp, expected.displayedHp)
+            assert.equal(page.previousDisplayedHp, expected.previousDisplayedHp)
+            assert.deepEqual(actual.asteroids.map(({ id, x, y, vx, radius, lastHitAt }) =>
+              ({ id, x, y, vx, radius, lastHitAt })), expected.asteroids)
+            assert.equal(random.calls(), canonicalRandom.calls())
+          }
+          assert.ok(page.finished && births.length > 5 && hits.length > 5)
+          assert.deepEqual(births, canonical.births)
+          assert.deepEqual(hits, canonical.hits)
+          assert.deepEqual(savedEntry(), canonical.score(EPOCH + wall))
+        })
+    }
+  })
+}
+
+test('a fatal batch commits all simultaneous damage without repeating the exact probes', async () => {
+  await withGame({}, ({ page, tick }) => {
+    page.hp = 1
+    const hits = []
+    for (const id of ['first', 'second']) {
+      let lastHitAt = -Infinity
+      page.asteroids.push({ id, x: page.shipRect.centerX, y: page.shipRect.centerY, radius: 7, vx: 0,
+        get lastHitAt() { return lastHitAt },
+        set lastHitAt(at) { lastHitAt = at; hits.push([id, at]) } })
+    }
+    let probes = 0
+    let previousX = 0
+    Object.defineProperty(page.contactBatch.scratch, 'previousX', {
+      get: () => previousX,
+      set: x => { previousX = x; probes += 1 },
+    })
+    const exactStep = spyMethod(page, 'handleCollisions')
+    const consume = page.consumeContactBatch
+    page.consumeContactBatch = function (batch) {
+      assert.equal(probes, 2)
+      consume.call(this, batch)
+      assert.equal(probes, 2)
+    }
+    const finish = page.finishRun
+    page.finishRun = function () {
+      assert.deepEqual(hits, [['first', 10], ['second', 10]])
+      finish.call(this)
+    }
+    tick(200)
+    assert.equal(exactStep.calls.length, 0)
+    assert.equal(savedEntry().survivedMs, 10)
+  })
+})
+
+test('an interrupted callback commits canonical motion but does not publish a partial frame', async () => {
+  await withGame({}, ({ page, tick }) => {
+    const body = { id: 'distant', x: 400, y: 80, radius: 7, vx: -100, lastHitAt: -Infinity }
+    page.asteroids.push(body)
+    const published = page.publishedFrame
+    const update = page.advanceQuietSteps
+    page.advanceQuietSteps = function () {
+      update.call(this, 1)
+      throw new Error('interrupted callback')
+    }
+    assert.throws(() => tick(20), /interrupted callback/)
+    assert.equal(page.simulationClock.elapsedMs, 10)
+    assert.equal(body.x, 399)
+    assert.equal(page.simulationFrameActive, false)
+    assert.equal(page.pointerInput.events.length, 0)
+    assert.equal(page.publishedFrame, published)
+    assert.equal(page.preparedElapsedMs, 0)
+  })
+})

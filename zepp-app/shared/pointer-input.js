@@ -4,22 +4,18 @@ const POINTER_BUCKET_COUNT = Math.ceil(MAX_SIMULATION_GAP_MS / SIMULATION_STEP_M
 export const MAX_POINTER_COMMANDS = 3 * POINTER_BUCKET_COUNT
 
 export function createPointerCapture() {
-  return { length: 0, down: false, y: null, downCount: 0, moveCount: 0, upCount: 0 }
+  return { down: false, y: null }
 }
 
 export function recordPointerSample(capture, queue, clock, controlMode, halfHeight, kind, y, now = Date.now) {
   if (kind === 'move') {
-    capture.moveCount += 1
     if (!capture.down || capture.y === y) return
   } else if (kind === 'down') {
-    capture.downCount += 1
     capture.down = true
   } else {
-    capture.upCount += 1
     capture.down = false
   }
   capture.y = kind === 'up' ? null : y
-  capture.length += 1
   if (controlMode === 'tilt') return
 
   // The presentation callback owns the clock, which stays stable between frames.
@@ -31,12 +27,8 @@ export function recordPointerSample(capture, queue, clock, controlMode, halfHeig
 }
 
 export function clearPointerCapture(capture) {
-  capture.length = 0
   capture.down = false
   capture.y = null
-  capture.downCount = 0
-  capture.moveCount = 0
-  capture.upCount = 0
 }
 
 export function createPointerInputQueue(keepSwipeTarget = false) {

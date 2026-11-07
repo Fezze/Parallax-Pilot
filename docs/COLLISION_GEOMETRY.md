@@ -58,8 +58,16 @@ of this measures physical-watch FPS, CPU, energy or sensor feel.
 
 ## Event-window exclusion
 
-Within one touch/swipe input segment, fixed horizontal velocity and clamped vertical control bound the canonical endpoints that could contact the ship. Windows include rounding and sweep padding, so false positives cost work but cannot omit a valid canonical collision. Instant swipes include the first old-to-target sweep. Input reversals restart the window from the exact repeated-add scalar state; actual births rebuild remaining windows. Potential contact quanta still use the existing swept arrow/circle narrow phase, cooldown and fatal-score rules. Empty collision windows may skip full world dispatch; they do not enlarge or simplify hit geometry.
+Within one TOUCH or SWIPE segment, fixed horizontal asteroid velocity and
+clamped vertical ship control bound the canonical sweeps that could contact
+the ship. SWIPE approaches a press-relative target at the TOUCH speed cap.
+Reversals and reachable target changes split the trajectory at their input
+boundaries. Actual births have their own canonical quantum.
 
-## Page spawn query after collision-grid retirement
-
-The game page no longer maintains bucket membership each frame. Its collision window/list path has no grid consumer. At actual births, a flat descriptor selects the exact same clamped slice range as the former grid query, including objects inside the threshold cell but outside the raw 45%/55% cutoff. Clearance is an order-independent minimum; seeded choices and RNG consumption remain identical. Legacy grid helpers remain available and independently tested.
+Windows include rounding and sweep padding. The existing whole-window
+predicate can reject a multi-quantum candidate when its expanded relative
+sweep is clear. The game caches the rounded poses and bounds once per
+remaining segment and applies the exact 10 ms arrow/circle test at eligible
+instants. Only the first hit per asteroid is needed within the 250 ms admitted
+frame because the 260 ms cooldown spans the rest of that frame. TILT retains
+its exact test at each canonical quantum with the current sensor reading.

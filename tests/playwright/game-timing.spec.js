@@ -16,9 +16,11 @@ for (const shape of ['round', 'square']) {
         const listeners=new Map()
         game.canvas.addEventListener=(name,handler)=>listeners.set(name,handler)
         game.bindCanvasEvents()
-        let steps=0,squareRoots=0
-        const step=game.stepSimulation
-        game.stepSimulation=function(...args){steps++;return step.apply(this,args)}
+        let steps=0,squareRoots=0,quietSteps=0
+        const quiet=game.advanceQuietSteps
+        game.advanceQuietSteps=function(count){quietSteps+=count;return quiet.call(this,count)}
+        const step=game.stepSpawnQuantum
+        game.stepSpawnQuantum=function(...args){steps++;return step.apply(this,args)}
         Math.sqrt=(...args)=>{squareRoots++;return originalSqrt(...args)}
         const initial=game.shipCenterY
         now+=13;listeners.get('CLICK_DOWN')({y:100})
@@ -26,14 +28,13 @@ for (const shape of ['round', 'square']) {
         now=1000035;listeners.get('CLICK_UP')()
         const stepsInHandlers=steps
         now=1000040;game.tick()
-        return{stepsInHandlers,steps,squareRoots,logicalSteps:game.runtimeDiagnostics.stepCount,skippedQuanta:game.diagnosticMetadata.skippedQuanta,age:game.simulationClock.elapsedMs,
+        return{stepsInHandlers,steps,squareRoots,quietSteps,age:game.simulationClock.elapsedMs,
           displacement:initial-game.shipCenterY,expected:game.baseControlSpeed*.02,pending:game.pointerInput.events.length}
       }finally{Date.now=originalNow;Math.sqrt=originalSqrt}
     })
     expect(result.stepsInHandlers).toBe(0)
     expect(result.steps).toBe(0)
-    expect(result.logicalSteps).toBe(4)
-    expect(result.skippedQuanta).toBe(4)
+    expect(result.quietSteps).toBe(4)
     expect(result.squareRoots).toBe(0)
     expect(result.age).toBe(40)
     expect(result.displacement).toBeCloseTo(result.expected,10)
@@ -68,7 +69,8 @@ for (const shape of ['round', 'square']) {
           const stayedPaused = before === JSON.stringify(game.asteroids)
           return { age: game.simulationClock.elapsedMs, paused: game.simulationClock.pausedMs,
             hp: game.hp, shipY: game.shipCenterY, spawned: game.asteroidSeed,
-            asteroids: JSON.stringify(game.asteroids), stayedPaused }
+            // Sweep scratch and native handles can vary with the callback that last used them.
+            asteroids: game.asteroids.map(({ previousX, presentation, ...canonical }) => canonical), stayedPaused }
         } finally {
           Date.now = originalNow
           Math.random = originalRandom

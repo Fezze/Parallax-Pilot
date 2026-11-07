@@ -36,7 +36,7 @@ test('high-rate input is bounded and reuses the same command storage', () => {
     assert.ok(queue.events.length <= MAX_POINTER_COMMANDS)
   }
   assert.ok(queue.events.every(command => pool.includes(command)))
-  assert.deepEqual(capture, { length: 25001, down: true, y: 25000, downCount: 1, moveCount: 25000, upCount: 0 })
+  assert.deepEqual(capture, { down: true, y: 25000 })
   assert.equal(queue.y, 25000)
   assert.deepEqual(clock, createSimulationClock(0))
   queue.events.length = 0
@@ -62,7 +62,7 @@ test('touch capture filters same-half motion before it can replace a crossing ti
     { kind: 'down', y: 100, at: 1003, bucket: 0 },
     { kind: 'move', y: 220, at: 1189, bucket: 18 },
   ])
-  assert.deepEqual(capture, { length: 5, down: true, y: 225, downCount: 1, moveCount: 6, upCount: 0 })
+  assert.deepEqual(capture, { down: true, y: 225 })
 })
 
 test('swipe capture keeps the final flick target and release through a paused gap and rollback', () => {

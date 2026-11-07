@@ -14,13 +14,10 @@ export function createSpriteRenderer(surface, shipRect, wristSide) {
     src: `game-sprites/ship-${wristSide}.png`,
   })
   let shipY = shipRect.y - SPRITE_PADDING
-  const views = new Map()
-  const active = []
   const available = []
-  let frameNumber = 0
 
   function showAsteroid(asteroid) {
-    const { id, radius } = asteroid
+    const { radius } = asteroid
     // An asteroid only moves horizontally during its lifetime.
     const offset = radius + SPRITE_PADDING
     const size = radius * 2 + SPRITE_PADDING * 2 + 1
@@ -31,7 +28,6 @@ export function createSpriteRenderer(surface, shipRect, wristSide) {
       if (slot.radius !== radius) options.src = `game-sprites/asteroid-${radius}.png`
       slot.image.setProperty(prop.MORE, options)
       slot.image.setProperty(prop.VISIBLE, true)
-      slot.id = id
       slot.radius = radius
       slot.x = x
       slot.offset = offset
@@ -39,19 +35,26 @@ export function createSpriteRenderer(surface, shipRect, wristSide) {
     }
 
     options.src = `game-sprites/asteroid-${radius}.png`
-    return { id, radius, x, offset, seen: 0, image: asteroidLayer.createWidget(widget.IMG, options) }
+    return { radius, x, offset, image: asteroidLayer.createWidget(widget.IMG, options) }
   }
 
   return {
-    draw(frame) {
-      const seen = ++frameNumber
+    draw(frame, retiredPresentation) {
+      for (const record of retiredPresentation) {
+        const slot = record.view
+        if (!slot) continue
+        slot.image.setProperty(prop.VISIBLE, false)
+        available.push(slot)
+        record.view = null
+      }
+      retiredPresentation.length = 0
+
       for (let i = 0; i < frame.asteroidCount; i += 1) {
         const asteroid = frame.asteroids[i]
-        let slot = views.get(asteroid.id)
+        const record = asteroid.presentation
+        const slot = record.view
         if (!slot) {
-          slot = showAsteroid(asteroid)
-          active.push(slot)
-          views.set(asteroid.id, slot)
+          record.view = showAsteroid(asteroid)
         } else {
           const x = Math.round(asteroid.x) - slot.offset
           if (slot.x !== x) {
@@ -59,18 +62,6 @@ export function createSpriteRenderer(surface, shipRect, wristSide) {
             slot.x = x
           }
         }
-        slot.seen = seen
-      }
-
-      for (let i = active.length - 1; i >= 0; i -= 1) {
-        const slot = active[i]
-        if (slot.seen === seen) continue
-        slot.image.setProperty(prop.VISIBLE, false)
-        views.delete(slot.id)
-        slot.id = null
-        available.push(slot)
-        active[i] = active[active.length - 1]
-        active.pop()
       }
 
       const y = Math.round(frame.ship.y) - SPRITE_PADDING
@@ -78,6 +69,10 @@ export function createSpriteRenderer(surface, shipRect, wristSide) {
         ship.setProperty(prop.MORE, { y })
         shipY = y
       }
+    },
+
+    destroy() {
+      available.length = 0
     },
   }
 }

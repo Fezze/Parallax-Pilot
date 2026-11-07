@@ -101,6 +101,15 @@ export function createShipRect(viewport, shipCenterY, wristSide, rect = {}, geom
   return rect
 }
 
+export function setCanonicalShipY(rect, y) {
+  if (rect.y === y) return
+  rect.y = y
+  rect.centerY = y + rect.h / 2
+  rect.points[0].y = rect.points[2].y = rect.points[4].y = rect.centerY
+  rect.points[1].y = y
+  rect.points[3].y = y + rect.h
+}
+
 // Presentation owns this rectangle. Never round or write interpolated values
 // back into the canonical collision rectangles.
 export function interpolateShipRect(previous, current, alpha, target = {}) {
@@ -236,12 +245,13 @@ export function chooseSpawnY({
   shipRect,
   asteroids,
   grid,
+  nearbyAsteroids,
   radius,
   wristSide,
   random = Math.random,
 }) {
   const spawnFromRight = resolveTravelDirection(wristSide) === 'right'
-  const nearbyAsteroids = getSpawnNearbyAsteroids(
+  const nearby = nearbyAsteroids !== undefined ? nearbyAsteroids : getSpawnNearbyAsteroids(
     asteroids,
     grid,
     spawnFromRight,
@@ -268,7 +278,7 @@ export function chooseSpawnY({
             maxY
           )
         : minY + random() * (maxY - minY)
-    const clearanceScore = getVerticalClearanceScore(candidateY, radius, nearbyAsteroids)
+    const clearanceScore = getVerticalClearanceScore(candidateY, radius, nearby)
     const distanceFromShip = Math.abs(candidateY - shipRect.centerY)
     const laneBias = Math.max(0, challengeBandHalfHeight - distanceFromShip) * 0.9
     const score = laneBias + clearanceScore + random() * 2
@@ -289,6 +299,7 @@ export function createAsteroid({
   shipRect,
   asteroids,
   grid,
+  nearbyAsteroids,
   wristSide,
   random = Math.random,
 }) {
@@ -308,6 +319,7 @@ export function createAsteroid({
     shipRect,
     asteroids,
     grid,
+    nearbyAsteroids,
     radius,
     wristSide,
     random,
